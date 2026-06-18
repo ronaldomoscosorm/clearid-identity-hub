@@ -228,7 +228,7 @@ export const argusApi = {
     if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
     const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const form = new FormData();
-    form.append("file", blob, "capture.jpg");
+    form.append("picture", blob, "capture.jpg");
     const headers = new Headers();
     headers.set("X-Environment", env);
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
