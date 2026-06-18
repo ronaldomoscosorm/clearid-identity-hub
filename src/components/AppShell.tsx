@@ -1,9 +1,11 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { LogOut, Shield, Activity, Settings as SettingsIcon, Users } from "lucide-react";
+import { LogOut, Shield, Activity, Settings as SettingsIcon, Users, Palette } from "lucide-react";
 import { useArgusEnv, type ArgusEnvKey } from "@/lib/argus-env";
+import { useBranding, useApplyBranding } from "@/lib/branding";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { PoweredBy } from "@/components/PoweredBy";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,6 +82,8 @@ function EnvToggle() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { env } = useArgusEnv();
+  const branding = useBranding();
+  useApplyBranding();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [email, setEmail] = useState<string | null>(null);
@@ -106,12 +110,22 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">
           <Link to="/identities" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Shield className="h-4 w-4" />
-            </div>
+            {branding.clientLogo ? (
+              <img
+                src={branding.clientLogo}
+                alt={branding.clientName || "Logo"}
+                className="h-8 w-8 rounded-md object-contain"
+              />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <Shield className="h-4 w-4" />
+              </div>
+            )}
             <div className="leading-tight">
               <div className="text-sm font-semibold text-foreground">Argus ClearID</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">R&amp;M Console</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {branding.clientName || "R&M Console"}
+              </div>
             </div>
           </Link>
 
@@ -119,6 +133,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavItem to="/identities" icon={Users} label="Identities" />
             <NavItem to="/diagnostics" icon={Activity} label="Diagnóstico" />
             <NavItem to="/settings" icon={SettingsIcon} label="Configurações" />
+            <NavItem to="/branding" icon={Palette} label="Identidade" />
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
@@ -147,12 +162,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavItem to="/identities" icon={Users} label="Identities" />
           <NavItem to="/diagnostics" icon={Activity} label="Diagnóstico" />
           <NavItem to="/settings" icon={SettingsIcon} label="Configurações" />
+          <NavItem to="/branding" icon={Palette} label="Identidade" />
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6" data-route={pathname}>
         {children}
       </main>
+
+      <footer className="border-t bg-card/50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <PoweredBy />
+        </div>
+      </footer>
     </div>
   );
 }
