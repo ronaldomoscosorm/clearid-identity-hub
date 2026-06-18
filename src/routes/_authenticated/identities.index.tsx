@@ -117,12 +117,30 @@ function IdentitiesList() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
-              <Label htmlFor="f-name">Nome</Label>
+              <Label htmlFor="f-query">Texto livre</Label>
               <Input
-                id="f-name"
-                value={fName}
-                onChange={(e) => setFName(e.target.value)}
-                placeholder="Ex: Maria Silva"
+                id="f-query"
+                value={fQuery}
+                onChange={(e) => setFQuery(e.target.value)}
+                placeholder="Nome, sobrenome ou e-mail"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-first-name">First name</Label>
+              <Input
+                id="f-first-name"
+                value={fFirstName}
+                onChange={(e) => setFFirstName(e.target.value)}
+                placeholder="Ex: Maria"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-last-name">Last name</Label>
+              <Input
+                id="f-last-name"
+                value={fLastName}
+                onChange={(e) => setFLastName(e.target.value)}
+                placeholder="Ex: Silva"
               />
             </div>
             <div className="space-y-1.5">
@@ -135,12 +153,30 @@ function IdentitiesList() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="f-extid">External ID</Label>
+              <Label htmlFor="f-company">Empresa</Label>
               <Input
-                id="f-extid"
-                value={fExternalId}
-                onChange={(e) => setFExternalId(e.target.value)}
-                placeholder="ex: RM-12345"
+                id="f-company"
+                value={fCompany}
+                onChange={(e) => setFCompany(e.target.value)}
+                placeholder="Empresa"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-job-title">Cargo</Label>
+              <Input
+                id="f-job-title"
+                value={fJobTitle}
+                onChange={(e) => setFJobTitle(e.target.value)}
+                placeholder="Cargo"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-department">Departamento</Label>
+              <Input
+                id="f-department"
+                value={fDepartment}
+                onChange={(e) => setFDepartment(e.target.value)}
+                placeholder="Departamento"
               />
             </div>
             <div className="space-y-1.5">
