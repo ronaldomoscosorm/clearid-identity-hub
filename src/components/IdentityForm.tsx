@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Identity } from "@/lib/argus-client";
+import type { IdentityUpsert } from "@/lib/argus-client";
 
 const baseSchema = z.object({
   externalId: z.string().trim().min(1, "Obrigatório").max(120),
@@ -23,10 +23,10 @@ const baseSchema = z.object({
 });
 
 export type IdentityFormProps = {
-  initial?: Partial<Identity>;
+  initial?: Partial<IdentityUpsert>;
   mode: "create" | "edit";
   submitting?: boolean;
-  onSubmit: (data: Identity) => void;
+  onSubmit: (data: IdentityUpsert) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
 };
@@ -45,7 +45,10 @@ export function IdentityForm({
   const [email, setEmail] = useState(initial?.email ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
   const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(
-    Object.entries(initial?.customFields ?? {}).map(([key, value]) => ({ key, value })),
+    Object.entries(initial?.customFields ?? {}).map(([key, value]) => ({
+      key,
+      value: String(value ?? ""),
+    })),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
 

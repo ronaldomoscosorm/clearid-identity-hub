@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, PowerOff } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
+import { clearIdToFormValues } from "@/lib/argus-client";
 import { useArgusEnv } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -88,7 +89,7 @@ function IdentityDetail() {
       ) : query.data ? (
         <IdentityForm
           mode="edit"
-          initial={query.data}
+          initial={clearIdToFormValues(query.data)}
           submitting={update.isPending}
           onSubmit={(data) => update.mutate(data)}
           onCancel={() => navigate({ to: "/identities" })}
