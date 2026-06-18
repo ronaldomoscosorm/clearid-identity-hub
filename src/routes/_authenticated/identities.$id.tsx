@@ -8,6 +8,8 @@ import { useArgusEnv } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
+import { IdentityPicturePanel } from "@/components/IdentityPicturePanel";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -75,6 +77,12 @@ function IdentityDetail() {
           {query.data ? `${query.data.firstName} ${query.data.lastName}` : "Identity"}
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{id}</p>
+        {query.data?.systemData?.externalId && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">External ID:</span>{" "}
+            <span className="font-mono">{query.data.systemData.externalId}</span>
+          </p>
+        )}
       </div>
 
       {query.isLoading ? (
@@ -87,7 +95,13 @@ function IdentityDetail() {
           {(query.error as Error).message}
         </div>
       ) : query.data ? (
-        <IdentityForm
+        <>
+          <Card>
+            <CardContent className="p-4">
+              <IdentityPicturePanel identityId={id} />
+            </CardContent>
+          </Card>
+          <IdentityForm
           mode="edit"
           initial={clearIdToFormValues(query.data)}
           submitting={update.isPending}
@@ -114,7 +128,8 @@ function IdentityDetail() {
               </AlertDialogContent>
             </AlertDialog>
           }
-        />
+          />
+        </>
       ) : null}
     </div>
   );
