@@ -203,6 +203,21 @@ export const argusApi = {
   deactivateIdentity: (id: string) =>
     argusFetch<void>(`/api/identities/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
+  /** Baixa a foto da identidade como Blob. Retorna null em 404. */
+  getIdentityPicture: async (id: string): Promise<Blob | null> => {
+    const env = getCurrentEnv();
+    const cfg = getEnvConfig(env);
+    if (!cfg.baseUrl) return null;
+    const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
+    const headers = new Headers();
+    headers.set("X-Environment", env);
+    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    const res = await fetch(url, { headers });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new ArgusApiError({ status: res.status, message: res.statusText });
+    return await res.blob();
+  },
+
   /**
    * Diagnóstico: o backend não expõe /api/diagnostics, então usamos
    * /api/identities como ping (valida rede + token OAuth contra ClearID).

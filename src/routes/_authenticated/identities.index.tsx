@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
+import { IdentityThumb } from "@/components/IdentityThumb";
 
 export const Route = createFileRoute("/_authenticated/identities/")({
   head: () => ({ meta: [{ title: "Identities — Argus ClearID" }] }),
@@ -204,6 +205,7 @@ function IdentitiesList() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-14">Foto</TableHead>
               <TableHead>IdentityId</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>E-mail</TableHead>
@@ -215,7 +217,7 @@ function IdentitiesList() {
             {query.isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 5 }).map((__, j) => (
+                  {Array.from({ length: 6 }).map((__, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -224,13 +226,13 @@ function IdentitiesList() {
               ))
             ) : query.isError ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-destructive">
+                <TableCell colSpan={6} className="py-10 text-center text-sm text-destructive">
                   {(query.error as Error).message}
                 </TableCell>
               </TableRow>
             ) : !query.data?.items?.length ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
                   Nenhuma identity encontrada para os filtros informados.
                 </TableCell>
               </TableRow>
@@ -240,6 +242,9 @@ function IdentitiesList() {
                 const isActive = status.toLowerCase() === "active";
                 return (
                   <TableRow key={it.identityId} className="cursor-pointer">
+                    <TableCell>
+                      <IdentityThumb identityId={it.identityId} />
+                    </TableCell>
                     <TableCell className="font-mono text-xs">
                       <Link
                         to="/identities/$id"
