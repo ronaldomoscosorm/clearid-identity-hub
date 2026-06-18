@@ -218,11 +218,11 @@ function IdentitiesList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ExternalId</TableHead>
+              <TableHead>IdentityId</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>E-mail</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Atualizado</TableHead>
+              <TableHead>Relevância</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -250,7 +250,6 @@ function IdentitiesList() {
               </TableRow>
             ) : (
               query.data.items.map((it) => {
-                const extId = it.systemData?.externalId ?? it.identityId;
                 const status = String(it.status ?? "");
                 const isActive = status.toLowerCase() === "active";
                 return (
@@ -261,7 +260,7 @@ function IdentitiesList() {
                         params={{ id: it.identityId }}
                         className="hover:underline"
                       >
-                        {extId}
+                        {it.identityId}
                       </Link>
                     </TableCell>
                     <TableCell>
@@ -274,9 +273,7 @@ function IdentitiesList() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {it.lastModificationDateUtc
-                        ? new Date(it.lastModificationDateUtc).toLocaleString()
-                        : "—"}
+                      {typeof it.score === "number" ? it.score.toFixed(2) : "—"}
                     </TableCell>
                   </TableRow>
                 );
