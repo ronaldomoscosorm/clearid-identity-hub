@@ -19,7 +19,7 @@ function NewIdentity() {
     onSuccess: (data) => {
       toast.success("Identity criada");
       qc.invalidateQueries({ queryKey: ["identities"] });
-      navigate({ to: "/identities/$id", params: { id: data.id ?? data.externalId } });
+      navigate({ to: "/identities/$id", params: { id: data.identityId } });
     },
     onError: (e) => {
       const err = e as ArgusApiError;

@@ -71,7 +71,7 @@ function Diagnostics() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Backend</CardTitle>
+              <CardTitle className="text-base">Backend</CardTitle>
           </CardHeader>
           <CardContent>
             {query.isLoading ? (
@@ -89,7 +89,9 @@ function Diagnostics() {
                 {typeof query.data.backend.latencyMs === "number" && (
                   <StatRow label="Latência" value={`${query.data.backend.latencyMs} ms`} />
                 )}
-                {query.data.backend.version && <StatRow label="Versão" value={query.data.backend.version} />}
+                  {typeof query.data.backend.status === "number" && (
+                    <StatRow label="HTTP status" value={String(query.data.backend.status)} />
+                  )}
                 <StatRow label="Última checagem" value={new Date(query.data.checkedAt).toLocaleTimeString()} />
               </>
             ) : null}
@@ -98,22 +100,26 @@ function Diagnostics() {
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Token ClearID (OAuth client_credentials)</CardTitle>
+            <CardTitle className="text-base">Identity Service (ClearID)</CardTitle>
           </CardHeader>
           <CardContent>
             {query.isLoading ? (
               <Skeleton className="h-24 w-full" />
             ) : query.data ? (
               <>
-                <StatRow label="Token válido" value={query.data.clearId.tokenValid ? "Sim" : "Não"} ok={query.data.clearId.tokenValid} />
-                {query.data.clearId.expiresAt && (
-                  <StatRow
-                    label="Expira em"
-                    value={new Date(query.data.clearId.expiresAt).toLocaleString()}
-                  />
+                <StatRow
+                  label="Endpoint /api/identities"
+                  value={query.data.identities.reachable ? "OK" : "Falhou"}
+                  ok={query.data.identities.reachable}
+                />
+                {typeof query.data.identities.sampleCount === "number" && (
+                  <StatRow label="Itens na amostra" value={String(query.data.identities.sampleCount)} />
                 )}
-                {query.data.clearId.accountId && (
-                  <StatRow label="Account ID" value={<code className="text-xs">{query.data.clearId.accountId}</code>} />
+                {query.data.identities.accountId && (
+                  <StatRow
+                    label="Account ID"
+                    value={<code className="text-xs">{query.data.identities.accountId}</code>}
+                  />
                 )}
               </>
             ) : (

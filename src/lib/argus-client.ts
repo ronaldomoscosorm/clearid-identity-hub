@@ -78,57 +78,161 @@ export async function argusFetch<T = unknown>(
   return body as T;
 }
 
-// ---- Identity Service v4 DTOs (alinháveis ao backend) ----
+// ---- Identity Service v4 DTOs (alinhados ao backend ArgusClearId.Api) ----
 
-export interface Identity {
-  id?: string;
+export interface ClearIdCustomField {
+  customFieldType?: string;
+  customFieldName: string;
+  customFieldValue: string;
+}
+
+export interface ClearIdIdentity {
+  accountId?: string;
+  identityId: string;
+  eTag?: string;
+  description?: string | null;
+  status: "Active" | "Inactive" | string;
+  firstName: string;
+  lastName: string;
+  middleName?: string | null;
+  displayName?: string | null;
+  countryCode?: string | null;
+  email?: string | null;
+  identityType?: string | null;
+  privateData?: Record<string, unknown> | null;
+  companyData?: Record<string, unknown> | null;
+  systemData?: {
+    externalId?: string | null;
+    customFields?: ClearIdCustomField[] | null;
+    [k: string]: unknown;
+  } | null;
+  creationDateUtc?: string;
+  lastModificationDateUtc?: string;
+}
+
+/** Wrapper retornado pelo backend: { success, message, data } */
+interface ApiEnvelope<T> {
+  success: boolean;
+  message?: string;
+  data: T;
+}
+
+/** Payload de criação/edição enviado ao backend. */
+export interface IdentityUpsert {
   externalId: string;
   firstName: string;
   lastName: string;
   email: string;
   status: "Active" | "Inactive";
   customFields?: Record<string, string>;
-  updatedAt?: string;
 }
 
-export interface IdentityListResponse {
-  items: Identity[];
-  total: number;
-}
-
-export interface DiagnosticsResponse {
+export interface DiagnosticsResult {
   environment: string;
   baseUrl?: string;
-  backend: { reachable: boolean; latencyMs?: number; version?: string };
-  clearId: {
-    tokenValid: boolean;
-    expiresAt?: string;
-    accountId?: string;
-  };
+  backend: { reachable: boolean; latencyMs?: number; status?: number };
+  identities: { reachable: boolean; sampleCount?: number; accountId?: string };
   checkedAt: string;
+}
+
+async function unwrap<T>(p: Promise<unknown>): Promise<T> {
+  const r = (await p) as ApiEnvelope<T> | T;
+  if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
+    return (r as ApiEnvelope<T>).data;
+  }
+  return r as T;
 }
 
 // ---- API helpers ----
 
 export const argusApi = {
-  listIdentities: (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
+  listIdentities: async (params?: {
+    search?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
     const q = new URLSearchParams();
     if (params?.search) q.set("search", params.search);
     if (params?.status) q.set("status", params.status);
     if (params?.page) q.set("page", String(params.page));
     if (params?.pageSize) q.set("pageSize", String(params.pageSize));
     const qs = q.toString();
-    return argusFetch<IdentityListResponse>(`/api/identities${qs ? `?${qs}` : ""}`);
+    const data = await unwrap<{ identities: ClearIdIdentity[]; total?: number }>(
+      argusFetch(`/api/identities${qs ? `?${qs}` : ""}`),
+    );
+    return { items: data.identities ?? [], total: data.total ?? data.identities?.length ?? 0 };
   },
-  getIdentity: (id: string) => argusFetch<Identity>(`/api/identities/${encodeURIComponent(id)}`),
-  createIdentity: (data: Identity) =>
-    argusFetch<Identity>(`/api/identities`, { method: "POST", body: JSON.stringify(data) }),
-  updateIdentity: (id: string, data: Identity) =>
-    argusFetch<Identity>(`/api/identities/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      body: JSON.stringify(data),
-    }),
+
+  getIdentity: (id: string) =>
+    unwrap<ClearIdIdentity>(argusFetch(`/api/identities/${encodeURIComponent(id)}`)),
+
+  createIdentity: (data: IdentityUpsert) =>
+    unwrap<ClearIdIdentity>(
+      argusFetch(`/api/identities`, { method: "POST", body: JSON.stringify(data) }),
+    ),
+
+  updateIdentity: (id: string, data: IdentityUpsert) =>
+    unwrap<ClearIdIdentity>(
+      argusFetch(`/api/identities/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    ),
+
   deactivateIdentity: (id: string) =>
     argusFetch<void>(`/api/identities/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  diagnostics: () => argusFetch<DiagnosticsResponse>(`/api/diagnostics`),
+
+  /**
+   * Diagnóstico: o backend não expõe /api/diagnostics, então usamos
+   * /api/identities como ping (valida rede + token OAuth contra ClearID).
+   */
+  diagnostics: async (): Promise<DiagnosticsResult> => {
+    const env = getCurrentEnv();
+    const cfg = getEnvConfig(env);
+    const start = performance.now();
+    try {
+      const data = await unwrap<{ identities: ClearIdIdentity[] }>(
+        argusFetch(`/api/identities?pageSize=1`),
+      );
+      const latencyMs = Math.round(performance.now() - start);
+      const accountId = data.identities?.[0]?.accountId;
+      return {
+        environment: env,
+        baseUrl: cfg.baseUrl,
+        backend: { reachable: true, latencyMs, status: 200 },
+        identities: { reachable: true, sampleCount: data.identities?.length ?? 0, accountId },
+        checkedAt: new Date().toISOString(),
+      };
+    } catch (e) {
+      const err = e as ArgusApiError;
+      return {
+        environment: env,
+        baseUrl: cfg.baseUrl,
+        backend: { reachable: false, status: err.status },
+        identities: { reachable: false },
+        checkedAt: new Date().toISOString(),
+      };
+    }
+  },
 };
+
+// ---- Helpers de mapeamento ClearID ↔ formulário ----
+
+export function customFieldsToRecord(cf?: ClearIdCustomField[] | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of cf ?? []) if (f.customFieldName) out[f.customFieldName] = f.customFieldValue ?? "";
+  return out;
+}
+
+export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { identityId: string } {
+  return {
+    identityId: i.identityId,
+    externalId: i.systemData?.externalId ?? "",
+    firstName: i.firstName ?? "",
+    lastName: i.lastName ?? "",
+    email: i.email ?? "",
+    status: (i.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
+    customFields: customFieldsToRecord(i.systemData?.customFields),
+  };
+}

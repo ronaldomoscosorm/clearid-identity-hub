@@ -123,31 +123,36 @@ function IdentitiesList() {
                 </TableCell>
               </TableRow>
             ) : (
-              query.data.items.map((it) => (
-                <TableRow key={it.id ?? it.externalId} className="cursor-pointer">
-                  <TableCell className="font-mono text-xs">
-                    <Link
-                      to="/identities/$id"
-                      params={{ id: it.id ?? it.externalId }}
-                      className="hover:underline"
-                    >
-                      {it.externalId}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    {it.firstName} {it.lastName}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{it.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={it.status === "Active" ? "default" : "secondary"}>
-                      {it.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {it.updatedAt ? new Date(it.updatedAt).toLocaleString() : "—"}
-                  </TableCell>
-                </TableRow>
-              ))
+              query.data.items.map((it) => {
+                const extId = it.systemData?.externalId ?? it.identityId;
+                return (
+                  <TableRow key={it.identityId} className="cursor-pointer">
+                    <TableCell className="font-mono text-xs">
+                      <Link
+                        to="/identities/$id"
+                        params={{ id: it.identityId }}
+                        className="hover:underline"
+                      >
+                        {extId}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      {it.firstName} {it.lastName}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{it.email ?? "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={it.status === "Active" ? "default" : "secondary"}>
+                        {it.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {it.lastModificationDateUtc
+                        ? new Date(it.lastModificationDateUtc).toLocaleString()
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
