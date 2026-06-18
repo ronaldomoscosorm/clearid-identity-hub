@@ -25,7 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 
-export const Route = createFileRoute("/_authenticated/identities")({
+export const Route = createFileRoute("/_authenticated/identities/")({
   head: () => ({ meta: [{ title: "Identities — Argus ClearID" }] }),
   component: IdentitiesList,
 });

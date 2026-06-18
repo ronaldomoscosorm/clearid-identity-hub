@@ -13,8 +13,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
-import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
+import { Route as AuthenticatedIdentitiesIndexRouteImport } from './routes/_authenticated/identities.index'
 import { Route as AuthenticatedIdentitiesNewRouteImport } from './routes/_authenticated/identities.new'
 import { Route as AuthenticatedIdentitiesIdRouteImport } from './routes/_authenticated/identities.$id'
 
@@ -37,47 +37,48 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedIdentitiesRoute = AuthenticatedIdentitiesRouteImport.update({
-  id: '/identities',
-  path: '/identities',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedDiagnosticsRoute =
   AuthenticatedDiagnosticsRouteImport.update({
     id: '/diagnostics',
     path: '/diagnostics',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedIdentitiesIndexRoute =
+  AuthenticatedIdentitiesIndexRouteImport.update({
+    id: '/identities/',
+    path: '/identities/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedIdentitiesNewRoute =
   AuthenticatedIdentitiesNewRouteImport.update({
-    id: '/new',
-    path: '/new',
-    getParentRoute: () => AuthenticatedIdentitiesRoute,
+    id: '/identities/new',
+    path: '/identities/new',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedIdentitiesIdRoute =
   AuthenticatedIdentitiesIdRouteImport.update({
-    id: '/$id',
-    path: '/$id',
-    getParentRoute: () => AuthenticatedIdentitiesRoute,
+    id: '/identities/$id',
+    path: '/identities/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
-  '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
+  '/identities/': typeof AuthenticatedIdentitiesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
-  '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
+  '/identities': typeof AuthenticatedIdentitiesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -85,10 +86,10 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
-  '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/_authenticated/identities/new': typeof AuthenticatedIdentitiesNewRoute
+  '/_authenticated/identities/': typeof AuthenticatedIdentitiesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -96,29 +97,29 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/diagnostics'
-    | '/identities'
     | '/settings'
     | '/identities/$id'
     | '/identities/new'
+    | '/identities/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/diagnostics'
-    | '/identities'
     | '/settings'
     | '/identities/$id'
     | '/identities/new'
+    | '/identities'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/diagnostics'
-    | '/_authenticated/identities'
     | '/_authenticated/settings'
     | '/_authenticated/identities/$id'
     | '/_authenticated/identities/new'
+    | '/_authenticated/identities/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -157,13 +158,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/identities': {
-      id: '/_authenticated/identities'
-      path: '/identities'
-      fullPath: '/identities'
-      preLoaderRoute: typeof AuthenticatedIdentitiesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/diagnostics': {
       id: '/_authenticated/diagnostics'
       path: '/diagnostics'
@@ -171,49 +165,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDiagnosticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/identities/': {
+      id: '/_authenticated/identities/'
+      path: '/identities'
+      fullPath: '/identities/'
+      preLoaderRoute: typeof AuthenticatedIdentitiesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/identities/new': {
       id: '/_authenticated/identities/new'
-      path: '/new'
+      path: '/identities/new'
       fullPath: '/identities/new'
       preLoaderRoute: typeof AuthenticatedIdentitiesNewRouteImport
-      parentRoute: typeof AuthenticatedIdentitiesRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/identities/$id': {
       id: '/_authenticated/identities/$id'
-      path: '/$id'
+      path: '/identities/$id'
       fullPath: '/identities/$id'
       preLoaderRoute: typeof AuthenticatedIdentitiesIdRouteImport
-      parentRoute: typeof AuthenticatedIdentitiesRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
   }
 }
 
-interface AuthenticatedIdentitiesRouteChildren {
-  AuthenticatedIdentitiesIdRoute: typeof AuthenticatedIdentitiesIdRoute
-  AuthenticatedIdentitiesNewRoute: typeof AuthenticatedIdentitiesNewRoute
-}
-
-const AuthenticatedIdentitiesRouteChildren: AuthenticatedIdentitiesRouteChildren =
-  {
-    AuthenticatedIdentitiesIdRoute: AuthenticatedIdentitiesIdRoute,
-    AuthenticatedIdentitiesNewRoute: AuthenticatedIdentitiesNewRoute,
-  }
-
-const AuthenticatedIdentitiesRouteWithChildren =
-  AuthenticatedIdentitiesRoute._addFileChildren(
-    AuthenticatedIdentitiesRouteChildren,
-  )
-
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
-  AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedIdentitiesIdRoute: typeof AuthenticatedIdentitiesIdRoute
+  AuthenticatedIdentitiesNewRoute: typeof AuthenticatedIdentitiesNewRoute
+  AuthenticatedIdentitiesIndexRoute: typeof AuthenticatedIdentitiesIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
-  AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedIdentitiesIdRoute: AuthenticatedIdentitiesIdRoute,
+  AuthenticatedIdentitiesNewRoute: AuthenticatedIdentitiesNewRoute,
+  AuthenticatedIdentitiesIndexRoute: AuthenticatedIdentitiesIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
