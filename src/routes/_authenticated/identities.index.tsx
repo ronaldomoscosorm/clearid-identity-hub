@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff } from "lucide-react";
 import { argusApi } from "@/lib/argus-client";
 import { useArgusEnv } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { IdentityThumb } from "@/components/IdentityThumb";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/identities/")({
   head: () => ({ meta: [{ title: "Identities — Argus ClearID" }] }),
@@ -34,9 +42,9 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 
 function IdentitiesList() {
   const { env } = useArgusEnv();
+  const queryClient = useQueryClient();
   // Campos do formulário (não disparam busca automaticamente)
   const [fFirstName, setFFirstName] = useState("");
-  const [fLastName, setFLastName] = useState("");
   const [fEmail, setFEmail] = useState("");
   const [fCompany, setFCompany] = useState("");
   const [fJobTitle, setFJobTitle] = useState("");
@@ -46,20 +54,18 @@ function IdentitiesList() {
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
   const [applied, setApplied] = useState<{
     firstName: string;
-    lastName: string;
     email: string;
     company: string;
     jobTitle: string;
     department: string;
     status: string;
-  }>({ firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
+  }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
 
   const query = useQuery({
     queryKey: ["identities", env, applied],
     queryFn: () =>
       argusApi.listIdentities({
         firstName: applied.firstName || undefined,
-        lastName: applied.lastName || undefined,
         email: applied.email || undefined,
         company: applied.company || undefined,
         jobTitle: applied.jobTitle || undefined,
@@ -69,11 +75,20 @@ function IdentitiesList() {
     retry: false,
   });
 
+  const toggleStatus = useMutation({
+    mutationFn: async ({ id, activate }: { id: string; activate: boolean }) =>
+      activate ? argusApi.activateIdentity(id) : argusApi.deactivateIdentity(id),
+    onSuccess: (_d, vars) => {
+      toast.success(vars.activate ? "Identity ativada" : "Identity desativada");
+      queryClient.invalidateQueries({ queryKey: ["identities"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setApplied({
       firstName: fFirstName.trim(),
-      lastName: fLastName.trim(),
       email: fEmail.trim(),
       company: fCompany.trim(),
       jobTitle: fJobTitle.trim(),
@@ -84,13 +99,12 @@ function IdentitiesList() {
 
   const onClear = () => {
     setFFirstName("");
-    setFLastName("");
     setFEmail("");
     setFCompany("");
     setFJobTitle("");
     setFDepartment("");
     setFStatus("all");
-    setApplied({ firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
+    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
   };
 
   return (
@@ -119,15 +133,6 @@ function IdentitiesList() {
                 value={fFirstName}
                 onChange={(e) => setFFirstName(e.target.value)}
                 placeholder="Ex: Maria"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="f-last-name">Sobrenome</Label>
-              <Input
-                id="f-last-name"
-                value={fLastName}
-                onChange={(e) => setFLastName(e.target.value)}
-                placeholder="Ex: Silva"
               />
             </div>
             <div className="space-y-1.5">
@@ -211,13 +216,14 @@ function IdentitiesList() {
               <TableHead>E-mail</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Relevância</TableHead>
+              <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {query.isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 6 }).map((__, j) => (
+                  {Array.from({ length: 7 }).map((__, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -226,13 +232,13 @@ function IdentitiesList() {
               ))
             ) : query.isError ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-sm text-destructive">
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-destructive">
                   {(query.error as Error).message}
                 </TableCell>
               </TableRow>
             ) : !query.data?.items?.length ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                   Nenhuma identity encontrada para os filtros informados.
                 </TableCell>
               </TableRow>
@@ -241,7 +247,7 @@ function IdentitiesList() {
                 const status = String(it.status ?? "");
                 const isActive = status.toLowerCase() === "active";
                 return (
-                  <TableRow key={it.identityId} className="cursor-pointer">
+                  <TableRow key={it.identityId}>
                     <TableCell>
                       <IdentityThumb identityId={it.identityId} />
                     </TableCell>
@@ -265,6 +271,43 @@ function IdentitiesList() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {typeof it.score === "number" ? it.score.toFixed(2) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Ações</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link to="/identities/$id" params={{ id: it.identityId }}>
+                              <Eye className="mr-2 h-4 w-4" /> Visualizar
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {isActive ? (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                toggleStatus.mutate({ id: it.identityId, activate: false })
+                              }
+                              disabled={toggleStatus.isPending}
+                            >
+                              <PowerOff className="mr-2 h-4 w-4" /> Desativar
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                toggleStatus.mutate({ id: it.identityId, activate: true })
+                              }
+                              disabled={toggleStatus.isPending}
+                            >
+                              <Power className="mr-2 h-4 w-4" /> Ativar
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );
