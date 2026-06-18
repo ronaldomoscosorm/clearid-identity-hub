@@ -232,7 +232,7 @@ export const argusApi = {
     const headers = new Headers();
     headers.set("X-Environment", env);
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-    const res = await fetch(url, { method: "PUT", headers, body: form });
+    const res = await fetch(url, { method: "POST", headers, body: form });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new ArgusApiError({ status: res.status, message: text || res.statusText });
