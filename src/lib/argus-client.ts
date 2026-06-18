@@ -147,13 +147,17 @@ async function unwrap<T>(p: Promise<unknown>): Promise<T> {
 
 export const argusApi = {
   listIdentities: async (params?: {
-    search?: string;
+    name?: string;
+    email?: string;
+    externalId?: string;
     status?: string;
     page?: number;
     pageSize?: number;
   }) => {
     const q = new URLSearchParams();
-    if (params?.search) q.set("search", params.search);
+    if (params?.name) q.set("name", params.name);
+    if (params?.email) q.set("email", params.email);
+    if (params?.externalId) q.set("externalId", params.externalId);
     if (params?.status) q.set("status", params.status);
     if (params?.page) q.set("page", String(params.page));
     if (params?.pageSize) q.set("pageSize", String(params.pageSize));
