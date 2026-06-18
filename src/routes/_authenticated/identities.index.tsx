@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, RefreshCw, Search } from "lucide-react";
 import { argusApi } from "@/lib/argus-client";
 import { useArgusEnv } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -32,36 +33,49 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 
 function IdentitiesList() {
   const { env } = useArgusEnv();
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<string>("all");
+  // Campos do formulário (não disparam busca automaticamente)
+  const [fName, setFName] = useState("");
+  const [fEmail, setFEmail] = useState("");
+  const [fExternalId, setFExternalId] = useState("");
+  const [fStatus, setFStatus] = useState<string>("all");
+
+  // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
+  const [applied, setApplied] = useState<{
+    name: string;
+    email: string;
+    externalId: string;
+    status: string;
+  }>({ name: "", email: "", externalId: "", status: "all" });
 
   const query = useQuery({
-    queryKey: ["identities", env],
-    queryFn: () => argusApi.listIdentities(),
+    queryKey: ["identities", env, applied],
+    queryFn: () =>
+      argusApi.listIdentities({
+        name: applied.name || undefined,
+        email: applied.email || undefined,
+        externalId: applied.externalId || undefined,
+        status: applied.status === "all" ? undefined : applied.status,
+      }),
     retry: false,
   });
 
-  const filtered = useMemo(() => {
-    const items = query.data?.items ?? [];
-    const term = search.trim().toLowerCase();
-    return items.filter((it) => {
-      if (status !== "all" && it.status !== status) return false;
-      if (!term) return true;
-      const ext = it.systemData?.externalId ?? "";
-      const haystack = [
-        it.firstName,
-        it.lastName,
-        it.displayName,
-        it.email,
-        ext,
-        it.identityId,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(term);
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setApplied({
+      name: fName.trim(),
+      email: fEmail.trim(),
+      externalId: fExternalId.trim(),
+      status: fStatus,
     });
-  }, [query.data, search, status]);
+  };
+
+  const onClear = () => {
+    setFName("");
+    setFEmail("");
+    setFExternalId("");
+    setFStatus("all");
+    setApplied({ name: "", email: "", externalId: "", status: "all" });
+  };
 
   return (
     <div className="space-y-6">
@@ -80,30 +94,68 @@ function IdentitiesList() {
       </div>
 
       <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[240px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por nome, e-mail ou externalId..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="f-name">Nome</Label>
+              <Input
+                id="f-name"
+                value={fName}
+                onChange={(e) => setFName(e.target.value)}
+                placeholder="Ex: Maria Silva"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-email">E-mail</Label>
+              <Input
+                id="f-email"
+                value={fEmail}
+                onChange={(e) => setFEmail(e.target.value)}
+                placeholder="usuario@empresa.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-extid">External ID</Label>
+              <Input
+                id="f-extid"
+                value={fExternalId}
+                onChange={(e) => setFExternalId(e.target.value)}
+                placeholder="ex: RM-12345"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={fStatus} onValueChange={setFStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="Active">Ativos</SelectItem>
+                  <SelectItem value="Inactive">Inativos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              <SelectItem value="Active">Ativos</SelectItem>
-              <SelectItem value="Inactive">Inativos</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="icon" onClick={() => query.refetch()} disabled={query.isFetching}>
-            <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-          </Button>
-        </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClear} disabled={query.isFetching}>
+              Limpar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => query.refetch()}
+              disabled={query.isFetching}
+              title="Recarregar"
+            >
+              <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            </Button>
+            <Button type="submit" disabled={query.isFetching}>
+              <Search className="mr-1 h-4 w-4" /> Pesquisar
+            </Button>
+          </div>
+        </form>
       </Card>
 
       <Card>
@@ -134,16 +186,14 @@ function IdentitiesList() {
                   {(query.error as Error).message}
                 </TableCell>
               </TableRow>
-            ) : !filtered.length ? (
+            ) : !query.data?.items?.length ? (
               <TableRow>
                 <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                  {query.data?.items?.length
-                    ? "Nenhum resultado para os filtros aplicados."
-                    : "Nenhuma identity encontrada."}
+                  Nenhuma identity encontrada para os filtros informados.
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((it) => {
+              query.data.items.map((it) => {
                 const extId = it.systemData?.externalId ?? it.identityId;
                 return (
                   <TableRow key={it.identityId} className="cursor-pointer">
