@@ -251,6 +251,8 @@ function IdentitiesList() {
             ) : (
               query.data.items.map((it) => {
                 const extId = it.systemData?.externalId ?? it.identityId;
+                const status = String(it.status ?? "");
+                const isActive = status.toLowerCase() === "active";
                 return (
                   <TableRow key={it.identityId} className="cursor-pointer">
                     <TableCell className="font-mono text-xs">
@@ -267,8 +269,8 @@ function IdentitiesList() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{it.email ?? "—"}</TableCell>
                     <TableCell>
-                      <Badge variant={it.status === "Active" ? "default" : "secondary"}>
-                        {it.status}
+                      <Badge variant={isActive ? "default" : "secondary"}>
+                        {isActive ? "Active" : status || "—"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
