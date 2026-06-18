@@ -203,6 +203,27 @@ export const argusApi = {
   deactivateIdentity: (id: string) =>
     argusFetch<void>(`/api/identities/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
+  /** Ativa uma identidade: carrega, troca status para Active e PUT. */
+  activateIdentity: async (id: string) => {
+    const current = await unwrap<ClearIdIdentity>(
+      argusFetch(`/api/identities/${encodeURIComponent(id)}`),
+    );
+    const payload: IdentityUpsert = {
+      externalId: current.systemData?.externalId ?? "",
+      firstName: current.firstName ?? "",
+      lastName: current.lastName ?? "",
+      email: current.email ?? "",
+      status: "Active",
+      customFields: customFieldsToRecord(current.systemData?.customFields),
+    };
+    return unwrap<ClearIdIdentity>(
+      argusFetch(`/api/identities/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    );
+  },
+
   /** Baixa a foto da identidade como Blob. Retorna null em 404. */
   getIdentityPicture: async (id: string): Promise<Blob | null> => {
     const env = getCurrentEnv();
