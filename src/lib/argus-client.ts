@@ -221,6 +221,24 @@ export const argusApi = {
     return await res.blob();
   },
 
+  /** Envia uma nova foto (JPEG) para a identidade. */
+  uploadIdentityPicture: async (id: string, blob: Blob): Promise<void> => {
+    const env = getCurrentEnv();
+    const cfg = getEnvConfig(env);
+    if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+    const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
+    const form = new FormData();
+    form.append("file", blob, "capture.jpg");
+    const headers = new Headers();
+    headers.set("X-Environment", env);
+    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    const res = await fetch(url, { method: "PUT", headers, body: form });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new ArgusApiError({ status: res.status, message: text || res.statusText });
+    }
+  },
+
   /**
    * Diagnóstico: o backend não expõe /api/diagnostics, então usamos
    * /api/identities como ping (valida rede + token OAuth contra ClearID).
