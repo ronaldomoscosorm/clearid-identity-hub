@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, RefreshCw, Search } from "lucide-react";
 import { argusApi } from "@/lib/argus-client";
@@ -36,14 +36,32 @@ function IdentitiesList() {
   const [status, setStatus] = useState<string>("all");
 
   const query = useQuery({
-    queryKey: ["identities", env, search, status],
-    queryFn: () =>
-      argusApi.listIdentities({
-        search: search || undefined,
-        status: status === "all" ? undefined : status,
-      }),
+    queryKey: ["identities", env],
+    queryFn: () => argusApi.listIdentities(),
     retry: false,
   });
+
+  const filtered = useMemo(() => {
+    const items = query.data?.items ?? [];
+    const term = search.trim().toLowerCase();
+    return items.filter((it) => {
+      if (status !== "all" && it.status !== status) return false;
+      if (!term) return true;
+      const ext = it.systemData?.externalId ?? "";
+      const haystack = [
+        it.firstName,
+        it.lastName,
+        it.displayName,
+        it.email,
+        ext,
+        it.identityId,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [query.data, search, status]);
 
   return (
     <div className="space-y-6">
@@ -116,14 +134,16 @@ function IdentitiesList() {
                   {(query.error as Error).message}
                 </TableCell>
               </TableRow>
-            ) : !query.data?.items?.length ? (
+            ) : !filtered.length ? (
               <TableRow>
                 <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhuma identity encontrada.
+                  {query.data?.items?.length
+                    ? "Nenhum resultado para os filtros aplicados."
+                    : "Nenhuma identity encontrada."}
                 </TableCell>
               </TableRow>
             ) : (
-              query.data.items.map((it) => {
+              filtered.map((it) => {
                 const extId = it.systemData?.externalId ?? it.identityId;
                 return (
                   <TableRow key={it.identityId} className="cursor-pointer">
