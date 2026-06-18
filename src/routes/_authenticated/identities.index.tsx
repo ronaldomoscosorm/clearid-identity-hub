@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff } from "lucide-react";
 import { argusApi } from "@/lib/argus-client";
 import { useArgusEnv } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { IdentityThumb } from "@/components/IdentityThumb";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/identities/")({
   head: () => ({ meta: [{ title: "Identities — Argus ClearID" }] }),
@@ -34,9 +42,9 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 
 function IdentitiesList() {
   const { env } = useArgusEnv();
+  const queryClient = useQueryClient();
   // Campos do formulário (não disparam busca automaticamente)
   const [fFirstName, setFFirstName] = useState("");
-  const [fLastName, setFLastName] = useState("");
   const [fEmail, setFEmail] = useState("");
   const [fCompany, setFCompany] = useState("");
   const [fJobTitle, setFJobTitle] = useState("");
@@ -46,20 +54,18 @@ function IdentitiesList() {
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
   const [applied, setApplied] = useState<{
     firstName: string;
-    lastName: string;
     email: string;
     company: string;
     jobTitle: string;
     department: string;
     status: string;
-  }>({ firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
+  }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
 
   const query = useQuery({
     queryKey: ["identities", env, applied],
     queryFn: () =>
       argusApi.listIdentities({
         firstName: applied.firstName || undefined,
-        lastName: applied.lastName || undefined,
         email: applied.email || undefined,
         company: applied.company || undefined,
         jobTitle: applied.jobTitle || undefined,
@@ -69,11 +75,20 @@ function IdentitiesList() {
     retry: false,
   });
 
+  const toggleStatus = useMutation({
+    mutationFn: async ({ id, activate }: { id: string; activate: boolean }) =>
+      activate ? argusApi.activateIdentity(id) : argusApi.deactivateIdentity(id),
+    onSuccess: (_d, vars) => {
+      toast.success(vars.activate ? "Identity ativada" : "Identity desativada");
+      queryClient.invalidateQueries({ queryKey: ["identities"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setApplied({
       firstName: fFirstName.trim(),
-      lastName: fLastName.trim(),
       email: fEmail.trim(),
       company: fCompany.trim(),
       jobTitle: fJobTitle.trim(),
@@ -84,13 +99,12 @@ function IdentitiesList() {
 
   const onClear = () => {
     setFFirstName("");
-    setFLastName("");
     setFEmail("");
     setFCompany("");
     setFJobTitle("");
     setFDepartment("");
     setFStatus("all");
-    setApplied({ firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
+    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
   };
 
   return (
@@ -119,15 +133,6 @@ function IdentitiesList() {
                 value={fFirstName}
                 onChange={(e) => setFFirstName(e.target.value)}
                 placeholder="Ex: Maria"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="f-last-name">Sobrenome</Label>
-              <Input
-                id="f-last-name"
-                value={fLastName}
-                onChange={(e) => setFLastName(e.target.value)}
-                placeholder="Ex: Silva"
               />
             </div>
             <div className="space-y-1.5">
