@@ -34,6 +34,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import type { ClearIdIdentity } from "@/lib/argus-client";
 
 export const Route = createFileRoute("/_authenticated/identities/")({
   head: () => ({ meta: [{ title: "Identities — Argus ClearID" }] }),
@@ -43,6 +54,9 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 function IdentitiesList() {
   const { env } = useArgusEnv();
   const queryClient = useQueryClient();
+  const [confirm, setConfirm] = useState<{ id: string; activate: boolean; name: string } | null>(
+    null,
+  );
   // Campos do formulário (não disparam busca automaticamente)
   const [fFirstName, setFFirstName] = useState("");
   const [fEmail, setFEmail] = useState("");
@@ -76,11 +90,25 @@ function IdentitiesList() {
   });
 
   const toggleStatus = useMutation({
-    mutationFn: async ({ id, activate }: { id: string; activate: boolean }) =>
-      activate ? argusApi.activateIdentity(id) : argusApi.deactivateIdentity(id),
-    onSuccess: (_d, vars) => {
+    mutationFn: async ({ id, activate }: { id: string; activate: boolean }) => {
+      if (activate) await argusApi.activateIdentity(id);
+      else await argusApi.deactivateIdentity(id);
+      // Re-pesquisar essa identity após a operação
+      return await argusApi.getIdentity(id);
+    },
+    onSuccess: (updated, vars) => {
       toast.success(vars.activate ? "Identity ativada" : "Identity desativada");
-      queryClient.invalidateQueries({ queryKey: ["identities"] });
+      // Atualiza o item dentro do cache da listagem atual
+      queryClient.setQueryData(
+        ["identities", env, applied],
+        (prev: { items: ClearIdIdentity[]; total: number } | undefined) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            items: prev.items.map((i) => (i.identityId === updated.identityId ? updated : i)),
+          };
+        },
+      );
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -290,7 +318,12 @@ function IdentitiesList() {
                           {isActive ? (
                             <DropdownMenuItem
                               onClick={() =>
-                                toggleStatus.mutate({ id: it.identityId, activate: false })
+                                setConfirm({
+                                  id: it.identityId,
+                                  activate: false,
+                                  name: `${it.firstName ?? ""} ${it.lastName ?? ""}`.trim() ||
+                                    it.identityId,
+                                })
                               }
                               disabled={toggleStatus.isPending}
                             >
@@ -299,7 +332,12 @@ function IdentitiesList() {
                           ) : (
                             <DropdownMenuItem
                               onClick={() =>
-                                toggleStatus.mutate({ id: it.identityId, activate: true })
+                                setConfirm({
+                                  id: it.identityId,
+                                  activate: true,
+                                  name: `${it.firstName ?? ""} ${it.lastName ?? ""}`.trim() ||
+                                    it.identityId,
+                                })
                               }
                               disabled={toggleStatus.isPending}
                             >
@@ -316,6 +354,36 @@ function IdentitiesList() {
           </TableBody>
         </Table>
       </Card>
+
+      <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirm?.activate ? "Ativar identity?" : "Desativar identity?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Você tem certeza que deseja {confirm?.activate ? "ativar" : "desativar"}{" "}
+              <strong>{confirm?.name}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={toggleStatus.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={toggleStatus.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!confirm) return;
+                toggleStatus.mutate(
+                  { id: confirm.id, activate: confirm.activate },
+                  { onSettled: () => setConfirm(null) },
+                );
+              }}
+            >
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
