@@ -11,8 +11,8 @@ const ENV_KEY = "argus.env";
 const CFG_KEY = "argus.config";
 
 const DEFAULTS: Record<ArgusEnvKey, ArgusEnvConfig> = {
-  demo: { baseUrl: "https://argusclearid-demo.rm.local", apiKey: "" },
-  prod: { baseUrl: "https://argusclearid.rm.local", apiKey: "" },
+  demo: { baseUrl: "https://argusclearidapi.rmtecho.com.br", apiKey: "" },
+  prod: { baseUrl: "https://argusclearidapi.rmtecho.com.br", apiKey: "" },
 };
 
 function isBrowser() {
