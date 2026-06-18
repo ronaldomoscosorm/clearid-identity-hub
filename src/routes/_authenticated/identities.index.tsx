@@ -34,26 +34,38 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 function IdentitiesList() {
   const { env } = useArgusEnv();
   // Campos do formulário (não disparam busca automaticamente)
-  const [fName, setFName] = useState("");
+  const [fQuery, setFQuery] = useState("");
+  const [fFirstName, setFFirstName] = useState("");
+  const [fLastName, setFLastName] = useState("");
   const [fEmail, setFEmail] = useState("");
-  const [fExternalId, setFExternalId] = useState("");
+  const [fCompany, setFCompany] = useState("");
+  const [fJobTitle, setFJobTitle] = useState("");
+  const [fDepartment, setFDepartment] = useState("");
   const [fStatus, setFStatus] = useState<string>("all");
 
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
   const [applied, setApplied] = useState<{
-    name: string;
+    query: string;
+    firstName: string;
+    lastName: string;
     email: string;
-    externalId: string;
+    company: string;
+    jobTitle: string;
+    department: string;
     status: string;
-  }>({ name: "", email: "", externalId: "", status: "all" });
+  }>({ query: "", firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
 
   const query = useQuery({
     queryKey: ["identities", env, applied],
     queryFn: () =>
       argusApi.listIdentities({
-        name: applied.name || undefined,
+        query: applied.query || undefined,
+        firstName: applied.firstName || undefined,
+        lastName: applied.lastName || undefined,
         email: applied.email || undefined,
-        externalId: applied.externalId || undefined,
+        company: applied.company || undefined,
+        jobTitle: applied.jobTitle || undefined,
+        department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
       }),
     retry: false,
@@ -62,19 +74,27 @@ function IdentitiesList() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setApplied({
-      name: fName.trim(),
+      query: fQuery.trim(),
+      firstName: fFirstName.trim(),
+      lastName: fLastName.trim(),
       email: fEmail.trim(),
-      externalId: fExternalId.trim(),
+      company: fCompany.trim(),
+      jobTitle: fJobTitle.trim(),
+      department: fDepartment.trim(),
       status: fStatus,
     });
   };
 
   const onClear = () => {
-    setFName("");
+    setFQuery("");
+    setFFirstName("");
+    setFLastName("");
     setFEmail("");
-    setFExternalId("");
+    setFCompany("");
+    setFJobTitle("");
+    setFDepartment("");
     setFStatus("all");
-    setApplied({ name: "", email: "", externalId: "", status: "all" });
+    setApplied({ query: "", firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
   };
 
   return (
@@ -97,12 +117,30 @@ function IdentitiesList() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
-              <Label htmlFor="f-name">Nome</Label>
+              <Label htmlFor="f-query">Texto livre</Label>
               <Input
-                id="f-name"
-                value={fName}
-                onChange={(e) => setFName(e.target.value)}
-                placeholder="Ex: Maria Silva"
+                id="f-query"
+                value={fQuery}
+                onChange={(e) => setFQuery(e.target.value)}
+                placeholder="Nome, sobrenome ou e-mail"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-first-name">First name</Label>
+              <Input
+                id="f-first-name"
+                value={fFirstName}
+                onChange={(e) => setFFirstName(e.target.value)}
+                placeholder="Ex: Maria"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-last-name">Last name</Label>
+              <Input
+                id="f-last-name"
+                value={fLastName}
+                onChange={(e) => setFLastName(e.target.value)}
+                placeholder="Ex: Silva"
               />
             </div>
             <div className="space-y-1.5">
@@ -115,12 +153,30 @@ function IdentitiesList() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="f-extid">External ID</Label>
+              <Label htmlFor="f-company">Empresa</Label>
               <Input
-                id="f-extid"
-                value={fExternalId}
-                onChange={(e) => setFExternalId(e.target.value)}
-                placeholder="ex: RM-12345"
+                id="f-company"
+                value={fCompany}
+                onChange={(e) => setFCompany(e.target.value)}
+                placeholder="Empresa"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-job-title">Cargo</Label>
+              <Input
+                id="f-job-title"
+                value={fJobTitle}
+                onChange={(e) => setFJobTitle(e.target.value)}
+                placeholder="Cargo"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="f-department">Departamento</Label>
+              <Input
+                id="f-department"
+                value={fDepartment}
+                onChange={(e) => setFDepartment(e.target.value)}
+                placeholder="Departamento"
               />
             </div>
             <div className="space-y-1.5">
@@ -162,11 +218,11 @@ function IdentitiesList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ExternalId</TableHead>
+              <TableHead>IdentityId</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>E-mail</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Atualizado</TableHead>
+              <TableHead>Relevância</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -194,7 +250,8 @@ function IdentitiesList() {
               </TableRow>
             ) : (
               query.data.items.map((it) => {
-                const extId = it.systemData?.externalId ?? it.identityId;
+                const status = String(it.status ?? "");
+                const isActive = status.toLowerCase() === "active";
                 return (
                   <TableRow key={it.identityId} className="cursor-pointer">
                     <TableCell className="font-mono text-xs">
@@ -203,7 +260,7 @@ function IdentitiesList() {
                         params={{ id: it.identityId }}
                         className="hover:underline"
                       >
-                        {extId}
+                        {it.identityId}
                       </Link>
                     </TableCell>
                     <TableCell>
@@ -211,14 +268,12 @@ function IdentitiesList() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{it.email ?? "—"}</TableCell>
                     <TableCell>
-                      <Badge variant={it.status === "Active" ? "default" : "secondary"}>
-                        {it.status}
+                      <Badge variant={isActive ? "default" : "secondary"}>
+                        {isActive ? "Active" : status || "—"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {it.lastModificationDateUtc
-                        ? new Date(it.lastModificationDateUtc).toLocaleString()
-                        : "—"}
+                      {typeof it.score === "number" ? it.score.toFixed(2) : "—"}
                     </TableCell>
                   </TableRow>
                 );

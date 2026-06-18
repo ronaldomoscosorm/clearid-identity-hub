@@ -108,6 +108,14 @@ export interface ClearIdIdentity {
   } | null;
   creationDateUtc?: string;
   lastModificationDateUtc?: string;
+  score?: number | null;
+}
+
+export interface IdentitySearchResult {
+  results?: ClearIdIdentity[] | null;
+  totalItems?: number | null;
+  skip: number;
+  take: number;
 }
 
 /** Wrapper retornado pelo backend: { success, message, data } */
@@ -147,25 +155,33 @@ async function unwrap<T>(p: Promise<unknown>): Promise<T> {
 
 export const argusApi = {
   listIdentities: async (params?: {
-    name?: string;
+    query?: string;
+    firstName?: string;
+    lastName?: string;
     email?: string;
-    externalId?: string;
+    company?: string;
+    jobTitle?: string;
+    department?: string;
     status?: string;
-    page?: number;
-    pageSize?: number;
+    skip?: number;
+    take?: number;
   }) => {
     const q = new URLSearchParams();
-    if (params?.name) q.set("name", params.name);
+    q.set("includeDeleted", "false");
+    q.set("skip", String(params?.skip ?? 0));
+    q.set("take", String(params?.take ?? 50));
+    if (params?.query) q.set("query", params.query);
+    if (params?.firstName) q.set("firstName", params.firstName);
+    if (params?.lastName) q.set("lastName", params.lastName);
     if (params?.email) q.set("email", params.email);
-    if (params?.externalId) q.set("externalId", params.externalId);
-    if (params?.status) q.set("status", params.status);
-    if (params?.page) q.set("page", String(params.page));
-    if (params?.pageSize) q.set("pageSize", String(params.pageSize));
-    const qs = q.toString();
-    const data = await unwrap<{ identities: ClearIdIdentity[]; total?: number }>(
-      argusFetch(`/api/identities${qs ? `?${qs}` : ""}`),
+    if (params?.company) q.set("company", params.company);
+    if (params?.jobTitle) q.set("jobTitle", params.jobTitle);
+    if (params?.department) q.set("department", params.department);
+    if (params?.status) q.set("status", params.status.toLowerCase());
+    const data = await unwrap<IdentitySearchResult>(
+      argusFetch(`/api/identities/search?${q.toString()}`),
     );
-    return { items: data.identities ?? [], total: data.total ?? data.identities?.length ?? 0 };
+    return { items: data.results ?? [], total: data.totalItems ?? data.results?.length ?? 0 };
   },
 
   getIdentity: (id: string) =>
