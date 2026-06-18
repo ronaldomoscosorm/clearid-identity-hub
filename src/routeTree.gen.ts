@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
+import { Route as AuthenticatedBrandingRouteImport } from './routes/_authenticated/branding'
 import { Route as AuthenticatedIdentitiesIndexRouteImport } from './routes/_authenticated/identities.index'
 import { Route as AuthenticatedIdentitiesNewRouteImport } from './routes/_authenticated/identities.new'
 import { Route as AuthenticatedIdentitiesIdRouteImport } from './routes/_authenticated/identities.$id'
@@ -49,6 +50,11 @@ const AuthenticatedDiagnosticsRoute =
     path: '/diagnostics',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedBrandingRoute = AuthenticatedBrandingRouteImport.update({
+  id: '/branding',
+  path: '/branding',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedIdentitiesIndexRoute =
   AuthenticatedIdentitiesIndexRouteImport.update({
     id: '/',
@@ -71,6 +77,7 @@ const AuthenticatedIdentitiesIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/branding': typeof AuthenticatedBrandingRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
@@ -81,6 +88,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/branding': typeof AuthenticatedBrandingRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
@@ -92,6 +100,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/branding': typeof AuthenticatedBrandingRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/branding'
     | '/diagnostics'
     | '/identities'
     | '/settings'
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/branding'
     | '/diagnostics'
     | '/settings'
     | '/identities/$id'
@@ -124,6 +135,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/branding'
     | '/_authenticated/diagnostics'
     | '/_authenticated/identities'
     | '/_authenticated/settings'
@@ -182,6 +194,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDiagnosticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/branding': {
+      id: '/_authenticated/branding'
+      path: '/branding'
+      fullPath: '/branding'
+      preLoaderRoute: typeof AuthenticatedBrandingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/identities/': {
       id: '/_authenticated/identities/'
       path: '/'
@@ -225,12 +244,14 @@ const AuthenticatedIdentitiesRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedBrandingRoute: typeof AuthenticatedBrandingRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedBrandingRoute: AuthenticatedBrandingRoute,
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
