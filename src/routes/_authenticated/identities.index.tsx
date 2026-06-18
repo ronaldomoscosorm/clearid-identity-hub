@@ -34,7 +34,6 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 function IdentitiesList() {
   const { env } = useArgusEnv();
   // Campos do formulário (não disparam busca automaticamente)
-  const [fQuery, setFQuery] = useState("");
   const [fFirstName, setFFirstName] = useState("");
   const [fLastName, setFLastName] = useState("");
   const [fEmail, setFEmail] = useState("");
@@ -45,7 +44,6 @@ function IdentitiesList() {
 
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
   const [applied, setApplied] = useState<{
-    query: string;
     firstName: string;
     lastName: string;
     email: string;
@@ -53,13 +51,12 @@ function IdentitiesList() {
     jobTitle: string;
     department: string;
     status: string;
-  }>({ query: "", firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
+  }>({ firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
 
   const query = useQuery({
     queryKey: ["identities", env, applied],
     queryFn: () =>
       argusApi.listIdentities({
-        query: applied.query || undefined,
         firstName: applied.firstName || undefined,
         lastName: applied.lastName || undefined,
         email: applied.email || undefined,
@@ -74,7 +71,6 @@ function IdentitiesList() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setApplied({
-      query: fQuery.trim(),
       firstName: fFirstName.trim(),
       lastName: fLastName.trim(),
       email: fEmail.trim(),
@@ -86,7 +82,6 @@ function IdentitiesList() {
   };
 
   const onClear = () => {
-    setFQuery("");
     setFFirstName("");
     setFLastName("");
     setFEmail("");
@@ -94,7 +89,7 @@ function IdentitiesList() {
     setFJobTitle("");
     setFDepartment("");
     setFStatus("all");
-    setApplied({ query: "", firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
+    setApplied({ firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
   };
 
   return (
@@ -117,16 +112,7 @@ function IdentitiesList() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
-              <Label htmlFor="f-query">Texto livre</Label>
-              <Input
-                id="f-query"
-                value={fQuery}
-                onChange={(e) => setFQuery(e.target.value)}
-                placeholder="Nome, sobrenome ou e-mail"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="f-first-name">First name</Label>
+              <Label htmlFor="f-first-name">Nome</Label>
               <Input
                 id="f-first-name"
                 value={fFirstName}
@@ -135,7 +121,7 @@ function IdentitiesList() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="f-last-name">Last name</Label>
+              <Label htmlFor="f-last-name">Sobrenome</Label>
               <Input
                 id="f-last-name"
                 value={fLastName}
