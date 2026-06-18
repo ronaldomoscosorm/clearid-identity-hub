@@ -34,26 +34,38 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 function IdentitiesList() {
   const { env } = useArgusEnv();
   // Campos do formulário (não disparam busca automaticamente)
-  const [fName, setFName] = useState("");
+  const [fQuery, setFQuery] = useState("");
+  const [fFirstName, setFFirstName] = useState("");
+  const [fLastName, setFLastName] = useState("");
   const [fEmail, setFEmail] = useState("");
-  const [fExternalId, setFExternalId] = useState("");
+  const [fCompany, setFCompany] = useState("");
+  const [fJobTitle, setFJobTitle] = useState("");
+  const [fDepartment, setFDepartment] = useState("");
   const [fStatus, setFStatus] = useState<string>("all");
 
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
   const [applied, setApplied] = useState<{
-    name: string;
+    query: string;
+    firstName: string;
+    lastName: string;
     email: string;
-    externalId: string;
+    company: string;
+    jobTitle: string;
+    department: string;
     status: string;
-  }>({ name: "", email: "", externalId: "", status: "all" });
+  }>({ query: "", firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
 
   const query = useQuery({
     queryKey: ["identities", env, applied],
     queryFn: () =>
       argusApi.listIdentities({
-        name: applied.name || undefined,
+        query: applied.query || undefined,
+        firstName: applied.firstName || undefined,
+        lastName: applied.lastName || undefined,
         email: applied.email || undefined,
-        externalId: applied.externalId || undefined,
+        company: applied.company || undefined,
+        jobTitle: applied.jobTitle || undefined,
+        department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
       }),
     retry: false,
@@ -62,19 +74,27 @@ function IdentitiesList() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setApplied({
-      name: fName.trim(),
+      query: fQuery.trim(),
+      firstName: fFirstName.trim(),
+      lastName: fLastName.trim(),
       email: fEmail.trim(),
-      externalId: fExternalId.trim(),
+      company: fCompany.trim(),
+      jobTitle: fJobTitle.trim(),
+      department: fDepartment.trim(),
       status: fStatus,
     });
   };
 
   const onClear = () => {
-    setFName("");
+    setFQuery("");
+    setFFirstName("");
+    setFLastName("");
     setFEmail("");
-    setFExternalId("");
+    setFCompany("");
+    setFJobTitle("");
+    setFDepartment("");
     setFStatus("all");
-    setApplied({ name: "", email: "", externalId: "", status: "all" });
+    setApplied({ query: "", firstName: "", lastName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
   };
 
   return (
