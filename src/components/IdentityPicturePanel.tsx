@@ -12,6 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Props {
   identityId: string;
@@ -96,6 +106,7 @@ function WebcamDialog({
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [snapshotBlob, setSnapshotBlob] = useState<Blob | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -141,6 +152,7 @@ function WebcamDialog({
         if (!blob) return;
         setSnapshotBlob(blob);
         setSnapshot(URL.createObjectURL(blob));
+        setConfirmOpen(true);
       },
       "image/jpeg",
       0.92,
@@ -151,6 +163,7 @@ function WebcamDialog({
     if (snapshot) URL.revokeObjectURL(snapshot);
     setSnapshot(null);
     setSnapshotBlob(null);
+    setConfirmOpen(false);
   };
 
   return (
@@ -180,24 +193,47 @@ function WebcamDialog({
             <X className="mr-1 h-4 w-4" /> Cancelar
           </Button>
           {snapshot ? (
-            <>
-              <Button type="button" variant="outline" onClick={retake} disabled={uploading}>
-                <RefreshCw className="mr-1 h-4 w-4" /> Repetir
-              </Button>
-              <Button
-                type="button"
-                disabled={uploading || !snapshotBlob}
-                onClick={() => snapshotBlob && onCapture(snapshotBlob)}
-              >
-                {uploading ? "Enviando..." : "Salvar foto"}
-              </Button>
-            </>
+            <Button type="button" variant="outline" onClick={retake} disabled={uploading}>
+              <RefreshCw className="mr-1 h-4 w-4" /> Repetir
+            </Button>
           ) : (
             <Button type="button" onClick={capture} disabled={!!err}>
               <Camera className="mr-1 h-4 w-4" /> Capturar
             </Button>
           )}
         </DialogFooter>
+
+        <AlertDialog
+          open={confirmOpen}
+          onOpenChange={(o) => {
+            if (uploading) return;
+            setConfirmOpen(o);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Gravar esta foto?</AlertDialogTitle>
+              <AlertDialogDescription>
+                A foto capturada será enviada e substituirá a foto atual da identidade. Deseja
+                continuar?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={uploading} onClick={() => retake()}>
+                Não, repetir
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={uploading || !snapshotBlob}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (snapshotBlob) onCapture(snapshotBlob);
+                }}
+              >
+                {uploading ? "Enviando..." : "Sim, gravar"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
