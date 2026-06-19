@@ -4,7 +4,6 @@ import { ArrowLeft, PowerOff } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
 import { clearIdToFormValues } from "@/lib/argus-client";
-import { useArgusEnv } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
@@ -29,12 +28,11 @@ export const Route = createFileRoute("/_authenticated/identities/$id")({
 
 function IdentityDetail() {
   const { id } = Route.useParams();
-  const { env } = useArgusEnv();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["identity", env, id],
+    queryKey: ["identity", id],
     queryFn: () => argusApi.getIdentity(id),
     retry: false,
   });
@@ -44,7 +42,7 @@ function IdentityDetail() {
     onSuccess: () => {
       toast.success("Identity atualizada");
       qc.invalidateQueries({ queryKey: ["identities"] });
-      qc.invalidateQueries({ queryKey: ["identity", env, id] });
+      qc.invalidateQueries({ queryKey: ["identity", id] });
     },
     onError: (e) => {
       const err = e as ArgusApiError;
