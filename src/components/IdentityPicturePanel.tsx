@@ -105,23 +105,26 @@ export function IdentityPicturePanel({ identityId }: Props) {
   };
 
   const pasteFromClipboard = async () => {
+    // navigator.clipboard.read() is blocked inside the Lovable preview iframe
+    // (Permissions-Policy). Try it first, but fall back to instructing the user
+    // to press Ctrl+V — the window 'paste' listener below will pick it up.
     try {
-      if (!navigator.clipboard?.read) {
-        toast.error("Seu navegador não permite ler a área de transferência. Use Ctrl+V.");
+      if (navigator.clipboard?.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const type = item.types.find((t) => t.startsWith("image/"));
+          if (type) {
+            const blob = await item.getType(type);
+            await handleBlob(blob);
+            return;
+          }
+        }
+        toast.message("Nenhuma imagem encontrada. Copie uma imagem e tecle Ctrl+V.");
         return;
       }
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const type = item.types.find((t) => t.startsWith("image/"));
-        if (type) {
-          const blob = await item.getType(type);
-          handleBlob(blob);
-          return;
-        }
-      }
-      toast.error("Nenhuma imagem encontrada na área de transferência.");
-    } catch (e) {
-      toast.error((e as Error).message);
+      toast.message("Tecle Ctrl+V para colar a imagem.");
+    } catch {
+      toast.message("Tecle Ctrl+V para colar a imagem.");
     }
   };
 
