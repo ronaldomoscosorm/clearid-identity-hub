@@ -1,7 +1,9 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { LogOut, Shield, Activity, Settings as SettingsIcon, Users, Palette } from "lucide-react";
-import { useArgusEnv, type ArgusEnvKey } from "@/lib/argus-env";
+import { useQuery } from "@tanstack/react-query";
+import { argusApi } from "@/lib/argus-client";
+import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -38,12 +40,13 @@ function NavItem({
   );
 }
 
-function EnvBadge({ env }: { env: ArgusEnvKey }) {
+function EnvBadge({ env }: { env: string }) {
+  const isProd = env.toLowerCase() === "prod" || env.toLowerCase() === "production";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
-        env === "prod"
+        isProd
           ? "bg-primary text-primary-foreground"
           : "bg-muted text-muted-foreground",
       )}
@@ -54,34 +57,15 @@ function EnvBadge({ env }: { env: ArgusEnvKey }) {
   );
 }
 
-function EnvToggle() {
-  const { env, setEnv } = useArgusEnv();
-  return (
-    <div className="inline-flex items-center gap-2 rounded-md border bg-card p-1 shadow-sm">
-      <button
-        onClick={() => setEnv("demo")}
-        className={cn(
-          "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-          env === "demo" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        Demo
-      </button>
-      <button
-        onClick={() => setEnv("prod")}
-        className={cn(
-          "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-          env === "prod" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        Produção
-      </button>
-    </div>
-  );
-}
-
 export function AppShell({ children }: { children: ReactNode }) {
-  const { env } = useArgusEnv();
+  const config = useArgusConfig();
+  const envQuery = useQuery({
+    queryKey: ["backend-env", config.baseUrl],
+    queryFn: argusApi.diagnostics,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const env = envQuery.data?.environment ?? "…";
   const branding = useBranding();
   useApplyBranding();
   const navigate = useNavigate();
@@ -93,10 +77,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
   }, []);
 
-  // Reset queries when env changes so we don't show stale data from the other env
+  // Reset queries when backend base URL changes
   useEffect(() => {
     queryClient.invalidateQueries();
-  }, [env, queryClient]);
+  }, [config.baseUrl, queryClient]);
 
   const handleSignOut = async () => {
     await queryClient.cancelQueries();
@@ -138,7 +122,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="ml-auto flex items-center gap-3">
             <EnvBadge env={env} />
-            <EnvToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="font-normal">

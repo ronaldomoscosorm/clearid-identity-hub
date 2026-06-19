@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff } from "lucide-react";
 import { argusApi } from "@/lib/argus-client";
-import { useArgusEnv } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,7 +51,6 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 });
 
 function IdentitiesList() {
-  const { env } = useArgusEnv();
   const queryClient = useQueryClient();
   const [confirm, setConfirm] = useState<{ id: string; activate: boolean; name: string } | null>(
     null,
@@ -76,7 +74,7 @@ function IdentitiesList() {
   }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
 
   const query = useQuery({
-    queryKey: ["identities", env, applied],
+    queryKey: ["identities", applied],
     queryFn: () =>
       argusApi.listIdentities({
         firstName: applied.firstName || undefined,
@@ -100,7 +98,7 @@ function IdentitiesList() {
       toast.success(vars.activate ? "Identity ativada" : "Identity desativada");
       // Atualiza o item dentro do cache da listagem atual
       queryClient.setQueryData(
-        ["identities", env, applied],
+        ["identities", applied],
         (prev: { items: ClearIdIdentity[]; total: number } | undefined) => {
           if (!prev) return prev;
           return {

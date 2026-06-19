@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
-import { useArgusEnv } from "@/lib/argus-env";
+import { useArgusConfig } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,14 +31,15 @@ function StatRow({ label, value, ok }: { label: string; value: React.ReactNode; 
 }
 
 function Diagnostics() {
-  const { env, config } = useArgusEnv();
+  const config = useArgusConfig();
 
   const query = useQuery({
-    queryKey: ["diagnostics", env],
+    queryKey: ["diagnostics", config.baseUrl],
     queryFn: argusApi.diagnostics,
     refetchInterval: 30_000,
     retry: false,
   });
+  const env = query.data?.environment ?? "—";
 
   return (
     <div className="space-y-6">
@@ -98,35 +99,6 @@ function Diagnostics() {
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Identity Service (ClearID)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {query.isLoading ? (
-              <Skeleton className="h-24 w-full" />
-            ) : query.data ? (
-              <>
-                <StatRow
-                  label="Endpoint /api/identities"
-                  value={query.data.identities.reachable ? "OK" : "Falhou"}
-                  ok={query.data.identities.reachable}
-                />
-                {typeof query.data.identities.sampleCount === "number" && (
-                  <StatRow label="Itens na amostra" value={String(query.data.identities.sampleCount)} />
-                )}
-                {query.data.identities.accountId && (
-                  <StatRow
-                    label="Account ID"
-                    value={<code className="text-xs">{query.data.identities.accountId}</code>}
-                  />
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">Sem dados — verifique conexão com o backend.</p>
-            )}
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
