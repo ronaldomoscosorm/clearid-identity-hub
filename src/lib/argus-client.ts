@@ -1,4 +1,4 @@
-import { getCurrentEnv, getEnvConfig, type ArgusEnvKey } from "./argus-env";
+import { getConfig } from "./argus-env";
 
 export interface ArgusError {
   status: number;
@@ -21,15 +21,14 @@ export class ArgusApiError extends Error {
 
 export async function argusFetch<T = unknown>(
   path: string,
-  init: RequestInit & { env?: ArgusEnvKey } = {},
+  init: RequestInit = {},
 ): Promise<T> {
-  const env = init.env ?? getCurrentEnv();
-  const cfg = getEnvConfig(env);
+  const cfg = getConfig();
 
   if (!cfg.baseUrl) {
     throw new ArgusApiError({
       status: 0,
-      message: "Base URL não configurada para o ambiente " + env,
+      message: "Base URL não configurada",
     });
   }
 
@@ -38,7 +37,6 @@ export async function argusFetch<T = unknown>(
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  headers.set("X-Environment", env);
   if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
 
   let response: Response;
@@ -138,8 +136,7 @@ export interface IdentityUpsert {
 export interface DiagnosticsResult {
   environment: string;
   baseUrl?: string;
-  backend: { reachable: boolean; latencyMs?: number; status?: number };
-  identities: { reachable: boolean; sampleCount?: number; accountId?: string };
+  backend: { reachable: boolean; latencyMs?: number; status?: number; message?: string };
   checkedAt: string;
 }
 
@@ -208,12 +205,10 @@ export const argusApi = {
 
   /** Baixa a foto da identidade como Blob. Retorna null em 404. */
   getIdentityPicture: async (id: string): Promise<Blob | null> => {
-    const env = getCurrentEnv();
-    const cfg = getEnvConfig(env);
+    const cfg = getConfig();
     if (!cfg.baseUrl) return null;
     const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const headers = new Headers();
-    headers.set("X-Environment", env);
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     const res = await fetch(url, { headers });
     if (res.status === 404) return null;
@@ -223,14 +218,12 @@ export const argusApi = {
 
   /** Envia uma nova foto (JPEG) para a identidade. */
   uploadIdentityPicture: async (id: string, blob: Blob): Promise<void> => {
-    const env = getCurrentEnv();
-    const cfg = getEnvConfig(env);
+    const cfg = getConfig();
     if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
     const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const form = new FormData();
     form.append("picture", blob, "capture.jpg");
     const headers = new Headers();
-    headers.set("X-Environment", env);
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     const res = await fetch(url, { method: "POST", headers, body: form });
     if (!res.ok) {
@@ -240,33 +233,37 @@ export const argusApi = {
   },
 
   /**
-   * Diagnóstico: o backend não expõe /api/diagnostics, então usamos
-   * /api/identities como ping (valida rede + token OAuth contra ClearID).
+   * Diagnóstico: chama GET /api/diagnostics/test-connection. O backend define
+   * o ambiente atual (demo/prod) — o frontend apenas exibe.
    */
   diagnostics: async (): Promise<DiagnosticsResult> => {
-    const env = getCurrentEnv();
-    const cfg = getEnvConfig(env);
+    const cfg = getConfig();
     const start = performance.now();
     try {
-      const data = await unwrap<{ identities: ClearIdIdentity[] }>(
-        argusFetch(`/api/identities?pageSize=1`),
-      );
+      const raw = await argusFetch<Record<string, unknown>>(`/api/diagnostics/test-connection`);
       const latencyMs = Math.round(performance.now() - start);
-      const accountId = data.identities?.[0]?.accountId;
+      const body = (raw && typeof raw === "object" && "data" in raw && raw.data && typeof raw.data === "object"
+        ? (raw.data as Record<string, unknown>)
+        : raw) as Record<string, unknown>;
+      const environment =
+        (body.environment as string | undefined) ??
+        (body.Environment as string | undefined) ??
+        (raw.environment as string | undefined) ??
+        "—";
+      const message =
+        (raw.message as string | undefined) ?? (body.message as string | undefined);
       return {
-        environment: env,
+        environment,
         baseUrl: cfg.baseUrl,
-        backend: { reachable: true, latencyMs, status: 200 },
-        identities: { reachable: true, sampleCount: data.identities?.length ?? 0, accountId },
+        backend: { reachable: true, latencyMs, status: 200, message },
         checkedAt: new Date().toISOString(),
       };
     } catch (e) {
       const err = e as ArgusApiError;
       return {
-        environment: env,
+        environment: "—",
         baseUrl: cfg.baseUrl,
-        backend: { reachable: false, status: err.status },
-        identities: { reachable: false },
+        backend: { reachable: false, status: err.status, message: err.message },
         checkedAt: new Date().toISOString(),
       };
     }
