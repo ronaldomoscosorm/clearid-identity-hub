@@ -27,6 +27,25 @@ interface Props {
   identityId: string;
 }
 
+async function toJpeg(blob: Blob, quality = 0.92): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas indisponível");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0);
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("Falha ao converter imagem"))),
+      "image/jpeg",
+      quality,
+    );
+  });
+}
+
 export function IdentityPicturePanel({ identityId }: Props) {
   const { env } = useArgusEnv();
   const qc = useQueryClient();
