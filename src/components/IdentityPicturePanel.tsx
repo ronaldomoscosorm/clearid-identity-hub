@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, ClipboardPaste, RefreshCw, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi } from "@/lib/argus-client";
-import { useArgusEnv } from "@/lib/argus-env";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,7 +46,6 @@ async function toJpeg(blob: Blob, quality = 0.92): Promise<Blob> {
 }
 
 export function IdentityPicturePanel({ identityId }: Props) {
-  const { env } = useArgusEnv();
   const qc = useQueryClient();
   const [url, setUrl] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -55,7 +53,7 @@ export function IdentityPicturePanel({ identityId }: Props) {
   const [pasteUrl, setPasteUrl] = useState<string | null>(null);
 
   const q = useQuery({
-    queryKey: ["identity-picture", env, identityId],
+    queryKey: ["identity-picture", identityId],
     queryFn: () => argusApi.getIdentityPicture(identityId),
     retry: false,
   });
@@ -74,7 +72,7 @@ export function IdentityPicturePanel({ identityId }: Props) {
     mutationFn: (blob: Blob) => argusApi.uploadIdentityPicture(identityId, blob),
     onSuccess: () => {
       toast.success("Foto atualizada");
-      qc.invalidateQueries({ queryKey: ["identity-picture", env, identityId] });
+      qc.invalidateQueries({ queryKey: ["identity-picture", identityId] });
       setOpen(false);
       clearPaste();
     },
