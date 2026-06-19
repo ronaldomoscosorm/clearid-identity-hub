@@ -70,14 +70,19 @@ export function IdentityPicturePanel({ identityId }: Props) {
     });
   };
 
-  const handleBlob = (blob: Blob) => {
+  const handleBlob = async (blob: Blob) => {
     if (!blob.type.startsWith("image/")) {
       toast.error("O conteúdo da área de transferência não é uma imagem.");
       return;
     }
-    clearPaste();
-    setPasteBlob(blob);
-    setPasteUrl(URL.createObjectURL(blob));
+    try {
+      const jpeg = blob.type === "image/jpeg" ? blob : await toJpeg(blob);
+      clearPaste();
+      setPasteBlob(jpeg);
+      setPasteUrl(URL.createObjectURL(jpeg));
+    } catch (e) {
+      toast.error("Não foi possível processar a imagem: " + (e as Error).message);
+    }
   };
 
   const pasteFromClipboard = async () => {
