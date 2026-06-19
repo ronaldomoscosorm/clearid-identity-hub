@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, RefreshCw, User, X } from "lucide-react";
+import { Camera, ClipboardPaste, RefreshCw, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi } from "@/lib/argus-client";
 import { useArgusEnv } from "@/lib/argus-env";
@@ -32,6 +32,8 @@ export function IdentityPicturePanel({ identityId }: Props) {
   const qc = useQueryClient();
   const [url, setUrl] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [pasteBlob, setPasteBlob] = useState<Blob | null>(null);
+  const [pasteUrl, setPasteUrl] = useState<string | null>(null);
 
   const q = useQuery({
     queryKey: ["identity-picture", env, identityId],
@@ -55,9 +57,68 @@ export function IdentityPicturePanel({ identityId }: Props) {
       toast.success("Foto atualizada");
       qc.invalidateQueries({ queryKey: ["identity-picture", env, identityId] });
       setOpen(false);
+      clearPaste();
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const clearPaste = () => {
+    setPasteBlob(null);
+    setPasteUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  };
+
+  const handleBlob = (blob: Blob) => {
+    if (!blob.type.startsWith("image/")) {
+      toast.error("O conteúdo da área de transferência não é uma imagem.");
+      return;
+    }
+    clearPaste();
+    setPasteBlob(blob);
+    setPasteUrl(URL.createObjectURL(blob));
+  };
+
+  const pasteFromClipboard = async () => {
+    try {
+      if (!navigator.clipboard?.read) {
+        toast.error("Seu navegador não permite ler a área de transferência. Use Ctrl+V.");
+        return;
+      }
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (type) {
+          const blob = await item.getType(type);
+          handleBlob(blob);
+          return;
+        }
+      }
+      toast.error("Nenhuma imagem encontrada na área de transferência.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            handleBlob(file);
+            return;
+          }
+        }
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
 
   return (
     <div className="flex items-start gap-4">
@@ -72,10 +133,15 @@ export function IdentityPicturePanel({ identityId }: Props) {
         <p className="text-sm font-medium">Foto biométrica</p>
         <p className="text-xs text-muted-foreground">
           {url ? "Foto cadastrada no ClearID." : "Nenhuma foto cadastrada."}
+          {" "}
+          Você também pode colar uma imagem com Ctrl+V.
         </p>
         <div className="flex gap-2">
           <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
             <Camera className="mr-1 h-4 w-4" /> Tirar foto
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={pasteFromClipboard}>
+            <ClipboardPaste className="mr-1 h-4 w-4" /> Colar imagem
           </Button>
         </div>
       </div>
@@ -86,6 +152,40 @@ export function IdentityPicturePanel({ identityId }: Props) {
         onCapture={(blob) => upload.mutate(blob)}
         uploading={upload.isPending}
       />
+
+      <AlertDialog
+        open={!!pasteBlob}
+        onOpenChange={(o) => {
+          if (upload.isPending) return;
+          if (!o) clearPaste();
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gravar esta imagem?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A imagem da área de transferência substituirá a foto atual da identidade.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {pasteUrl && (
+            <div className="overflow-hidden rounded-md border bg-muted">
+              <img src={pasteUrl} alt="Pré-visualização" className="mx-auto max-h-64 object-contain" />
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={upload.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={upload.isPending || !pasteBlob}
+              onClick={(e) => {
+                e.preventDefault();
+                if (pasteBlob) upload.mutate(pasteBlob);
+              }}
+            >
+              {upload.isPending ? "Enviando..." : "Sim, gravar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
