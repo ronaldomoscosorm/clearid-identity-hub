@@ -65,6 +65,16 @@ function Diagnostics() {
           </CardHeader>
           <CardContent>
             <StatRow label="Ambiente" value={<Badge variant={env === "prod" ? "default" : "secondary"}>{env}</Badge>} />
+            <StatRow
+              label="Código do cliente"
+              value={
+                query.data?.clientCode ? (
+                  <code className="text-xs">{query.data.clientCode}</code>
+                ) : (
+                  "—"
+                )
+              }
+            />
             <StatRow label="Base URL" value={<code className="text-xs">{config.baseUrl || "—"}</code>} />
             <StatRow label="API Key configurada" value={config.apiKey ? "Sim" : "Não"} />
           </CardContent>
