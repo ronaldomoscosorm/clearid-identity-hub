@@ -1,5 +1,37 @@
 import { getConfig } from "./argus-env";
 
+// --- AccountId cache (preenchido pelo /api/diagnostics/environment) ---
+let cachedAccountId: string | null = null;
+const accountIdListeners = new Set<(id: string | null) => void>();
+
+export function getAccountId(): string | null {
+  if (cachedAccountId) return cachedAccountId;
+  if (typeof window !== "undefined") {
+    try {
+      const stored = window.localStorage.getItem("argus.accountId");
+      if (stored) cachedAccountId = stored;
+    } catch { /* ignore */ }
+  }
+  return cachedAccountId;
+}
+
+export function setAccountId(id: string | null) {
+  cachedAccountId = id || null;
+  if (typeof window !== "undefined") {
+    try {
+      if (id) window.localStorage.setItem("argus.accountId", id);
+      else window.localStorage.removeItem("argus.accountId");
+    } catch { /* ignore */ }
+  }
+  for (const cb of accountIdListeners) cb(cachedAccountId);
+}
+
+/** Substitui `{accountId}` em paths por o valor cacheado. */
+export function withAccountId(path: string): string {
+  const id = getAccountId();
+  return id ? path.replace(/\{accountId\}/g, encodeURIComponent(id)) : path;
+}
+
 export interface ArgusError {
   status: number;
   message: string;
@@ -38,6 +70,10 @@ export async function argusFetch<T = unknown>(
     headers.set("Content-Type", "application/json");
   }
   if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+  const accountId = getAccountId();
+  if (accountId && !headers.has("X-Account-Id")) {
+    headers.set("X-Account-Id", accountId);
+  }
 
   let response: Response;
   try {
@@ -260,6 +296,7 @@ export const argusApi = {
         (envBody.accountId as string | undefined) ??
         (envBody.AccountId as string | undefined) ??
         (envBody.clientCode as string | undefined);
+      if (clientCode) setAccountId(clientCode);
       const message = (conn?.message as string | undefined) ?? (connBody.message as string | undefined);
       return {
         environment,
