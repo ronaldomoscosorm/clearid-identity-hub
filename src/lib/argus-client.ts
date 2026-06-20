@@ -247,6 +247,8 @@ export const argusApi = {
     const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    const acc = getAccountId();
+    if (acc) headers.set("X-Account-Id", acc);
     const res = await fetch(url, { headers });
     if (res.status === 404) return null;
     if (!res.ok) throw new ArgusApiError({ status: res.status, message: res.statusText });
@@ -262,6 +264,8 @@ export const argusApi = {
     form.append("picture", blob, "capture.jpg");
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    const acc = getAccountId();
+    if (acc) headers.set("X-Account-Id", acc);
     const res = await fetch(url, { method: "POST", headers, body: form });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
