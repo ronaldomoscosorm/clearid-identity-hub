@@ -135,6 +135,7 @@ export interface IdentityUpsert {
 
 export interface DiagnosticsResult {
   environment: string;
+  clientCode?: string;
   baseUrl?: string;
   backend: { reachable: boolean; latencyMs?: number; status?: number; message?: string };
   checkedAt: string;
@@ -250,10 +251,21 @@ export const argusApi = {
         (body.Environment as string | undefined) ??
         (raw.environment as string | undefined) ??
         "—";
+      const clientCode =
+        (body.clientCode as string | undefined) ??
+        (body.ClientCode as string | undefined) ??
+        (body.clientId as string | undefined) ??
+        (body.ClientId as string | undefined) ??
+        (body.customerCode as string | undefined) ??
+        (body.CustomerCode as string | undefined) ??
+        (body.tenantId as string | undefined) ??
+        (body.TenantId as string | undefined) ??
+        (raw.clientCode as string | undefined);
       const message =
         (raw.message as string | undefined) ?? (body.message as string | undefined);
       return {
         environment,
+        clientCode,
         baseUrl: cfg.baseUrl,
         backend: { reachable: true, latencyMs, status: 200, message },
         checkedAt: new Date().toISOString(),

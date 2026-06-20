@@ -94,6 +94,12 @@ function Settings() {
                 <Badge variant={lastResult.environment.toLowerCase().startsWith("prod") ? "default" : "secondary"}>
                   {lastResult.environment}
                 </Badge>
+                {lastResult.clientCode && (
+                  <>
+                    <span className="text-muted-foreground">Cliente:</span>
+                    <Badge variant="outline">{lastResult.clientCode}</Badge>
+                  </>
+                )}
                 {typeof lastResult.backend.latencyMs === "number" && (
                   <span className="text-xs text-muted-foreground">{lastResult.backend.latencyMs} ms</span>
                 )}
