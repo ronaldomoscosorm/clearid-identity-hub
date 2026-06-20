@@ -96,7 +96,7 @@ function Settings() {
                 </Badge>
                 {lastResult.clientCode && (
                   <>
-                    <span className="text-muted-foreground">Cliente:</span>
+                    <span className="text-muted-foreground">Código do cliente:</span>
                     <Badge variant="outline">{lastResult.clientCode}</Badge>
                   </>
                 )}

@@ -241,28 +241,26 @@ export const argusApi = {
     const cfg = getConfig();
     const start = performance.now();
     try {
-      const raw = await argusFetch<Record<string, unknown>>(`/api/diagnostics/test-connection`);
+      const [conn, env] = await Promise.all([
+        argusFetch<Record<string, unknown>>(`/api/diagnostics/test-connection`),
+        argusFetch<Record<string, unknown>>(`/api/diagnostics/environment`).catch(() => null),
+      ]);
       const latencyMs = Math.round(performance.now() - start);
-      const body = (raw && typeof raw === "object" && "data" in raw && raw.data && typeof raw.data === "object"
-        ? (raw.data as Record<string, unknown>)
-        : raw) as Record<string, unknown>;
+      const connBody = (conn && typeof conn === "object" && "data" in conn && conn.data && typeof conn.data === "object"
+        ? (conn.data as Record<string, unknown>)
+        : conn) as Record<string, unknown>;
+      const envBody = (env && typeof env === "object" && "data" in env && env.data && typeof env.data === "object"
+        ? (env.data as Record<string, unknown>)
+        : (env ?? {})) as Record<string, unknown>;
       const environment =
-        (body.environment as string | undefined) ??
-        (body.Environment as string | undefined) ??
-        (raw.environment as string | undefined) ??
+        (envBody.environment as string | undefined) ??
+        (connBody.environment as string | undefined) ??
         "—";
       const clientCode =
-        (body.clientCode as string | undefined) ??
-        (body.ClientCode as string | undefined) ??
-        (body.clientId as string | undefined) ??
-        (body.ClientId as string | undefined) ??
-        (body.customerCode as string | undefined) ??
-        (body.CustomerCode as string | undefined) ??
-        (body.tenantId as string | undefined) ??
-        (body.TenantId as string | undefined) ??
-        (raw.clientCode as string | undefined);
-      const message =
-        (raw.message as string | undefined) ?? (body.message as string | undefined);
+        (envBody.accountId as string | undefined) ??
+        (envBody.AccountId as string | undefined) ??
+        (envBody.clientCode as string | undefined);
+      const message = (conn?.message as string | undefined) ?? (connBody.message as string | undefined);
       return {
         environment,
         clientCode,
