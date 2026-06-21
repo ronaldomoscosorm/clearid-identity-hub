@@ -328,7 +328,10 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
   return {
     systemData,
     description: data.description ?? null,
-    status: typeof data.status === "string" ? data.status.toLowerCase() : data.status,
+    status:
+      typeof data.status === "string"
+        ? data.status.charAt(0).toUpperCase() + data.status.slice(1).toLowerCase()
+        : data.status,
     firstName: data.firstName,
     lastName: data.lastName,
     middleName: data.middleName ?? null,
