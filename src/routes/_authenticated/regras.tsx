@@ -72,6 +72,7 @@ function RegrasPage() {
   const navigate = useNavigate({ from: Route.fullPath });
   const { locationId, view } = Route.useSearch();
   const siteId = useDefaultSiteId();
+  const [addOpen, setAddOpen] = useState(false);
 
   const locationsQuery = useQuery({
     queryKey: ["locations", siteId],
