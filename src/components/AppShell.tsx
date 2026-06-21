@@ -85,14 +85,35 @@ export function AppShell({ children }: { children: ReactNode }) {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
   }, []);
 
-  // Reset queries when backend base URL changes
+  // Reset queries when backend base URL changes — keep the shell's own
+  // queries (sites list, diagnostics/env) so the top menu doesn't flicker
+  // alongside the page content.
   useEffect(() => {
-    queryClient.invalidateQueries();
+    queryClient.invalidateQueries({
+      predicate: (q) => {
+        const k = q.queryKey?.[0];
+        return k !== "argus" || q.queryKey?.[1] !== "sites";
+      },
+    });
+    // Always keep env/diagnostics out of the invalidation as well.
+    queryClient.invalidateQueries({
+      predicate: (q) => q.queryKey?.[0] !== "backend-env" && !(q.queryKey?.[0] === "argus" && q.queryKey?.[1] === "sites"),
+    });
   }, [config.baseUrl, queryClient]);
 
-  // Re-fetch all data when default site changes
+  // Re-fetch page data when default site changes, but NOT the shell's own
+  // queries (sites list / env badge) — otherwise the top menu re-renders
+  // together with the page.
   useEffect(() => {
-    queryClient.invalidateQueries();
+    queryClient.invalidateQueries({
+      predicate: (q) => {
+        const k0 = q.queryKey?.[0];
+        const k1 = q.queryKey?.[1];
+        if (k0 === "backend-env") return false;
+        if (k0 === "argus" && k1 === "sites") return false;
+        return true;
+      },
+    });
   }, [siteId, queryClient]);
 
   const handleSignOut = async () => {
