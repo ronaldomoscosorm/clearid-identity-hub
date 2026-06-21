@@ -65,6 +65,7 @@ function IdentitiesList() {
   const [fStatus, setFStatus] = useState<string>("all");
 
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
+  const [hasSearched, setHasSearched] = useState(false);
   const [applied, setApplied] = useState<{
     firstName: string;
     email: string;
@@ -85,6 +86,7 @@ function IdentitiesList() {
         department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
       }),
+    enabled: hasSearched,
     retry: false,
   });
 
@@ -114,6 +116,7 @@ function IdentitiesList() {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setHasSearched(true);
     setApplied({
       firstName: fFirstName.trim(),
       email: fEmail.trim(),
@@ -131,6 +134,7 @@ function IdentitiesList() {
     setFJobTitle("");
     setFDepartment("");
     setFStatus("all");
+    setHasSearched(false);
     setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
   };
 
@@ -247,7 +251,13 @@ function IdentitiesList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {query.isLoading ? (
+            {!hasSearched ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  Informe filtros e clique em <span className="font-medium text-foreground">Pesquisar</span> para listar identities.
+                </TableCell>
+              </TableRow>
+            ) : query.isLoading || query.isFetching ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   {Array.from({ length: 7 }).map((__, j) => (
