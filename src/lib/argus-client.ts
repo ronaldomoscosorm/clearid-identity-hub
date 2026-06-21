@@ -473,6 +473,7 @@ export const argusApi = {
     status?: string;
     skip?: number;
     take?: number;
+    allSites?: boolean;
   }) => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
@@ -487,7 +488,11 @@ export const argusApi = {
     if (params?.department) q.set("department", params.department);
     if (params?.status) q.set("status", params.status.toLowerCase());
     const data = await unwrap<IdentitySearchResult>(
-      argusFetch(`/api/identities/search?${q.toString()}`),
+      argusFetch(
+        `/api/identities/search?${q.toString()}`,
+        {},
+        { allSites: params?.allSites },
+      ),
     );
     return { items: data.results ?? [], total: data.totalItems ?? data.results?.length ?? 0 };
   },
