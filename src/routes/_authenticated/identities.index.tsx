@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff } from "lucide-react";
-import { argusApi } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +52,7 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 
 function IdentitiesList() {
   const queryClient = useQueryClient();
+  const siteId = useDefaultSiteId();
   const [confirm, setConfirm] = useState<{ id: string; activate: boolean; name: string } | null>(
     null,
   );
@@ -74,7 +75,7 @@ function IdentitiesList() {
   }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
 
   const query = useQuery({
-    queryKey: ["identities", applied],
+    queryKey: ["identities", siteId, applied],
     queryFn: () =>
       argusApi.listIdentities({
         firstName: applied.firstName || undefined,

@@ -2,7 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { LogOut, Shield, Activity, Settings as SettingsIcon, Users, Palette } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { argusApi } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,6 +66,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     retry: false,
   });
   const env = envQuery.data?.environment ?? "…";
+  const siteId = useDefaultSiteId();
+  const sitesQuery = useQuery({
+    queryKey: ["argus", "sites"],
+    queryFn: argusApi.listSites,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const currentSite = sitesQuery.data?.find((s) => s.siteId === siteId);
   const branding = useBranding();
   useApplyBranding();
   const navigate = useNavigate();
@@ -81,6 +89,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     queryClient.invalidateQueries();
   }, [config.baseUrl, queryClient]);
+
+  // Re-fetch all data when default site changes
+  useEffect(() => {
+    queryClient.invalidateQueries();
+  }, [siteId, queryClient]);
 
   const handleSignOut = async () => {
     await queryClient.cancelQueries();
@@ -121,6 +134,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
+            {siteId && (
+              <span className="hidden items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex" title="Site padrão">
+                <span className="font-medium text-foreground">Site:</span>
+                <span className="max-w-[200px] truncate">{currentSite?.name ?? siteId}</span>
+              </span>
+            )}
             <EnvBadge env={env} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

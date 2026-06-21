@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { argusApi } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,9 +11,10 @@ interface Props {
 
 export function IdentityThumb({ identityId, className }: Props) {
   const [url, setUrl] = useState<string | null>(null);
+  const siteId = useDefaultSiteId();
 
   const q = useQuery({
-    queryKey: ["identity-picture", identityId],
+    queryKey: ["identity-picture", siteId, identityId],
     queryFn: () => argusApi.getIdentityPicture(identityId),
     retry: false,
     staleTime: 5 * 60_000,

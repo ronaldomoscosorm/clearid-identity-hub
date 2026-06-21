@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, PowerOff } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError } from "@/lib/argus-client";
+import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
 import { clearIdToFormValues } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,9 +30,10 @@ function IdentityDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const siteId = useDefaultSiteId();
 
   const query = useQuery({
-    queryKey: ["identity", id],
+    queryKey: ["identity", siteId, id],
     queryFn: () => argusApi.getIdentity(id),
     retry: false,
   });
