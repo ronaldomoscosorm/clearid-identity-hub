@@ -320,6 +320,14 @@ function RegrasPage() {
         teamName={selectedTeam?.name ?? null}
         siteId={siteId}
       />
+      {pictureFor && (
+        <IdentityPictureDialog
+          identityId={pictureFor.id}
+          identityName={pictureFor.name}
+          open={!!pictureFor}
+          onOpenChange={(o) => !o && setPictureFor(null)}
+        />
+      )}
     </div>
   );
 }
