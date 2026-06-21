@@ -174,8 +174,14 @@ function RegrasPage() {
       ) : (
         <Card>
           <div className="border-b px-4 py-3">
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               {selectedTeam?.name ?? "Membros"}
+              {membersQuery.isFetching && !membersQuery.isLoading && (
+                <span className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  Atualizando...
+                </span>
+              )}
             </h2>
             <p className="text-xs text-muted-foreground">
               {membersQuery.isLoading
