@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ function Settings() {
   const [cfg, setCfg] = useState<ArgusEnvConfig>(() => getConfig());
   const [lastResult, setLastResult] = useState<DiagnosticsResult | null>(null);
   const [siteId, setSiteId] = useState<string>(() => getDefaultSiteId() ?? "");
+  const qc = useQueryClient();
 
   const sitesQuery = useQuery({
     queryKey: ["argus", "sites"],
@@ -44,6 +45,7 @@ function Settings() {
     saveConfig(cfg);
     setDefaultSiteId(siteId || null);
     setCfg((c) => ({ ...c, defaultSiteId: siteId || undefined, defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name }));
+    qc.invalidateQueries();
     toast.success("Configurações salvas");
   };
 
