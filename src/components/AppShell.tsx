@@ -85,26 +85,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
   }, []);
 
-  // Reset queries when backend base URL changes — keep the shell's own
-  // queries (sites list, diagnostics/env) so the top menu doesn't flicker
+  // Invalidate page-level queries, but keep shell-owned queries (sites
+  // list, env/diagnostics) untouched so the top menu doesn't flicker
   // alongside the page content.
-  useEffect(() => {
-    queryClient.invalidateQueries({
-      predicate: (q) => {
-        const k = q.queryKey?.[0];
-        return k !== "argus" || q.queryKey?.[1] !== "sites";
-      },
-    });
-    // Always keep env/diagnostics out of the invalidation as well.
-    queryClient.invalidateQueries({
-      predicate: (q) => q.queryKey?.[0] !== "backend-env" && !(q.queryKey?.[0] === "argus" && q.queryKey?.[1] === "sites"),
-    });
-  }, [config.baseUrl, queryClient]);
-
-  // Re-fetch page data when default site changes, but NOT the shell's own
-  // queries (sites list / env badge) — otherwise the top menu re-renders
-  // together with the page.
-  useEffect(() => {
+  const invalidatePageQueries = () => {
     queryClient.invalidateQueries({
       predicate: (q) => {
         const k0 = q.queryKey?.[0];
@@ -114,7 +98,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         return true;
       },
     });
-  }, [siteId, queryClient]);
+  };
+
+  useEffect(() => {
+    invalidatePageQueries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.baseUrl]);
+
+  useEffect(() => {
+    invalidatePageQueries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId]);
 
   const handleSignOut = async () => {
     await queryClient.cancelQueries();
