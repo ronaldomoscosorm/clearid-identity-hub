@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { LogOut, Shield, Activity, Settings as SettingsIcon, Users, Palette } from "lucide-react";
+import { LogOut, Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
@@ -128,6 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <nav className="hidden items-center gap-1 md:flex">
             <NavItem to="/identities" icon={Users} label="Identities" />
+            <NavItem to="/regras" icon={ShieldCheck} label="Regras" />
             <NavItem to="/diagnostics" icon={Activity} label="Diagnóstico" />
             <NavItem to="/settings" icon={SettingsIcon} label="Configurações" />
             <NavItem to="/branding" icon={Palette} label="Identidade" />
@@ -162,6 +163,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Mobile nav */}
         <div className="flex items-center gap-1 overflow-x-auto border-t px-4 py-2 md:hidden">
           <NavItem to="/identities" icon={Users} label="Identities" />
+          <NavItem to="/regras" icon={ShieldCheck} label="Regras" />
           <NavItem to="/diagnostics" icon={Activity} label="Diagnóstico" />
           <NavItem to="/settings" icon={SettingsIcon} label="Configurações" />
           <NavItem to="/branding" icon={Palette} label="Identidade" />
