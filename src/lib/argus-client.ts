@@ -409,7 +409,7 @@ export function customFieldsToRecord(cf?: ClearIdCustomField[] | null): Record<s
 export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { identityId: string } {
   return {
     identityId: i.identityId,
-    externalId: i.systemData?.externalId ?? "",
+    externalId: i.externalId ?? i.systemData?.externalId ?? "",
     firstName: i.firstName ?? "",
     lastName: i.lastName ?? "",
     email: i.email ?? "",
