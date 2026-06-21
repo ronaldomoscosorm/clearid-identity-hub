@@ -303,6 +303,7 @@ function RegrasPage() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         teamId={teamId ?? null}
+        teamName={selectedTeam?.name ?? null}
         siteId={siteId}
       />
     </div>
@@ -431,16 +432,17 @@ function AddMembersDialog({
   open,
   onClose,
   teamId,
+  teamName,
   siteId,
 }: {
   open: boolean;
   onClose: () => void;
   teamId: string | null;
+  teamName: string | null;
   siteId: string | null;
 }) {
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
-  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, ClearIdIdentity>>({});
   const [startAt, setStartAt] = useState<string>(() => currentLocalDateTimeValue());
   const [endAt, setEndAt] = useState<string>("");
@@ -450,6 +452,14 @@ function AddMembersDialog({
     setStartAt(currentLocalDateTimeValue());
     setEndAt("");
   }, [open]);
+
+  // Debounce search input so we pesquisamos a medida que o usuário digita,
+  // sem disparar uma requisição a cada tecla.
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const searchQuery = useQuery({
     queryKey: ["identity-search", siteId, query],
@@ -473,8 +483,14 @@ function AddMembersDialog({
   const toggle = (i: ClearIdIdentity) => {
     setSelected((prev) => {
       const next = { ...prev };
-      if (next[i.identityId]) delete next[i.identityId];
-      else next[i.identityId] = i;
+      if (next[i.identityId]) {
+        delete next[i.identityId];
+      } else {
+        next[i.identityId] = i;
+        // Ao escolher um nome, limpa o texto de pesquisa para uma nova busca.
+        setSearchInput("");
+        setQuery("");
+      }
       return next;
     });
   };
@@ -514,11 +530,6 @@ function AddMembersDialog({
     onClose();
   };
 
-  const onSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setQuery(searchInput.trim());
-  };
-
   const handleAdd = () => {
     if (!startAt) {
       toast.error("Informe a data de início.");
@@ -555,23 +566,39 @@ function AddMembersDialog({
     <Dialog open={open} onOpenChange={(o) => (!o ? handleClose() : undefined)}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Adicionar membros</DialogTitle>
+          <DialogTitle>
+            Adicionar membros{teamName ? ` — ${teamName}` : ""}
+          </DialogTitle>
           <DialogDescription>
-            Pesquise por nome ou email no site padrão. Você pode fazer várias pesquisas e selecionar diferentes membros antes de adicionar.
+            Pesquise por nome ou email no site padrão. Os resultados aparecem
+            à medida que você digita. Selecione um membro para limpar a busca
+            e procurar outro.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={onSearchSubmit} className="flex gap-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Nome ou email"
             autoFocus
+            className="pl-9 pr-9"
           />
-          <Button type="submit" variant="outline" disabled={!searchInput.trim()}>
-            <Search className="mr-2 h-4 w-4" /> Pesquisar
-          </Button>
-        </form>
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchInput("");
+                setQuery("");
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted"
+              aria-label="Limpar pesquisa"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
         <div className="max-h-72 overflow-auto rounded-md border">
           <Table>
