@@ -474,6 +474,35 @@ function AddMembersDialog({
     setQuery(searchInput.trim());
   };
 
+  const handleAdd = () => {
+    if (!startAt) {
+      toast.error("Informe a data de início.");
+      return;
+    }
+    const start = new Date(startAt);
+    if (isNaN(start.getTime())) {
+      toast.error("Data de início inválida.");
+      return;
+    }
+    if (endAt) {
+      const end = new Date(endAt);
+      if (isNaN(end.getTime())) {
+        toast.error("Data de término inválida.");
+        return;
+      }
+      if (end <= start) {
+        toast.error("A data de término deve ser posterior à data de início.");
+        return;
+      }
+    } else {
+      const ok = window.confirm(
+        "A data de término está em branco. Os membros serão adicionados sem prazo final. Deseja continuar?",
+      );
+      if (!ok) return;
+    }
+    submit.mutate(selectedList.map((i) => i.identityId));
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => (!o ? handleClose() : undefined)}>
       <DialogContent className="max-w-3xl">
@@ -628,7 +657,7 @@ function AddMembersDialog({
             Cancelar
           </Button>
           <Button
-            onClick={() => submit.mutate(selectedList.map((i) => i.identityId))}
+            onClick={handleAdd}
             disabled={selectedList.length === 0 || submit.isPending || !teamId}
           >
             {submit.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
