@@ -1,8 +1,8 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { LogOut, Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck } from "lucide-react";
+import { LogOut, Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, setDefaultSiteId, useDefaultSiteId } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
 import { supabase } from "@/integrations/supabase/client";
@@ -135,12 +135,44 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
-            {siteId && (
-              <span className="hidden items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 text-xs text-muted-foreground sm:inline-flex" title="Site padrão">
-                <span className="font-medium text-foreground">Site:</span>
-                <span className="max-w-[200px] truncate">{currentSite?.name ?? siteId}</span>
-              </span>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden h-8 gap-1.5 font-normal sm:inline-flex"
+                  title="Site padrão"
+                  disabled={!sitesQuery.data?.length}
+                >
+                  <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="max-w-[180px] truncate text-xs">
+                    {currentSite?.name ?? siteId ?? "Selecionar site"}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
+                <DropdownMenuLabel>Site padrão</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {sitesQuery.data?.length ? (
+                  sitesQuery.data.map((s) => {
+                    const active = s.siteId === siteId;
+                    return (
+                      <DropdownMenuItem
+                        key={s.siteId}
+                        onClick={() => setDefaultSiteId(s.siteId)}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate">{s.name ?? s.siteId}</span>
+                        {active && <Check className="h-4 w-4 text-primary" />}
+                      </DropdownMenuItem>
+                    );
+                  })
+                ) : (
+                  <DropdownMenuItem disabled>Nenhum site disponível</DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <EnvBadge env={env} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
