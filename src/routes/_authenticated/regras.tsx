@@ -583,28 +583,57 @@ function AddMembersDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Nome ou email"
-            autoFocus
-            className="pl-9 pr-9"
-          />
-          {searchInput && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchInput("");
-                setQuery("");
+        <div className="space-y-1">
+          <Label className="text-primary">
+            Identidades <span className="text-primary">*</span>
+          </Label>
+          <div
+            className="flex min-h-11 flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 focus-within:ring-2 focus-within:ring-ring"
+            onClick={(e) => {
+              const input = (e.currentTarget.querySelector(
+                "input[data-chip-input]",
+              ) as HTMLInputElement | null);
+              input?.focus();
+            }}
+          >
+            {selectedList.map((i) => {
+              const name = `${i.firstName ?? ""} ${i.lastName ?? ""}`.trim() || i.identityId;
+              return (
+                <span
+                  key={i.identityId}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-1 text-sm"
+                >
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>{name}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggle(i);
+                    }}
+                    className="ml-0.5 rounded-full p-0.5 text-muted-foreground hover:bg-muted-foreground/20"
+                    aria-label={`Remover ${name}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              );
+            })}
+            <input
+              data-chip-input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Digite para pesquisar..."
+              autoFocus
+              className="min-w-[12rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-muted-foreground"
+              onKeyDown={(e) => {
+                if (e.key === "Backspace" && !searchInput && selectedList.length > 0) {
+                  toggle(selectedList[selectedList.length - 1]);
+                }
               }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted"
-              aria-label="Limpar pesquisa"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+            />
+          </div>
+          <div className="text-xs text-muted-foreground">{selectedList.length} / 99</div>
         </div>
 
         <div className="max-h-72 overflow-auto rounded-md border">
