@@ -311,8 +311,8 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     });
   }
 
-  const systemData: Record<string, unknown> = {};
-  systemData.externalId = data.externalId;
+  const systemData: Record<string, unknown> = { ...(data.systemData ?? {}) };
+  systemData.externalId = getClearIdExternalId(data);
   const customFields = customFieldsToClearIdArray(data.customFields, data.systemData?.customFields);
   if (customFields) systemData.customFields = customFields;
 
@@ -611,10 +611,16 @@ export function customFieldsToRecord(cf?: ClearIdCustomField[] | null): Record<s
   return out;
 }
 
+export function getClearIdExternalId(i: Pick<ClearIdIdentity, "externalId" | "systemData"> | Pick<IdentityUpsert, "externalId" | "systemData">): string {
+  const systemExternalId = i.systemData?.externalId;
+  if (typeof systemExternalId === "string" && systemExternalId.trim()) return systemExternalId;
+  return i.externalId ?? "";
+}
+
 export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { identityId: string } {
   return {
     identityId: i.identityId,
-    externalId: i.externalId ?? i.systemData?.externalId ?? "",
+    externalId: getClearIdExternalId(i),
     firstName: i.firstName ?? "",
     lastName: i.lastName ?? "",
     email: i.email ?? "",
