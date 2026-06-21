@@ -265,6 +265,18 @@ export interface ClearIdTeamMember {
   identityDepartmentName?: string | null;
 }
 
+export interface ClearIdLocation {
+  locationId: string;
+  siteId: string;
+  accountId?: string;
+  name: string;
+  description?: string | null;
+  visibility?: string | null;
+  approvers?: string[];
+  owners?: string[];
+  siteOwners?: string[];
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
@@ -304,6 +316,17 @@ export const argusApi = {
     );
     if (Array.isArray(data)) return data;
     return data?.teamMembers ?? [];
+  },
+
+  listLocations: async (params?: { skip?: number; take?: number }): Promise<ClearIdLocation[]> => {
+    const q = new URLSearchParams();
+    q.set("skip", String(params?.skip ?? 0));
+    q.set("take", String(params?.take ?? 200));
+    const data = await unwrap<
+      { results?: ClearIdLocation[] } | ClearIdLocation[]
+    >(argusFetch(`/api/locations?${q.toString()}`));
+    if (Array.isArray(data)) return data;
+    return data?.results ?? [];
   },
 
   listIdentities: async (params?: {
