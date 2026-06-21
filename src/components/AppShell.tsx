@@ -155,7 +155,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenuLabel>Site padrão</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {sitesQuery.data?.length ? (
-                  sitesQuery.data.map((s) => {
+                  [...sitesQuery.data]
+                    .sort((a, b) =>
+                      (a.name ?? a.siteId).localeCompare(b.name ?? b.siteId, "pt-BR", { sensitivity: "base" }),
+                    )
+                    .map((s) => {
                     const active = s.siteId === siteId;
                     return (
                       <DropdownMenuItem
