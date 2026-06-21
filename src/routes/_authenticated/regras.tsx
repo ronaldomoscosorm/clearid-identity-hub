@@ -58,7 +58,7 @@ import {
 import { IdentityThumb } from "@/components/IdentityThumb";
 
 const searchSchema = z.object({
-  locationId: z.string().optional(),
+  teamId: z.string().optional(),
   view: z.string().optional(),
 });
 type RegrasSearch = z.infer<typeof searchSchema>;
@@ -71,38 +71,32 @@ export const Route = createFileRoute("/_authenticated/regras")({
 
 function RegrasPage() {
   const navigate = useNavigate({ from: Route.fullPath });
-  const { locationId, view } = Route.useSearch();
+  const { teamId, view } = Route.useSearch();
   const siteId = useDefaultSiteId();
   const [addOpen, setAddOpen] = useState(false);
 
-  const locationsQuery = useQuery({
-    queryKey: ["locations", siteId],
-    queryFn: () => argusApi.listLocations({ take: 200 }),
+  const teamsQuery = useQuery({
+    queryKey: ["teams", siteId],
+    queryFn: () => argusApi.listTeams({ take: 100 }),
     enabled: !!siteId,
     retry: false,
   });
 
-  const sortedLocations = (locationsQuery.data ?? [])
+  const sortedTeams = (teamsQuery.data ?? [])
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }));
 
-  const selectedLocation = sortedLocations.find((l) => l.locationId === locationId);
-  const approverIds = selectedLocation?.approvers ?? [];
+  const selectedTeam = sortedTeams.find((t) => t.teamId === teamId);
 
   const membersQuery = useQuery({
-    queryKey: ["location-members", siteId, locationId, approverIds],
-    queryFn: async () => {
-      const results = await Promise.all(
-        approverIds.map((id) => argusApi.getIdentity(id).catch(() => null)),
-      );
-      return results.filter((r): r is NonNullable<typeof r> => !!r);
-    },
-    enabled: !!locationId && approverIds.length > 0,
+    queryKey: ["team-members", siteId, teamId],
+    queryFn: () => argusApi.listTeamMembers(teamId!, { count: 500 }),
+    enabled: !!teamId,
     retry: false,
   });
 
-  const setLocation = (id: string) => {
-    navigate({ search: () => ({ locationId: id || undefined, view: undefined }) });
+  const setTeam = (id: string) => {
+    navigate({ search: () => ({ teamId: id || undefined, view: undefined }) });
   };
   const openView = (id: string) => {
     navigate({ search: (prev: RegrasSearch) => ({ ...prev, view: id }) });
@@ -123,35 +117,35 @@ function RegrasPage() {
       <Card className="p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[280px] flex-1 space-y-2">
-            <Label htmlFor="location">Regra</Label>
+            <Label htmlFor="team">Regra</Label>
             <Select
-              value={locationId ?? ""}
-              onValueChange={setLocation}
-              disabled={!siteId || locationsQuery.isLoading || !!locationsQuery.error}
+              value={teamId ?? ""}
+              onValueChange={setTeam}
+              disabled={!siteId || teamsQuery.isLoading || !!teamsQuery.error}
             >
-              <SelectTrigger id="location">
+              <SelectTrigger id="team">
                 <SelectValue
                   placeholder={
                     !siteId
                       ? "Selecione um site padrão em Configurações"
-                      : locationsQuery.isLoading
+                      : teamsQuery.isLoading
                       ? "Carregando regras..."
-                      : locationsQuery.error
+                      : teamsQuery.error
                         ? "Falha ao carregar regras"
                         : "Selecione uma regra"
                   }
                 />
               </SelectTrigger>
               <SelectContent>
-                {sortedLocations.map((l) => (
-                  <SelectItem key={l.locationId} value={l.locationId}>
-                    {l.name}
+                {sortedTeams.map((t) => (
+                  <SelectItem key={t.teamId} value={t.teamId}>
+                    {t.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          {locationId && (
+          {teamId && (
             <>
               <Button
                 variant="outline"
@@ -168,12 +162,12 @@ function RegrasPage() {
             </>
           )}
         </div>
-        {locationsQuery.error && (
-          <p className="mt-2 text-sm text-destructive">{(locationsQuery.error as Error).message}</p>
+        {teamsQuery.error && (
+          <p className="mt-2 text-sm text-destructive">{(teamsQuery.error as Error).message}</p>
         )}
       </Card>
 
-      {!locationId ? (
+      {!teamId ? (
         <Card className="p-12 text-center text-sm text-muted-foreground">
           Selecione uma regra acima para listar seus membros.
         </Card>
@@ -181,12 +175,12 @@ function RegrasPage() {
         <Card>
           <div className="border-b px-4 py-3">
             <h2 className="text-sm font-semibold text-foreground">
-              {selectedLocation?.name ?? "Membros"}
+              {selectedTeam?.name ?? "Membros"}
             </h2>
             <p className="text-xs text-muted-foreground">
               {membersQuery.isLoading
                 ? "Carregando..."
-                : `${membersQuery.data?.length ?? approverIds.length} membro(s)`}
+                : `${membersQuery.data?.length ?? 0} membro(s)`}
             </p>
           </div>
           <Table>
@@ -226,8 +220,8 @@ function RegrasPage() {
                 (membersQuery.data ?? [])
                   .slice()
                   .sort((a, b) => {
-                    const an = `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim();
-                    const bn = `${b.firstName ?? ""} ${b.lastName ?? ""}`.trim();
+                    const an = (a.identityName ?? "").trim();
+                    const bn = (b.identityName ?? "").trim();
                     return an.localeCompare(bn, "pt-BR", { sensitivity: "base" });
                   })
                   .map((m) => (
@@ -236,10 +230,10 @@ function RegrasPage() {
                         <IdentityThumb identityId={m.identityId} />
                       </TableCell>
                       <TableCell className="font-medium">
-                        {`${m.firstName ?? ""} ${m.lastName ?? ""}`.trim() || "—"}
+                        {m.identityName?.trim() || "—"}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {m.email ?? "—"}
+                        {m.identityEmail ?? "—"}
                       </TableCell>
                       <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
                         {m.identityId}
@@ -256,9 +250,9 @@ function RegrasPage() {
                             <DropdownMenuItem onClick={() => openView(m.identityId)}>
                               <Eye className="mr-2 h-4 w-4" /> Visualizar
                             </DropdownMenuItem>
-                            {m.email && (
+                            {m.identityEmail && (
                               <DropdownMenuItem asChild>
-                                <a href={`mailto:${m.email}`}>
+                                <a href={`mailto:${m.identityEmail}`}>
                                   <Mail className="mr-2 h-4 w-4" /> Enviar e-mail
                                 </a>
                               </DropdownMenuItem>
@@ -278,7 +272,7 @@ function RegrasPage() {
       <AddMembersDialog
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        teamId={locationId ?? null}
+        teamId={teamId ?? null}
         siteId={siteId}
       />
     </div>
