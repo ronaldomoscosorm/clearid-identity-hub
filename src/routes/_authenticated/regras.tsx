@@ -449,6 +449,9 @@ function AddMembersDialog({
 
   useEffect(() => {
     if (!open) return;
+    setSelected({});
+    setSearchInput("");
+    setQuery("");
     setStartAt(currentLocalDateTimeValue());
     setEndAt("");
   }, [open]);
@@ -511,6 +514,10 @@ function AddMembersDialog({
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       setSelected({});
+      setSearchInput("");
+      setQuery("");
+      setStartAt(currentLocalDateTimeValue());
+      setEndAt("");
       onClose();
       const toastId = toast.loading("Atualizando lista de membros...");
       queryClient
