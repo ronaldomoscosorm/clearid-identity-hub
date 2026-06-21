@@ -113,7 +113,9 @@ function IdentityDetail() {
             // identidade no ClearID).
             update.mutate({
               ...data,
-              identityType: original.identityType ?? "employee",
+              // ClearID v4 exige identityType em lowercase. O GET retorna
+              // "Employee" (capitalizado), então normalizamos antes do PUT.
+              identityType: (original.identityType ?? "employee").toLowerCase(),
               description: original.description ?? undefined,
               countryCode: original.countryCode ?? undefined,
               middleName: original.middleName ?? undefined,
