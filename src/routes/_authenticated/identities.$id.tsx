@@ -106,7 +106,20 @@ function IdentityDetail() {
           mode="edit"
           initial={clearIdToFormValues(query.data)}
           submitting={update.isPending}
-          onSubmit={(data) => update.mutate(data)}
+          onSubmit={(data) => {
+            const original = query.data!;
+            // ClearID PUT é um replace completo. Preservamos os campos que
+            // não estão no formulário para evitar 400 (Falha ao atualizar
+            // identidade no ClearID).
+            update.mutate({
+              ...data,
+              identityType: original.identityType ?? "employee",
+              description: original.description ?? undefined,
+              countryCode: original.countryCode ?? undefined,
+              middleName: original.middleName ?? undefined,
+              displayName: original.displayName ?? undefined,
+            });
+          }}
           onCancel={() => navigate({ to: "/identities" })}
           extraActions={
             <AlertDialog>

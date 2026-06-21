@@ -156,10 +156,14 @@ export async function argusFetch<T = unknown>(
   }
 
   if (!response.ok) {
+    const bodyObj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
     const msg =
-      (body && typeof body === "object" && "error" in body
-        ? String((body as { error: unknown }).error)
-        : null) ?? response.statusText ?? `HTTP ${response.status}`;
+      (bodyObj && "message" in bodyObj && typeof bodyObj.message === "string"
+        ? bodyObj.message
+        : null) ??
+      (bodyObj && "error" in bodyObj ? String(bodyObj.error) : null) ??
+      response.statusText ??
+      `HTTP ${response.status}`;
     throw new ArgusApiError({
       status: response.status,
       message: msg,
@@ -227,6 +231,13 @@ export interface IdentityUpsert {
   email: string;
   status: "Active" | "Inactive";
   customFields?: Record<string, string>;
+  // Campos opcionais preservados ao editar (ClearID PUT é replace
+  // completo e pode rejeitar com 400 se omitidos).
+  identityType?: string | null;
+  description?: string | null;
+  countryCode?: string | null;
+  middleName?: string | null;
+  displayName?: string | null;
 }
 
 export interface DiagnosticsResult {
