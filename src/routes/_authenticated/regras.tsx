@@ -637,7 +637,18 @@ function AddMembersDialog({
               }}
             />
           </div>
-          <div className="text-xs text-muted-foreground">{selectedList.length} / 99</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">
+              {selectedList.length} / 99
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                checked={searchAllSites}
+                onCheckedChange={(v) => setSearchAllSites(!!v)}
+              />
+              <span>Pesquisar em todos os sites</span>
+            </label>
+          </div>
         </div>
 
         <div className="max-h-72 overflow-auto rounded-md border">
