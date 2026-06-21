@@ -251,7 +251,13 @@ function IdentitiesList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {query.isLoading ? (
+            {!hasSearched ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  Informe filtros e clique em <span className="font-medium text-foreground">Pesquisar</span> para listar identities.
+                </TableCell>
+              </TableRow>
+            ) : query.isLoading || query.isFetching ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   {Array.from({ length: 7 }).map((__, j) => (
