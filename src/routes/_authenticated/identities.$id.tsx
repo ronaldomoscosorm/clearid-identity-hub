@@ -76,10 +76,12 @@ function IdentityDetail() {
           {query.data ? `${query.data.firstName} ${query.data.lastName}` : "Identity"}
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{id}</p>
-        {query.data?.systemData?.externalId && (
+        {(query.data?.externalId ?? query.data?.systemData?.externalId) && (
           <p className="mt-1 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">External ID:</span>{" "}
-            <span className="font-mono">{query.data.systemData.externalId}</span>
+            <span className="font-mono">
+              {query.data?.externalId ?? query.data?.systemData?.externalId}
+            </span>
           </p>
         )}
       </div>
