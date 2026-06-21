@@ -227,6 +227,13 @@ export interface IdentityUpsert {
   email: string;
   status: "Active" | "Inactive";
   customFields?: Record<string, string>;
+  // Campos opcionais preservados ao editar (ClearID PUT é replace
+  // completo e pode rejeitar com 400 se omitidos).
+  identityType?: string | null;
+  description?: string | null;
+  countryCode?: string | null;
+  middleName?: string | null;
+  displayName?: string | null;
 }
 
 export interface DiagnosticsResult {
