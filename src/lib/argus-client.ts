@@ -206,6 +206,15 @@ export interface DiagnosticsResult {
   checkedAt: string;
 }
 
+export interface ClearIdSite {
+  siteId: string;
+  name: string;
+  description?: string | null;
+  accountId?: string;
+  regionId?: string | null;
+  timeZoneId?: string | null;
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
