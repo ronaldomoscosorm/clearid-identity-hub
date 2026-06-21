@@ -464,6 +464,7 @@ function AddMembersDialog({
       toast.success(`${ids.length} membro(s) adicionado(s).`);
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.refetchQueries({ queryKey: ["team-members", siteId, teamId] });
       setSelected({});
       onClose();
     },
@@ -502,12 +503,15 @@ function AddMembersDialog({
         toast.error("A data de término deve ser posterior à data de início.");
         return;
       }
-    } else {
-      const ok = window.confirm(
-        "A data de término está em branco. Os membros serão adicionados sem prazo final. Deseja continuar?",
-      );
-      if (!ok) return;
     }
+    const count = selectedList.length;
+    const endMsg = endAt
+      ? `até ${new Date(endAt).toLocaleString()}`
+      : "sem prazo final (data de término em branco)";
+    const ok = window.confirm(
+      `Confirma a adição de ${count} membro(s) a partir de ${new Date(startAt).toLocaleString()} ${endMsg}?`,
+    );
+    if (!ok) return;
     submit.mutate(selectedList.map((i) => i.identityId));
   };
 
