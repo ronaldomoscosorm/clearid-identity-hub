@@ -284,6 +284,28 @@ export const argusApi = {
     return data?.sites ?? [];
   },
 
+  listTeams: async (params?: { name?: string; take?: number }): Promise<ClearIdTeam[]> => {
+    const q = new URLSearchParams();
+    q.set("take", String(params?.take ?? 200));
+    if (params?.name) q.set("name", params.name);
+    const data = await unwrap<{ teams?: ClearIdTeam[] } | ClearIdTeam[]>(
+      argusFetch(`/api/teams?${q.toString()}`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.teams ?? [];
+  },
+
+  listTeamMembers: async (teamId: string, params?: { searchText?: string; count?: number }) => {
+    const q = new URLSearchParams();
+    q.set("count", String(params?.count ?? 200));
+    if (params?.searchText) q.set("searchText", params.searchText);
+    const data = await unwrap<{ teamMembers?: ClearIdTeamMember[] } | ClearIdTeamMember[]>(
+      argusFetch(`/api/teams/${encodeURIComponent(teamId)}/members?${q.toString()}`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.teamMembers ?? [];
+  },
+
   listIdentities: async (params?: {
     query?: string;
     firstName?: string;
