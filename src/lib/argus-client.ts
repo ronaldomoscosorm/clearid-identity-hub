@@ -106,6 +106,7 @@ export class ArgusApiError extends Error {
 export async function argusFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
+  opts: { allSites?: boolean } = {},
 ): Promise<T> {
   const cfg = getConfig();
 
@@ -118,7 +119,7 @@ export async function argusFetch<T = unknown>(
 
   let url = cfg.baseUrl.replace(/\/+$/, "") + path;
   const siteIdForQuery = getDefaultSiteId();
-  if (siteIdForQuery && !/[?&]siteId=/.test(url)) {
+  if (!opts.allSites && siteIdForQuery && !/[?&]siteId=/.test(url)) {
     url += (url.includes("?") ? "&" : "?") + "siteId=" + encodeURIComponent(siteIdForQuery);
   }
   const headers = new Headers(init.headers);
@@ -130,7 +131,7 @@ export async function argusFetch<T = unknown>(
   if (accountId && !headers.has("X-Account-Id")) {
     headers.set("X-Account-Id", accountId);
   }
-  if (siteIdForQuery && !headers.has("X-Site-Id")) {
+  if (!opts.allSites && siteIdForQuery && !headers.has("X-Site-Id")) {
     headers.set("X-Site-Id", siteIdForQuery);
   }
 
