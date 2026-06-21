@@ -226,6 +226,14 @@ async function unwrap<T>(p: Promise<unknown>): Promise<T> {
 // ---- API helpers ----
 
 export const argusApi = {
+  listSites: async (): Promise<ClearIdSite[]> => {
+    const data = await unwrap<{ sites?: ClearIdSite[] } | ClearIdSite[]>(
+      argusFetch(`/api/sites`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.sites ?? [];
+  },
+
   listIdentities: async (params?: {
     query?: string;
     firstName?: string;
