@@ -326,26 +326,6 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
       `${data.firstName} ${data.lastName}`.trim());
 
   return {
-    privateData: pickDefined(data.privateData, [
-      "birthday",
-      "employeeNumber",
-      "secondaryEmail",
-      "cityOfResidence",
-      "stateOfResidence",
-      "zipCode",
-      "phoneNumberPrimary",
-      "phoneNumberSecondary",
-    ]),
-    companyData: pickDefined(data.companyData, [
-      "approvers",
-      "supervisorName",
-      "departmentName",
-      "jobTitle",
-      "siteId",
-      "companyName",
-      "workerTypeDescription",
-      "workerTypeCode",
-    ]),
     systemData,
     description: data.description ?? null,
     status: typeof data.status === "string" ? data.status.toLowerCase() : data.status,
