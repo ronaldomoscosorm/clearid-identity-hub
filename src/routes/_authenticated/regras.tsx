@@ -600,13 +600,26 @@ function AddMembersDialog({
           </div>
           <div className="space-y-1">
             <Label htmlFor="endAt">Data de término</Label>
-            <Input
-              id="endAt"
-              type="datetime-local"
-              value={endAt}
-              onChange={(e) => setEndAt(e.target.value)}
-              placeholder="Sem término"
-            />
+            <div className="flex gap-2">
+              <Input
+                id="endAt"
+                type="datetime-local"
+                value={endAt}
+                onChange={(e) => setEndAt(e.target.value)}
+                placeholder="Sem término"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setEndAt("")}
+                disabled={!endAt}
+                aria-label="Limpar data de término"
+                title="Limpar"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
