@@ -116,7 +116,11 @@ export async function argusFetch<T = unknown>(
     });
   }
 
-  const url = cfg.baseUrl.replace(/\/+$/, "") + path;
+  let url = cfg.baseUrl.replace(/\/+$/, "") + path;
+  const siteIdForQuery = getDefaultSiteId();
+  if (siteIdForQuery && !/[?&]siteId=/.test(url)) {
+    url += (url.includes("?") ? "&" : "?") + "siteId=" + encodeURIComponent(siteIdForQuery);
+  }
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -126,9 +130,8 @@ export async function argusFetch<T = unknown>(
   if (accountId && !headers.has("X-Account-Id")) {
     headers.set("X-Account-Id", accountId);
   }
-  const siteId = getDefaultSiteId();
-  if (siteId && !headers.has("X-Site-Id")) {
-    headers.set("X-Site-Id", siteId);
+  if (siteIdForQuery && !headers.has("X-Site-Id")) {
+    headers.set("X-Site-Id", siteIdForQuery);
   }
 
   let response: Response;
