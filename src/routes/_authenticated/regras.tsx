@@ -174,8 +174,14 @@ function RegrasPage() {
       ) : (
         <Card>
           <div className="border-b px-4 py-3">
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               {selectedTeam?.name ?? "Membros"}
+              {membersQuery.isFetching && !membersQuery.isLoading && (
+                <span className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  Atualizando...
+                </span>
+              )}
             </h2>
             <p className="text-xs text-muted-foreground">
               {membersQuery.isLoading
@@ -464,9 +470,15 @@ function AddMembersDialog({
       toast.success(`${ids.length} membro(s) adicionado(s).`);
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
-      queryClient.refetchQueries({ queryKey: ["team-members", siteId, teamId] });
       setSelected({});
       onClose();
+      const toastId = toast.loading("Atualizando lista de membros...");
+      queryClient
+        .refetchQueries({ queryKey: ["team-members", siteId, teamId] })
+        .then(() => toast.success("Lista de membros atualizada.", { id: toastId }))
+        .catch((e: Error) =>
+          toast.error(e.message || "Falha ao atualizar a lista de membros.", { id: toastId }),
+        );
     },
     onError: (e: Error) => {
       toast.error(e.message || "Falha ao adicionar membros.");
