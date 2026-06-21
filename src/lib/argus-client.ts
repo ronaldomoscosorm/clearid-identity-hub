@@ -246,6 +246,25 @@ export interface ClearIdSite {
   timeZoneId?: string | null;
 }
 
+export interface ClearIdTeam {
+  teamId: string;
+  name: string;
+  description?: string | null;
+  status?: string | null;
+  isDeleted?: boolean;
+}
+
+export interface ClearIdTeamMember {
+  teamId: string;
+  teamName?: string;
+  identityId: string;
+  identityName?: string | null;
+  identityEmail?: string | null;
+  identityJobTitle?: string | null;
+  identityCompanyName?: string | null;
+  identityDepartmentName?: string | null;
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
