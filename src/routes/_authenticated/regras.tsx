@@ -464,9 +464,15 @@ function AddMembersDialog({
       toast.success(`${ids.length} membro(s) adicionado(s).`);
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
-      queryClient.refetchQueries({ queryKey: ["team-members", siteId, teamId] });
       setSelected({});
       onClose();
+      const toastId = toast.loading("Atualizando lista de membros...");
+      queryClient
+        .refetchQueries({ queryKey: ["team-members", siteId, teamId] })
+        .then(() => toast.success("Lista de membros atualizada.", { id: toastId }))
+        .catch((e: Error) =>
+          toast.error(e.message || "Falha ao atualizar a lista de membros.", { id: toastId }),
+        );
     },
     onError: (e: Error) => {
       toast.error(e.message || "Falha ao adicionar membros.");
