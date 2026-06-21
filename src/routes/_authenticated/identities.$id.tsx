@@ -31,13 +31,13 @@ function IdentityDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const siteId = useDefaultSiteId();
-  const externalId = query.data ? getClearIdExternalId(query.data) : "";
 
   const query = useQuery({
     queryKey: ["identity", siteId, id],
     queryFn: () => argusApi.getIdentity(id),
     retry: false,
   });
+  const externalId = query.data ? getClearIdExternalId(query.data) : "";
 
   const update = useMutation({
     mutationFn: (data: Parameters<typeof argusApi.updateIdentity>[1]) => argusApi.updateIdentity(id, data),
