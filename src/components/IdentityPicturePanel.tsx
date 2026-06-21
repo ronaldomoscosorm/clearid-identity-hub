@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, ClipboardPaste, RefreshCw, User, X } from "lucide-react";
+import { Camera, ClipboardPaste, RefreshCw, Upload, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ export function IdentityPicturePanel({ identityId }: Props) {
   const [open, setOpen] = useState(false);
   const [pasteBlob, setPasteBlob] = useState<Blob | null>(null);
   const [pasteUrl, setPasteUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const q = useQuery({
     queryKey: ["identity-picture", siteId, identityId],
@@ -74,6 +75,11 @@ export function IdentityPicturePanel({ identityId }: Props) {
     onSuccess: () => {
       toast.success("Foto atualizada");
       qc.invalidateQueries({ queryKey: ["identity-picture"] });
+      // O upload da foto altera o eTag/last-modification da identidade no
+      // ClearID. Sem refetch, um PUT subsequente envia dados obsoletos e
+      // o backend responde 400. Invalida ambas as variações da queryKey.
+      qc.invalidateQueries({ queryKey: ["identity", siteId, identityId] });
+      qc.invalidateQueries({ queryKey: ["identity"] });
       setOpen(false);
       clearPaste();
     },
@@ -169,6 +175,25 @@ export function IdentityPicturePanel({ identityId }: Props) {
           <Button type="button" size="sm" variant="outline" onClick={pasteFromClipboard}>
             <ClipboardPaste className="mr-1 h-4 w-4" /> Colar imagem
           </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="mr-1 h-4 w-4" /> Enviar arquivo
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleBlob(file);
+              e.target.value = "";
+            }}
+          />
         </div>
       </div>
 
