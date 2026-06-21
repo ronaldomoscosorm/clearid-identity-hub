@@ -407,6 +407,15 @@ function IdentitiesList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {pictureFor && (
+        <IdentityPictureDialog
+          identityId={pictureFor.id}
+          identityName={pictureFor.name}
+          open={!!pictureFor}
+          onOpenChange={(o) => !o && setPictureFor(null)}
+        />
+      )}
     </div>
   );
 }
