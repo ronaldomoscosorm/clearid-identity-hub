@@ -432,16 +432,17 @@ function AddMembersDialog({
   open,
   onClose,
   teamId,
+  teamName,
   siteId,
 }: {
   open: boolean;
   onClose: () => void;
   teamId: string | null;
+  teamName: string | null;
   siteId: string | null;
 }) {
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
-  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, ClearIdIdentity>>({});
   const [startAt, setStartAt] = useState<string>(() => currentLocalDateTimeValue());
   const [endAt, setEndAt] = useState<string>("");
@@ -451,6 +452,14 @@ function AddMembersDialog({
     setStartAt(currentLocalDateTimeValue());
     setEndAt("");
   }, [open]);
+
+  // Debounce search input so we pesquisamos a medida que o usuário digita,
+  // sem disparar uma requisição a cada tecla.
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const searchQuery = useQuery({
     queryKey: ["identity-search", siteId, query],
@@ -474,8 +483,14 @@ function AddMembersDialog({
   const toggle = (i: ClearIdIdentity) => {
     setSelected((prev) => {
       const next = { ...prev };
-      if (next[i.identityId]) delete next[i.identityId];
-      else next[i.identityId] = i;
+      if (next[i.identityId]) {
+        delete next[i.identityId];
+      } else {
+        next[i.identityId] = i;
+        // Ao escolher um nome, limpa o texto de pesquisa para uma nova busca.
+        setSearchInput("");
+        setQuery("");
+      }
       return next;
     });
   };
@@ -513,11 +528,6 @@ function AddMembersDialog({
   const handleClose = () => {
     if (submit.isPending) return;
     onClose();
-  };
-
-  const onSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setQuery(searchInput.trim());
   };
 
   const handleAdd = () => {
