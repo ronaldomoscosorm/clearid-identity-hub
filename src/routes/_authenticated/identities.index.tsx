@@ -205,9 +205,9 @@ function IdentitiesList() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
                   <SelectItem value="Active">Ativos</SelectItem>
                   <SelectItem value="Inactive">Inativos</SelectItem>
+                  <SelectItem value="all">Todos os status</SelectItem>
                 </SelectContent>
               </Select>
             </div>
