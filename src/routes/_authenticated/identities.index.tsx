@@ -65,6 +65,7 @@ function IdentitiesList() {
   const [fStatus, setFStatus] = useState<string>("all");
 
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
+  const [hasSearched, setHasSearched] = useState(false);
   const [applied, setApplied] = useState<{
     firstName: string;
     email: string;
@@ -85,6 +86,7 @@ function IdentitiesList() {
         department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
       }),
+    enabled: hasSearched,
     retry: false,
   });
 
@@ -114,6 +116,7 @@ function IdentitiesList() {
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setHasSearched(true);
     setApplied({
       firstName: fFirstName.trim(),
       email: fEmail.trim(),
@@ -131,6 +134,7 @@ function IdentitiesList() {
     setFJobTitle("");
     setFDepartment("");
     setFStatus("all");
+    setHasSearched(false);
     setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
   };
 
