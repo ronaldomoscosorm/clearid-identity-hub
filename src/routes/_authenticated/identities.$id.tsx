@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, PowerOff } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
-import { clearIdToFormValues } from "@/lib/argus-client";
+import { clearIdToFormValues, getClearIdExternalId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
@@ -31,6 +31,7 @@ function IdentityDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const siteId = useDefaultSiteId();
+  const externalId = query.data ? getClearIdExternalId(query.data) : "";
 
   const query = useQuery({
     queryKey: ["identity", siteId, id],
@@ -76,12 +77,10 @@ function IdentityDetail() {
           {query.data ? `${query.data.firstName} ${query.data.lastName}` : "Identity"}
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{id}</p>
-        {(query.data?.externalId ?? query.data?.systemData?.externalId) && (
+        {externalId && (
           <p className="mt-1 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">External ID:</span>{" "}
-            <span className="font-mono">
-              {query.data?.externalId ?? query.data?.systemData?.externalId}
-            </span>
+            <span className="font-mono">{externalId}</span>
           </p>
         )}
       </div>
