@@ -47,13 +47,14 @@ async function toJpeg(blob: Blob, quality = 0.92): Promise<Blob> {
 
 export function IdentityPicturePanel({ identityId }: Props) {
   const qc = useQueryClient();
+  const siteId = useDefaultSiteId();
   const [url, setUrl] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [pasteBlob, setPasteBlob] = useState<Blob | null>(null);
   const [pasteUrl, setPasteUrl] = useState<string | null>(null);
 
   const q = useQuery({
-    queryKey: ["identity-picture", identityId],
+    queryKey: ["identity-picture", siteId, identityId],
     queryFn: () => argusApi.getIdentityPicture(identityId),
     retry: false,
   });
@@ -72,7 +73,7 @@ export function IdentityPicturePanel({ identityId }: Props) {
     mutationFn: (blob: Blob) => argusApi.uploadIdentityPicture(identityId, blob),
     onSuccess: () => {
       toast.success("Foto atualizada");
-      qc.invalidateQueries({ queryKey: ["identity-picture", identityId] });
+      qc.invalidateQueries({ queryKey: ["identity-picture"] });
       setOpen(false);
       clearPaste();
     },
