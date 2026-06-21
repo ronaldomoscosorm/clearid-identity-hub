@@ -192,6 +192,7 @@ export interface ClearIdIdentity {
   countryCode?: string | null;
   email?: string | null;
   identityType?: string | null;
+  externalId?: string | null;
   privateData?: Record<string, unknown> | null;
   companyData?: Record<string, unknown> | null;
   systemData?: {
