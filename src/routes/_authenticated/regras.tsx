@@ -450,8 +450,8 @@ function AddMembersDialog({
     },
     onSuccess: (_d, ids) => {
       toast.success(`${ids.length} membro(s) adicionado(s).`);
-      queryClient.invalidateQueries({ queryKey: ["location-members"] });
-      queryClient.invalidateQueries({ queryKey: ["locations"] });
+      queryClient.invalidateQueries({ queryKey: ["team-members"] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
       setSelected({});
       onClose();
     },
