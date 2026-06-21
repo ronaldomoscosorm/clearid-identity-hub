@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
@@ -46,10 +46,6 @@ function Settings() {
     setCfg((c) => ({ ...c, defaultSiteId: siteId || undefined, defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name }));
     toast.success("Configurações salvas");
   };
-
-  useEffect(() => {
-    // If no site selected yet and list loaded, do nothing (user must choose).
-  }, [sitesQuery.data]);
 
   return (
     <div className="space-y-6">
