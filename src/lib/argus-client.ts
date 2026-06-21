@@ -194,9 +194,11 @@ export interface ClearIdIdentity {
   middleName?: string | null;
   displayName?: string | null;
   countryCode?: string | null;
+  culture?: string | null;
   email?: string | null;
   identityType?: string | null;
   externalId?: string | null;
+  picture?: unknown;
   privateData?: Record<string, unknown> | null;
   companyData?: Record<string, unknown> | null;
   systemData?: {
@@ -236,16 +238,20 @@ export interface IdentityUpsert {
   identityType?: string | null;
   description?: string | null;
   countryCode?: string | null;
+  culture?: string | null;
   middleName?: string | null;
   displayName?: string | null;
+  eTag?: string | null;
+  privateData?: Record<string, unknown> | null;
+  companyData?: Record<string, unknown> | null;
+  systemData?: ClearIdIdentity["systemData"];
 }
 
 /**
- * ClearID v4 rejeita o PUT/POST com 400 quando `status` ou `identityType`
- * chegam capitalizados (e.g. "Active"/"Employee"). A API retorna esses
- * valores em minúsculas, então normalizamos antes de enviar.
+ * ClearID v4 exige formatos diferentes para criação e atualização: no PUT,
+ * externalId/customFields ficam dentro de systemData e eTag é obrigatório.
  */
-function normalizeIdentityPayload(data: IdentityUpsert): IdentityUpsert {
+function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
   return {
     ...data,
     status: (typeof data.status === "string"
@@ -255,6 +261,81 @@ function normalizeIdentityPayload(data: IdentityUpsert): IdentityUpsert {
       typeof data.identityType === "string"
         ? data.identityType.toLowerCase()
         : data.identityType,
+  };
+}
+
+function customFieldsToClearIdArray(
+  fields?: Record<string, string>,
+  existing?: ClearIdCustomField[] | null,
+) {
+  if (!fields) return undefined;
+  const existingByName = new Map((existing ?? []).map((field) => [field.customFieldName, field]));
+  return Object.entries(fields)
+    .filter(([name]) => name.trim())
+    .map(([customFieldName, customFieldValue]) => ({
+      customFieldType: existingByName.get(customFieldName.trim())?.customFieldType,
+      customFieldName: customFieldName.trim(),
+      customFieldValue: customFieldValue ?? "",
+    }));
+}
+
+function toClearIdName(value: string | null | undefined, fallback: string) {
+  const raw = value || fallback;
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+function pickDefined<T extends Record<string, unknown>>(source: Record<string, unknown> | null | undefined, keys: string[]): Partial<T> | undefined {
+  if (!source) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (source[key] !== undefined) out[key] = source[key];
+  }
+  return Object.keys(out).length ? (out as Partial<T>) : undefined;
+}
+
+function sanitizeResourceFilters(value: unknown) {
+  if (!Array.isArray(value)) return value;
+  return value.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const { entityId, entityType, sourceId } = item as Record<string, unknown>;
+    return { entityId, entityType, sourceId };
+  });
+}
+
+function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, unknown> {
+  if (!data.eTag) {
+    throw new ArgusApiError({
+      status: 0,
+      message: "Não foi possível atualizar: versão da identidade não carregada. Aguarde a foto atualizar e tente novamente.",
+    });
+  }
+
+  const systemData: Record<string, unknown> = {};
+  systemData.externalId = data.externalId;
+  const customFields = customFieldsToClearIdArray(data.customFields, data.systemData?.customFields);
+  if (customFields) systemData.customFields = customFields;
+
+  const displayName =
+    data.displayName ??
+    ([data.lastName, data.firstName].filter(Boolean).join(", ") ||
+      `${data.firstName} ${data.lastName}`.trim());
+
+  return {
+    systemData,
+    description: data.description ?? null,
+    status:
+      typeof data.status === "string"
+        ? data.status.charAt(0).toUpperCase() + data.status.slice(1).toLowerCase()
+        : data.status,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    middleName: data.middleName ?? null,
+    displayName,
+    countryCode: data.countryCode ?? null,
+    culture: data.culture ?? null,
+    email: data.email,
+    identityType: toClearIdName(data.identityType, "Employee"),
+    eTag: data.eTag,
   };
 }
 
@@ -417,7 +498,7 @@ export const argusApi = {
     unwrap<ClearIdIdentity>(
       argusFetch(`/api/identities`, {
         method: "POST",
-        body: JSON.stringify(normalizeIdentityPayload(data)),
+        body: JSON.stringify(normalizeCreateIdentityPayload(data)),
       }),
     ),
 
@@ -425,7 +506,7 @@ export const argusApi = {
     unwrap<ClearIdIdentity>(
       argusFetch(`/api/identities/${encodeURIComponent(id)}`, {
         method: "PUT",
-        body: JSON.stringify(normalizeIdentityPayload(data)),
+        body: JSON.stringify(normalizeUpdateIdentityPayload(data)),
       }),
     ),
 

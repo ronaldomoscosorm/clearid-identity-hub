@@ -43,7 +43,7 @@ function IdentityDetail() {
     onSuccess: () => {
       toast.success("Identity atualizada");
       qc.invalidateQueries({ queryKey: ["identities"] });
-      qc.invalidateQueries({ queryKey: ["identity", id] });
+      qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
     onError: (e) => {
       const err = e as ArgusApiError;
@@ -113,13 +113,18 @@ function IdentityDetail() {
             // identidade no ClearID).
             update.mutate({
               ...data,
-              // ClearID v4 exige identityType em lowercase. O GET retorna
-              // "Employee" (capitalizado), então normalizamos antes do PUT.
+              // ClearID v4 exige eTag e dados aninhados no PUT. Preservamos
+              // tudo que não está no formulário para não perder dados.
               identityType: (original.identityType ?? "employee").toLowerCase(),
+              eTag: original.eTag,
               description: original.description ?? undefined,
               countryCode: original.countryCode ?? undefined,
+              culture: original.culture ?? undefined,
               middleName: original.middleName ?? undefined,
               displayName: original.displayName ?? undefined,
+              privateData: original.privateData ?? undefined,
+              companyData: original.companyData ?? undefined,
+              systemData: original.systemData ?? undefined,
             });
           }}
           onCancel={() => navigate({ to: "/identities" })}
