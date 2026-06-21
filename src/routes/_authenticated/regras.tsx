@@ -447,12 +447,14 @@ function AddMembersDialog({
   const [selected, setSelected] = useState<Record<string, ClearIdIdentity>>({});
   const [startAt, setStartAt] = useState<string>(() => currentLocalDateTimeValue());
   const [endAt, setEndAt] = useState<string>("");
+  const [searchAllSites, setSearchAllSites] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setSelected({});
     setSearchInput("");
     setQuery("");
+    setSearchAllSites(false);
     setStartAt(currentLocalDateTimeValue());
     setEndAt("");
   }, [open]);
@@ -466,8 +468,9 @@ function AddMembersDialog({
   }, [searchInput]);
 
   const searchQuery = useQuery({
-    queryKey: ["identity-search", siteId, query],
-    queryFn: () => argusApi.listIdentities({ query, take: 50 }),
+    queryKey: ["identity-search", siteId, query, searchAllSites],
+    queryFn: () =>
+      argusApi.listIdentities({ query, take: 50, allSites: searchAllSites }),
     enabled: open && !!query,
     retry: false,
   });
@@ -578,9 +581,9 @@ function AddMembersDialog({
             Adicionar membros{teamName ? ` — ${teamName}` : ""}
           </DialogTitle>
           <DialogDescription>
-            Pesquise por nome ou email no site padrão. Os resultados aparecem
-            à medida que você digita. Selecione um membro para limpar a busca
-            e procurar outro.
+            Pesquise por nome ou email. Por padrão, a busca é feita no site
+            atual — marque "Todos os sites" para pesquisar em todos. Selecione
+            um membro para limpar a busca e procurar outro.
           </DialogDescription>
         </DialogHeader>
 
@@ -634,7 +637,18 @@ function AddMembersDialog({
               }}
             />
           </div>
-          <div className="text-xs text-muted-foreground">{selectedList.length} / 99</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">
+              {selectedList.length} / 99
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                checked={searchAllSites}
+                onCheckedChange={(v) => setSearchAllSites(!!v)}
+              />
+              <span>Pesquisar em todos os sites</span>
+            </label>
+          </div>
         </div>
 
         <div className="max-h-72 overflow-auto rounded-md border">

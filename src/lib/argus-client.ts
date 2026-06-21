@@ -106,6 +106,7 @@ export class ArgusApiError extends Error {
 export async function argusFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
+  opts: { allSites?: boolean } = {},
 ): Promise<T> {
   const cfg = getConfig();
 
@@ -118,7 +119,7 @@ export async function argusFetch<T = unknown>(
 
   let url = cfg.baseUrl.replace(/\/+$/, "") + path;
   const siteIdForQuery = getDefaultSiteId();
-  if (siteIdForQuery && !/[?&]siteId=/.test(url)) {
+  if (!opts.allSites && siteIdForQuery && !/[?&]siteId=/.test(url)) {
     url += (url.includes("?") ? "&" : "?") + "siteId=" + encodeURIComponent(siteIdForQuery);
   }
   const headers = new Headers(init.headers);
@@ -130,7 +131,7 @@ export async function argusFetch<T = unknown>(
   if (accountId && !headers.has("X-Account-Id")) {
     headers.set("X-Account-Id", accountId);
   }
-  if (siteIdForQuery && !headers.has("X-Site-Id")) {
+  if (!opts.allSites && siteIdForQuery && !headers.has("X-Site-Id")) {
     headers.set("X-Site-Id", siteIdForQuery);
   }
 
@@ -472,6 +473,7 @@ export const argusApi = {
     status?: string;
     skip?: number;
     take?: number;
+    allSites?: boolean;
   }) => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
@@ -486,7 +488,11 @@ export const argusApi = {
     if (params?.department) q.set("department", params.department);
     if (params?.status) q.set("status", params.status.toLowerCase());
     const data = await unwrap<IdentitySearchResult>(
-      argusFetch(`/api/identities/search?${q.toString()}`),
+      argusFetch(
+        `/api/identities/search?${q.toString()}`,
+        {},
+        { allSites: params?.allSites },
+      ),
     );
     return { items: data.results ?? [], total: data.totalItems ?? data.results?.length ?? 0 };
   },
