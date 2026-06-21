@@ -329,6 +329,27 @@ export const argusApi = {
     return data?.results ?? [];
   },
 
+  addTeamMembers: (
+    teamId: string,
+    payload: {
+      identityIds: string[];
+      sourceId?: string | null;
+      startDateTimeUtc?: string | null;
+      endDateTimeUtc?: string | null;
+      reason?: string;
+    },
+  ) =>
+    argusFetch<unknown>(`/api/teams/${encodeURIComponent(teamId)}/members`, {
+      method: "POST",
+      body: JSON.stringify({
+        identityIds: payload.identityIds,
+        sourceId: payload.sourceId ?? null,
+        startDateTimeUtc: payload.startDateTimeUtc ?? null,
+        endDateTimeUtc: payload.endDateTimeUtc ?? null,
+        reason: payload.reason ?? "Portal Argus",
+      }),
+    }),
+
   listIdentities: async (params?: {
     query?: string;
     firstName?: string;

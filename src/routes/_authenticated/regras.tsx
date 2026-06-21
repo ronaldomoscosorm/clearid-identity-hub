@@ -1,6 +1,18 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { MoreHorizontal, Eye, Mail, RefreshCw, ExternalLink } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  MoreHorizontal,
+  Eye,
+  Mail,
+  RefreshCw,
+  ExternalLink,
+  Plus,
+  Search,
+  X,
+  Loader2,
+} from "lucide-react";
 import { z } from "zod";
 import {
   argusApi,
@@ -9,6 +21,8 @@ import {
 } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +73,7 @@ function RegrasPage() {
   const navigate = useNavigate({ from: Route.fullPath });
   const { locationId, view } = Route.useSearch();
   const siteId = useDefaultSiteId();
+  const [addOpen, setAddOpen] = useState(false);
 
   const locationsQuery = useQuery({
     queryKey: ["locations", siteId],
@@ -137,15 +152,20 @@ function RegrasPage() {
             </Select>
           </div>
           {locationId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => membersQuery.refetch()}
-              disabled={membersQuery.isFetching}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${membersQuery.isFetching ? "animate-spin" : ""}`} />
-              Atualizar
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => membersQuery.refetch()}
+                disabled={membersQuery.isFetching}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${membersQuery.isFetching ? "animate-spin" : ""}`} />
+                Atualizar
+              </Button>
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" /> Adicionar membros
+              </Button>
+            </>
           )}
         </div>
         {locationsQuery.error && (
@@ -255,6 +275,12 @@ function RegrasPage() {
       )}
 
       <ViewIdentityDialog identityId={view ?? null} onClose={closeView} />
+      <AddMembersDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        teamId={locationId ?? null}
+        siteId={siteId}
+      />
     </div>
   );
 }
@@ -361,5 +387,244 @@ function Field({
       </div>
       <div className={mono ? "font-mono text-sm" : "text-sm"}>{value || "—"}</div>
     </div>
+  );
+}
+
+function toUtcIso(local: string): string | null {
+  if (!local) return null;
+  const d = new Date(local);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function AddMembersDialog({
+  open,
+  onClose,
+  teamId,
+  siteId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  teamId: string | null;
+  siteId: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Record<string, ClearIdIdentity>>({});
+  const [startAt, setStartAt] = useState<string>("");
+  const [endAt, setEndAt] = useState<string>("");
+
+  const searchQuery = useQuery({
+    queryKey: ["identity-search", siteId, query],
+    queryFn: () => argusApi.listIdentities({ query, take: 50 }),
+    enabled: open && !!query,
+    retry: false,
+  });
+
+  const items = useMemo(() => {
+    const arr = (searchQuery.data?.items ?? []).slice();
+    arr.sort((a, b) => {
+      const an = `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim();
+      const bn = `${b.firstName ?? ""} ${b.lastName ?? ""}`.trim();
+      return an.localeCompare(bn, "pt-BR", { sensitivity: "base" });
+    });
+    return arr;
+  }, [searchQuery.data]);
+
+  const selectedList = Object.values(selected);
+
+  const toggle = (i: ClearIdIdentity) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[i.identityId]) delete next[i.identityId];
+      else next[i.identityId] = i;
+      return next;
+    });
+  };
+
+  const submit = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!teamId) throw new Error("Selecione uma regra antes.");
+      return argusApi.addTeamMembers(teamId, {
+        identityIds: ids,
+        sourceId: siteId ?? null,
+        startDateTimeUtc: toUtcIso(startAt),
+        endDateTimeUtc: toUtcIso(endAt),
+        reason: "Portal Argus",
+      });
+    },
+    onSuccess: (_d, ids) => {
+      toast.success(`${ids.length} membro(s) adicionado(s).`);
+      queryClient.invalidateQueries({ queryKey: ["location-members"] });
+      queryClient.invalidateQueries({ queryKey: ["locations"] });
+      setSelected({});
+      onClose();
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Falha ao adicionar membros.");
+    },
+  });
+
+  const handleClose = () => {
+    if (submit.isPending) return;
+    onClose();
+  };
+
+  const onSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setQuery(searchInput.trim());
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => (!o ? handleClose() : undefined)}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Adicionar membros</DialogTitle>
+          <DialogDescription>
+            Pesquise por nome ou email no site padrão. Você pode fazer várias pesquisas e selecionar diferentes membros antes de adicionar.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={onSearchSubmit} className="flex gap-2">
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Nome ou email"
+            autoFocus
+          />
+          <Button type="submit" variant="outline" disabled={!searchInput.trim()}>
+            <Search className="mr-2 h-4 w-4" /> Pesquisar
+          </Button>
+        </form>
+
+        <div className="max-h-72 overflow-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10"></TableHead>
+                <TableHead className="w-14"></TableHead>
+                <TableHead>Nome</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead className="hidden font-mono text-xs md:table-cell">Identity ID</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {!query ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+                    Digite um nome ou email e clique em Pesquisar.
+                  </TableCell>
+                </TableRow>
+              ) : searchQuery.isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Pesquisando...
+                  </TableCell>
+                </TableRow>
+              ) : searchQuery.error ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-sm text-destructive">
+                    {(searchQuery.error as Error).message}
+                  </TableCell>
+                </TableRow>
+              ) : items.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+                    Nenhum resultado.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                items.map((i) => {
+                  const checked = !!selected[i.identityId];
+                  return (
+                    <TableRow
+                      key={i.identityId}
+                      className="cursor-pointer"
+                      onClick={() => toggle(i)}
+                      data-state={checked ? "selected" : undefined}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox checked={checked} onCheckedChange={() => toggle(i)} />
+                      </TableCell>
+                      <TableCell>
+                        <IdentityThumb identityId={i.identityId} />
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {`${i.firstName ?? ""} ${i.lastName ?? ""}`.trim() || "—"}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {i.email ?? "—"}
+                      </TableCell>
+                      <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
+                        {i.identityId}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {selectedList.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Selecionados ({selectedList.length})
+            </div>
+            <div className="flex max-h-24 flex-wrap gap-1 overflow-auto">
+              {selectedList.map((i) => (
+                <Badge key={i.identityId} variant="secondary" className="gap-1">
+                  {`${i.firstName ?? ""} ${i.lastName ?? ""}`.trim() || i.identityId}
+                  <button
+                    type="button"
+                    onClick={() => toggle(i)}
+                    className="ml-1 rounded hover:bg-muted-foreground/20"
+                    aria-label="Remover"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label htmlFor="startAt">Data de início</Label>
+            <Input
+              id="startAt"
+              type="datetime-local"
+              value={startAt}
+              onChange={(e) => setStartAt(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="endAt">Data de término</Label>
+            <Input
+              id="endAt"
+              type="datetime-local"
+              value={endAt}
+              onChange={(e) => setEndAt(e.target.value)}
+              placeholder="Sem término"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={handleClose} disabled={submit.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => submit.mutate(selectedList.map((i) => i.identityId))}
+            disabled={selectedList.length === 0 || submit.isPending || !teamId}
+          >
+            {submit.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Adicionar {selectedList.length > 0 ? `(${selectedList.length})` : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
