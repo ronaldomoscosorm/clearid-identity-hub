@@ -265,6 +265,18 @@ export interface ClearIdTeamMember {
   identityDepartmentName?: string | null;
 }
 
+export interface ClearIdLocation {
+  locationId: string;
+  siteId: string;
+  accountId?: string;
+  name: string;
+  description?: string | null;
+  visibility?: string | null;
+  approvers?: string[];
+  owners?: string[];
+  siteOwners?: string[];
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
