@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff } from "lucide-react";
+import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff, Camera } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
 import { IdentityThumb } from "@/components/IdentityThumb";
+import { IdentityPictureDialog } from "@/components/IdentityPictureDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,6 +57,7 @@ function IdentitiesList() {
   const [confirm, setConfirm] = useState<{ id: string; activate: boolean; name: string } | null>(
     null,
   );
+  const [pictureFor, setPictureFor] = useState<{ id: string; name: string } | null>(null);
   // Campos do formulário (não disparam busca automaticamente)
   const [fFirstName, setFFirstName] = useState("");
   const [fEmail, setFEmail] = useState("");
