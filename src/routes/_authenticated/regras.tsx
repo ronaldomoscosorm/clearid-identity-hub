@@ -80,7 +80,31 @@ function RegrasPage() {
     queryFn: () => argusApi.listTeams({ take: 100 }),
     enabled: !!siteId,
     retry: false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
+
+  // Sempre que a página de regras for exibida, refaz o fetch para verificar
+  // se há novas regras cadastradas.
+  useEffect(() => {
+    if (!siteId) return;
+    const toastId = toast.loading("Verificando novas regras...");
+    teamsQuery
+      .refetch()
+      .then((res) => {
+        if (res.error) {
+          toast.error("Falha ao atualizar regras.", { id: toastId });
+        } else {
+          toast.success("Regras atualizadas.", { id: toastId });
+        }
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : "Erro desconhecido";
+        toast.error(`Falha ao atualizar regras: ${msg}`, { id: toastId });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId]);
 
   const sortedTeams = (teamsQuery.data ?? [])
     .slice()
