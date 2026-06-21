@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, ClipboardPaste, RefreshCw, User, X } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
