@@ -397,14 +397,17 @@ export const argusApi = {
 
   createIdentity: (data: IdentityUpsert) =>
     unwrap<ClearIdIdentity>(
-      argusFetch(`/api/identities`, { method: "POST", body: JSON.stringify(data) }),
+      argusFetch(`/api/identities`, {
+        method: "POST",
+        body: JSON.stringify(normalizeIdentityPayload(data)),
+      }),
     ),
 
   updateIdentity: (id: string, data: IdentityUpsert) =>
     unwrap<ClearIdIdentity>(
       argusFetch(`/api/identities/${encodeURIComponent(id)}`, {
         method: "PUT",
-        body: JSON.stringify(data),
+        body: JSON.stringify(normalizeIdentityPayload(data)),
       }),
     ),
 
