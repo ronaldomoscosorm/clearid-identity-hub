@@ -706,29 +706,6 @@ function AddMembersDialog({
           </Table>
         </div>
 
-        {selectedList.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Selecionados ({selectedList.length})
-            </div>
-            <div className="flex max-h-24 flex-wrap gap-1 overflow-auto">
-              {selectedList.map((i) => (
-                <Badge key={i.identityId} variant="secondary" className="gap-1">
-                  {`${i.firstName ?? ""} ${i.lastName ?? ""}`.trim() || i.identityId}
-                  <button
-                    type="button"
-                    onClick={() => toggle(i)}
-                    className="ml-1 rounded hover:bg-muted-foreground/20"
-                    aria-label="Remover"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="startAt">Data de início</Label>
