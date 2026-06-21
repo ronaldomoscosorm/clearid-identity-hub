@@ -72,13 +72,16 @@ export function IdentityPicturePanel({ identityId }: Props) {
 
   const upload = useMutation({
     mutationFn: (blob: Blob) => argusApi.uploadIdentityPicture(identityId, blob),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Foto atualizada");
-      qc.invalidateQueries({ queryKey: ["identity-picture"] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["identity-picture", siteId, identityId] }),
+        qc.invalidateQueries({ queryKey: ["identity", siteId, identityId] }),
+      ]);
       // O upload da foto altera o eTag/last-modification da identidade no
       // ClearID. Sem refetch, um PUT subsequente envia dados obsoletos e
       // o backend responde 400. Invalida ambas as variações da queryKey.
-      qc.invalidateQueries({ queryKey: ["identity", siteId, identityId] });
+      qc.invalidateQueries({ queryKey: ["identity-picture"] });
       qc.invalidateQueries({ queryKey: ["identity"] });
       setOpen(false);
       clearPaste();
