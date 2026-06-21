@@ -12,6 +12,7 @@ import {
   Search,
   X,
   Loader2,
+  User,
 } from "lucide-react";
 import { z } from "zod";
 import {
