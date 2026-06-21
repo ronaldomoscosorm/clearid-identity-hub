@@ -6,6 +6,7 @@ import {
   MoreHorizontal,
   Eye,
   Mail,
+  Camera,
   RefreshCw,
   ExternalLink,
   Plus,
@@ -57,6 +58,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { IdentityThumb } from "@/components/IdentityThumb";
+import { IdentityPictureDialog } from "@/components/IdentityPictureDialog";
 
 const searchSchema = z.object({
   teamId: z.string().optional(),
@@ -75,6 +77,7 @@ function RegrasPage() {
   const { teamId, view } = Route.useSearch();
   const siteId = useDefaultSiteId();
   const [addOpen, setAddOpen] = useState(false);
+  const [pictureFor, setPictureFor] = useState<{ id: string; name: string } | null>(null);
 
   const teamsQuery = useQuery({
     queryKey: ["teams", siteId],
@@ -280,6 +283,16 @@ function RegrasPage() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openView(m.identityId)}>
                               <Eye className="mr-2 h-4 w-4" /> Visualizar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setPictureFor({
+                                  id: m.identityId,
+                                  name: m.identityName?.trim() || m.identityId,
+                                })
+                              }
+                            >
+                              <Camera className="mr-2 h-4 w-4" /> Atualizar foto
                             </DropdownMenuItem>
                             {m.identityEmail && (
                               <DropdownMenuItem asChild>
