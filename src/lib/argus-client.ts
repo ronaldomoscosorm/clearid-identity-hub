@@ -1,8 +1,10 @@
+import { useSyncExternalStore } from "react";
 import { getConfig } from "./argus-env";
 
 // --- Default site cache ---
 let cachedSiteId: string | null = null;
 const SITE_KEY = "argus.defaultSiteId";
+const siteListeners = new Set<() => void>();
 
 export function getDefaultSiteId(): string | null {
   if (cachedSiteId) return cachedSiteId;
@@ -23,6 +25,31 @@ export function setDefaultSiteId(id: string | null) {
       else window.localStorage.removeItem(SITE_KEY);
     } catch { /* ignore */ }
   }
+  for (const cb of siteListeners) cb();
+}
+
+function subscribeSite(cb: () => void) {
+  siteListeners.add(cb);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === SITE_KEY) {
+      cachedSiteId = e.newValue || null;
+      cb();
+    }
+  };
+  if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
+  return () => {
+    siteListeners.delete(cb);
+    if (typeof window !== "undefined") window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** React hook: re-renderiza quando o site padrão muda. */
+export function useDefaultSiteId(): string | null {
+  return useSyncExternalStore(
+    subscribeSite,
+    () => getDefaultSiteId(),
+    () => null,
+  );
 }
 
 // --- AccountId cache (preenchido pelo /api/diagnostics/environment) ---
