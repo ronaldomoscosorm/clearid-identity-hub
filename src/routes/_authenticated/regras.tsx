@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   MoreHorizontal,
@@ -391,6 +391,12 @@ function toUtcIso(local: string): string | null {
   return d.toISOString();
 }
 
+function currentLocalDateTimeValue(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
 function AddMembersDialog({
   open,
   onClose,
@@ -406,12 +412,14 @@ function AddMembersDialog({
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, ClearIdIdentity>>({});
-  const [startAt, setStartAt] = useState<string>(() => {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0, 16);
-  });
+  const [startAt, setStartAt] = useState<string>(() => currentLocalDateTimeValue());
   const [endAt, setEndAt] = useState<string>("");
+
+  useEffect(() => {
+    if (!open) return;
+    setStartAt(currentLocalDateTimeValue());
+    setEndAt("");
+  }, [open]);
 
   const searchQuery = useQuery({
     queryKey: ["identity-search", siteId, query],
@@ -630,24 +638,47 @@ function AddMembersDialog({
           <div className="space-y-1">
             <Label htmlFor="endAt">Data de término</Label>
             <div className="flex gap-2">
-              <Input
-                id="endAt"
-                type="datetime-local"
-                value={endAt}
-                onChange={(e) => setEndAt(e.target.value)}
-                placeholder="Sem término"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setEndAt("")}
-                disabled={!endAt}
-                aria-label="Limpar data de término"
-                title="Limpar"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              {endAt ? (
+                <>
+                  <Input
+                    key="endAt-filled"
+                    id="endAt"
+                    type="datetime-local"
+                    value={endAt}
+                    onChange={(e) => setEndAt(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setEndAt("")}
+                    disabled={submit.isPending}
+                    aria-label="Limpar data de término"
+                    title="Limpar"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Input
+                    key="endAt-empty"
+                    id="endAt"
+                    type="text"
+                    value=""
+                    readOnly
+                    aria-label="Data de término em branco"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEndAt(currentLocalDateTimeValue())}
+                    disabled={submit.isPending}
+                  >
+                    <Plus className="mr-2 h-4 w-4" /> Definir
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
