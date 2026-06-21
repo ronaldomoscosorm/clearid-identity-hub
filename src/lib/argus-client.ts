@@ -318,6 +318,17 @@ export const argusApi = {
     return data?.teamMembers ?? [];
   },
 
+  listLocations: async (params?: { skip?: number; take?: number }): Promise<ClearIdLocation[]> => {
+    const q = new URLSearchParams();
+    q.set("skip", String(params?.skip ?? 0));
+    q.set("take", String(params?.take ?? 200));
+    const data = await unwrap<
+      { results?: ClearIdLocation[] } | ClearIdLocation[]
+    >(argusFetch(`/api/locations?${q.toString()}`));
+    if (Array.isArray(data)) return data;
+    return data?.results ?? [];
+  },
+
   listIdentities: async (params?: {
     query?: string;
     firstName?: string;
