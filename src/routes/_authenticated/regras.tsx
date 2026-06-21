@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { MoreHorizontal, Eye, Mail, RefreshCw, ExternalLink } from "lucide-react";
 import { z } from "zod";
-import { zodValidator } from "@tanstack/zod-adapter";
 import {
   argusApi,
   useDefaultSiteId,
@@ -48,10 +47,11 @@ const searchSchema = z.object({
   teamId: z.string().optional(),
   view: z.string().optional(),
 });
+type RegrasSearch = z.infer<typeof searchSchema>;
 
 export const Route = createFileRoute("/_authenticated/regras")({
   head: () => ({ meta: [{ title: "Regras — Argus ClearID" }] }),
-  validateSearch: zodValidator(searchSchema),
+  validateSearch: (s: Record<string, unknown>): RegrasSearch => searchSchema.parse(s),
   component: RegrasPage,
 });
 
@@ -83,10 +83,10 @@ function RegrasPage() {
     navigate({ search: () => ({ teamId: id || undefined, view: undefined }) });
   };
   const openView = (id: string) => {
-    navigate({ search: (prev) => ({ ...prev, view: id }) });
+    navigate({ search: (prev: RegrasSearch) => ({ ...prev, view: id }) });
   };
   const closeView = () => {
-    navigate({ search: (prev) => ({ ...prev, view: undefined }) });
+    navigate({ search: (prev: RegrasSearch) => ({ ...prev, view: undefined }) });
   };
 
   return (
