@@ -1,6 +1,18 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { MoreHorizontal, Eye, Mail, RefreshCw, ExternalLink } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import {
+  MoreHorizontal,
+  Eye,
+  Mail,
+  RefreshCw,
+  ExternalLink,
+  Plus,
+  Search,
+  X,
+  Loader2,
+} from "lucide-react";
 import { z } from "zod";
 import {
   argusApi,
@@ -9,6 +21,7 @@ import {
 } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -137,15 +150,20 @@ function RegrasPage() {
             </Select>
           </div>
           {locationId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => membersQuery.refetch()}
-              disabled={membersQuery.isFetching}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${membersQuery.isFetching ? "animate-spin" : ""}`} />
-              Atualizar
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => membersQuery.refetch()}
+                disabled={membersQuery.isFetching}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${membersQuery.isFetching ? "animate-spin" : ""}`} />
+                Atualizar
+              </Button>
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" /> Adicionar membros
+              </Button>
+            </>
           )}
         </div>
         {locationsQuery.error && (
@@ -255,6 +273,12 @@ function RegrasPage() {
       )}
 
       <ViewIdentityDialog identityId={view ?? null} onClose={closeView} />
+      <AddMembersDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        teamId={locationId ?? null}
+        siteId={siteId}
+      />
     </div>
   );
 }
