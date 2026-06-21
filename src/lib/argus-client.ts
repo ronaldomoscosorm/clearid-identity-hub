@@ -300,22 +300,7 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     });
   }
 
-  const systemData: Record<string, unknown> = {
-    ...(pickDefined(data.systemData as Record<string, unknown> | null | undefined, [
-      "hasExtendedTime",
-      "canEscort",
-      "antipassbackExemption",
-      "triggerCode",
-      "accessPermissionLevel",
-      "activationDateUtc",
-      "expirationDateUtc",
-      "externalSyncSourceId",
-      "externalSyncTimeUtc",
-      "provisioningAttributes",
-      "resourceFilters",
-    ]) ?? {}),
-  };
-  systemData.resourceFilters = sanitizeResourceFilters(systemData.resourceFilters);
+  const systemData: Record<string, unknown> = {};
   systemData.externalId = data.externalId;
   const customFields = customFieldsToClearIdArray(data.customFields);
   if (customFields) systemData.customFields = customFields;
