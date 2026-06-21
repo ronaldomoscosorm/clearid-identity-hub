@@ -303,6 +303,7 @@ function RegrasPage() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         teamId={teamId ?? null}
+        teamName={selectedTeam?.name ?? null}
         siteId={siteId}
       />
     </div>
