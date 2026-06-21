@@ -145,7 +145,10 @@ function Settings() {
                 } />
               </SelectTrigger>
               <SelectContent>
-                {(sitesQuery.data ?? []).map((s) => (
+                {(sitesQuery.data ?? [])
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }))
+                  .map((s) => (
                   <SelectItem key={s.siteId} value={s.siteId}>
                     {s.name}
                   </SelectItem>
