@@ -406,7 +406,11 @@ function AddMembersDialog({
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, ClearIdIdentity>>({});
-  const [startAt, setStartAt] = useState<string>("");
+  const [startAt, setStartAt] = useState<string>(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
   const [endAt, setEndAt] = useState<string>("");
 
   const searchQuery = useQuery({
