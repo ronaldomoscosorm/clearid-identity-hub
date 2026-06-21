@@ -3,6 +3,8 @@ import { useSyncExternalStore } from "react";
 export interface ArgusEnvConfig {
   baseUrl: string;
   apiKey: string;
+  defaultSiteId?: string;
+  defaultSiteName?: string;
 }
 
 const CFG_KEY = "argus.config";

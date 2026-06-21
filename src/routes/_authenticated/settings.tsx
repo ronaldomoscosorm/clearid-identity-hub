@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getConfig, saveConfig, type ArgusEnvConfig } from "@/lib/argus-env";
-import { argusApi, type DiagnosticsResult } from "@/lib/argus-client";
+import { argusApi, getDefaultSiteId, setDefaultSiteId, type DiagnosticsResult } from "@/lib/argus-client";
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -19,6 +20,13 @@ export const Route = createFileRoute("/_authenticated/settings")({
 function Settings() {
   const [cfg, setCfg] = useState<ArgusEnvConfig>(() => getConfig());
   const [lastResult, setLastResult] = useState<DiagnosticsResult | null>(null);
+  const [siteId, setSiteId] = useState<string>(() => getDefaultSiteId() ?? "");
+
+  const sitesQuery = useQuery({
+    queryKey: ["argus", "sites"],
+    queryFn: argusApi.listSites,
+    staleTime: 60_000,
+  });
 
   const test = useMutation({
     mutationFn: argusApi.diagnostics,
@@ -34,6 +42,8 @@ function Settings() {
 
   const handleSave = () => {
     saveConfig(cfg);
+    setDefaultSiteId(siteId || null);
+    setCfg((c) => ({ ...c, defaultSiteId: siteId || undefined, defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name }));
     toast.success("Configurações salvas");
   };
 
@@ -109,6 +119,43 @@ function Settings() {
           {lastResult?.backend.message && !lastResult.backend.reachable && (
             <p className="text-sm text-destructive">{lastResult.backend.message}</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Site padrão</CardTitle>
+          <CardDescription>
+            Selecione o site usado por padrão em todas as páginas do aplicativo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="site">Site</Label>
+            <Select value={siteId} onValueChange={setSiteId} disabled={sitesQuery.isLoading || !!sitesQuery.error}>
+              <SelectTrigger id="site">
+                <SelectValue placeholder={
+                  sitesQuery.isLoading
+                    ? "Carregando sites..."
+                    : sitesQuery.error
+                    ? "Falha ao carregar sites"
+                    : "Selecione um site"
+                } />
+              </SelectTrigger>
+              <SelectContent>
+                {(sitesQuery.data ?? []).map((s) => (
+                  <SelectItem key={s.siteId} value={s.siteId}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {sitesQuery.error && (
+              <p className="text-sm text-destructive">
+                {(sitesQuery.error as Error).message}
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

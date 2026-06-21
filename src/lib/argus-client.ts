@@ -1,5 +1,30 @@
 import { getConfig } from "./argus-env";
 
+// --- Default site cache ---
+let cachedSiteId: string | null = null;
+const SITE_KEY = "argus.defaultSiteId";
+
+export function getDefaultSiteId(): string | null {
+  if (cachedSiteId) return cachedSiteId;
+  if (typeof window !== "undefined") {
+    try {
+      const stored = window.localStorage.getItem(SITE_KEY);
+      if (stored) cachedSiteId = stored;
+    } catch { /* ignore */ }
+  }
+  return cachedSiteId;
+}
+
+export function setDefaultSiteId(id: string | null) {
+  cachedSiteId = id || null;
+  if (typeof window !== "undefined") {
+    try {
+      if (id) window.localStorage.setItem(SITE_KEY, id);
+      else window.localStorage.removeItem(SITE_KEY);
+    } catch { /* ignore */ }
+  }
+}
+
 // --- AccountId cache (preenchido pelo /api/diagnostics/environment) ---
 let cachedAccountId: string | null = null;
 const accountIdListeners = new Set<(id: string | null) => void>();
@@ -73,6 +98,10 @@ export async function argusFetch<T = unknown>(
   const accountId = getAccountId();
   if (accountId && !headers.has("X-Account-Id")) {
     headers.set("X-Account-Id", accountId);
+  }
+  const siteId = getDefaultSiteId();
+  if (siteId && !headers.has("X-Site-Id")) {
+    headers.set("X-Site-Id", siteId);
   }
 
   let response: Response;
@@ -177,6 +206,15 @@ export interface DiagnosticsResult {
   checkedAt: string;
 }
 
+export interface ClearIdSite {
+  siteId: string;
+  name: string;
+  description?: string | null;
+  accountId?: string;
+  regionId?: string | null;
+  timeZoneId?: string | null;
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
@@ -188,6 +226,14 @@ async function unwrap<T>(p: Promise<unknown>): Promise<T> {
 // ---- API helpers ----
 
 export const argusApi = {
+  listSites: async (): Promise<ClearIdSite[]> => {
+    const data = await unwrap<{ sites?: ClearIdSite[] } | ClearIdSite[]>(
+      argusFetch(`/api/sites`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.sites ?? [];
+  },
+
   listIdentities: async (params?: {
     query?: string;
     firstName?: string;
