@@ -325,6 +325,18 @@ function IdentitiesList() {
                               <Eye className="mr-2 h-4 w-4" /> Visualizar
                             </Link>
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setPictureFor({
+                                id: it.identityId,
+                                name:
+                                  `${it.firstName ?? ""} ${it.lastName ?? ""}`.trim() ||
+                                  it.identityId,
+                              })
+                            }
+                          >
+                            <Camera className="mr-2 h-4 w-4" /> Atualizar foto
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {isActive ? (
                             <DropdownMenuItem
