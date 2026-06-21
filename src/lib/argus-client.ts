@@ -264,14 +264,24 @@ function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
   };
 }
 
-function customFieldsToClearIdArray(fields?: Record<string, string>) {
+function customFieldsToClearIdArray(
+  fields?: Record<string, string>,
+  existing?: ClearIdCustomField[] | null,
+) {
   if (!fields) return undefined;
+  const existingByName = new Map((existing ?? []).map((field) => [field.customFieldName, field]));
   return Object.entries(fields)
     .filter(([name]) => name.trim())
     .map(([customFieldName, customFieldValue]) => ({
+      customFieldType: existingByName.get(customFieldName.trim())?.customFieldType,
       customFieldName: customFieldName.trim(),
       customFieldValue: customFieldValue ?? "",
     }));
+}
+
+function toClearIdName(value: string | null | undefined, fallback: string) {
+  const raw = value || fallback;
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
 function pickDefined<T extends Record<string, unknown>>(source: Record<string, unknown> | null | undefined, keys: string[]): Partial<T> | undefined {
@@ -302,7 +312,7 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
 
   const systemData: Record<string, unknown> = {};
   systemData.externalId = data.externalId;
-  const customFields = customFieldsToClearIdArray(data.customFields);
+  const customFields = customFieldsToClearIdArray(data.customFields, data.systemData?.customFields);
   if (customFields) systemData.customFields = customFields;
 
   const displayName =
@@ -324,6 +334,7 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     countryCode: data.countryCode ?? null,
     culture: data.culture ?? null,
     email: data.email,
+    identityType: toClearIdName(data.identityType, "Employee"),
     eTag: data.eTag,
   };
 }
