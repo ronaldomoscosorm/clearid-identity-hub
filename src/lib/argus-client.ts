@@ -240,6 +240,24 @@ export interface IdentityUpsert {
   displayName?: string | null;
 }
 
+/**
+ * ClearID v4 rejeita o PUT/POST com 400 quando `status` ou `identityType`
+ * chegam capitalizados (e.g. "Active"/"Employee"). A API retorna esses
+ * valores em minúsculas, então normalizamos antes de enviar.
+ */
+function normalizeIdentityPayload(data: IdentityUpsert): IdentityUpsert {
+  return {
+    ...data,
+    status: (typeof data.status === "string"
+      ? data.status.toLowerCase()
+      : data.status) as IdentityUpsert["status"],
+    identityType:
+      typeof data.identityType === "string"
+        ? data.identityType.toLowerCase()
+        : data.identityType,
+  };
+}
+
 export interface DiagnosticsResult {
   environment: string;
   clientCode?: string;
