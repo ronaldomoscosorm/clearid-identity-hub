@@ -16,29 +16,30 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
-function NavItem({
-  to,
-  icon: Icon,
-  label,
-}: {
-  to: string;
-  icon: typeof Users;
-  label: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[status=active]:bg-secondary data-[status=active]:text-foreground"
-      activeOptions={{ exact: false }}
-    >
-      <Icon className="h-4 w-4" />
-      {label}
-    </Link>
-  );
-}
+const NAV_ITEMS = [
+  { to: "/identities", icon: Users, label: "Identities" },
+  { to: "/regras", icon: ShieldCheck, label: "Regras" },
+  { to: "/diagnostics", icon: Activity, label: "Diagnóstico" },
+  { to: "/settings", icon: SettingsIcon, label: "Configurações" },
+  { to: "/branding", icon: Palette, label: "Identidade" },
+] as const;
 
 function EnvBadge({ env }: { env: string }) {
   const isProd = env.toLowerCase() === "prod" || env.toLowerCase() === "production";
@@ -118,118 +119,128 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">
-          <Link to="/identities" className="flex items-center gap-2">
-            {branding.clientLogo ? (
-              <img
-                src={branding.clientLogo}
-                alt={branding.clientName || "Logo"}
-                className="h-8 w-8 rounded-md object-contain"
-              />
-            ) : (
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <Shield className="h-4 w-4" />
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full bg-background">
+        <Sidebar collapsible="icon">
+          <SidebarHeader>
+            <Link to="/identities" className="flex items-center gap-2 px-2 py-1.5">
+              {branding.clientLogo ? (
+                <img
+                  src={branding.clientLogo}
+                  alt={branding.clientName || "Logo"}
+                  className="h-8 w-8 shrink-0 rounded-md object-contain"
+                />
+              ) : (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                  <Shield className="h-4 w-4" />
+                </div>
+              )}
+              <div className="leading-tight group-data-[collapsible=icon]:hidden">
+                <div className="text-sm font-semibold text-foreground">Argus ClearID</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  {branding.clientName || "R&M Console"}
+                </div>
               </div>
-            )}
-            <div className="leading-tight">
-              <div className="text-sm font-semibold text-foreground">Argus ClearID</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                {branding.clientName || "R&M Console"}
-              </div>
-            </div>
-          </Link>
-
-          <nav className="hidden items-center gap-1 md:flex">
-            <NavItem to="/identities" icon={Users} label="Identities" />
-            <NavItem to="/regras" icon={ShieldCheck} label="Regras" />
-            <NavItem to="/diagnostics" icon={Activity} label="Diagnóstico" />
-            <NavItem to="/settings" icon={SettingsIcon} label="Configurações" />
-            <NavItem to="/branding" icon={Palette} label="Identidade" />
-          </nav>
-
-          <div className="ml-auto flex items-center gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="hidden h-8 gap-1.5 font-normal sm:inline-flex"
-                  title="Site padrão"
-                  disabled={!sitesQuery.data?.length}
-                >
-                  <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="max-w-[180px] truncate text-xs">
-                    {currentSite?.name ?? siteId ?? "Selecionar site"}
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
-                <DropdownMenuLabel>Site padrão</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {sitesQuery.data?.length ? (
-                  [...sitesQuery.data]
-                    .sort((a, b) =>
-                      (a.name ?? a.siteId).localeCompare(b.name ?? b.siteId, "pt-BR", { sensitivity: "base" }),
-                    )
-                    .map((s) => {
-                    const active = s.siteId === siteId;
+            </Link>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {NAV_ITEMS.map((item) => {
+                    const active = pathname.startsWith(item.to);
                     return (
-                      <DropdownMenuItem
-                        key={s.siteId}
-                        onClick={() => setDefaultSiteId(s.siteId)}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="truncate">{s.name ?? s.siteId}</span>
-                        {active && <Check className="h-4 w-4 text-primary" />}
-                      </DropdownMenuItem>
+                      <SidebarMenuItem key={item.to}>
+                        <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                          <Link to={item.to}>
+                            <item.icon className="h-4 w-4" />
+                            <span>{item.label}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
                     );
-                  })
-                ) : (
-                  <DropdownMenuItem disabled>Nenhum site disponível</DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <EnvBadge env={env} />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="font-normal">
-                  {email ?? "Conta"}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>{email ?? "Operador"}</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sair
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </SidebarContent>
+          <SidebarFooter>
+            <div className="px-2 group-data-[collapsible=icon]:hidden">
+              <PoweredBy />
+            </div>
+          </SidebarFooter>
+        </Sidebar>
 
-        {/* Mobile nav */}
-        <div className="flex items-center gap-1 overflow-x-auto border-t px-4 py-2 md:hidden">
-          <NavItem to="/identities" icon={Users} label="Identities" />
-          <NavItem to="/regras" icon={ShieldCheck} label="Regras" />
-          <NavItem to="/diagnostics" icon={Activity} label="Diagnóstico" />
-          <NavItem to="/settings" icon={SettingsIcon} label="Configurações" />
-          <NavItem to="/branding" icon={Palette} label="Identidade" />
-        </div>
-      </header>
+        <SidebarInset>
+          <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:px-6">
+            <SidebarTrigger className="-ml-1" />
+            <div className="ml-auto flex items-center gap-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 font-normal"
+                    title="Site padrão"
+                    disabled={!sitesQuery.data?.length}
+                  >
+                    <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="max-w-[180px] truncate text-xs">
+                      {currentSite?.name ?? siteId ?? "Selecionar site"}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
+                  <DropdownMenuLabel>Site padrão</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {sitesQuery.data?.length ? (
+                    [...sitesQuery.data]
+                      .sort((a, b) =>
+                        (a.name ?? a.siteId).localeCompare(b.name ?? b.siteId, "pt-BR", { sensitivity: "base" }),
+                      )
+                      .map((s) => {
+                        const active = s.siteId === siteId;
+                        return (
+                          <DropdownMenuItem
+                            key={s.siteId}
+                            onClick={() => setDefaultSiteId(s.siteId)}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className="truncate">{s.name ?? s.siteId}</span>
+                            {active && <Check className="h-4 w-4 text-primary" />}
+                          </DropdownMenuItem>
+                        );
+                      })
+                  ) : (
+                    <DropdownMenuItem disabled>Nenhum site disponível</DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <EnvBadge env={env} />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="font-normal">
+                    {email ?? "Conta"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>{email ?? "Operador"}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6" data-route={pathname}>
-        {children}
-      </main>
-
-      <footer className="border-t bg-card/50">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <PoweredBy />
-        </div>
-      </footer>
-    </div>
+          <main className="flex-1 px-4 py-8 sm:px-6" data-route={pathname}>
+            {children}
+          </main>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
   );
 }
