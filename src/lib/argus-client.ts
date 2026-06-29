@@ -325,6 +325,9 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
 
   return {
     systemData,
+    companyData: data.siteId
+      ? { ...(data.companyData ?? {}), siteId: data.siteId }
+      : data.companyData ?? undefined,
     description: data.description ?? null,
     status:
       typeof data.status === "string"
