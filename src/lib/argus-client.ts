@@ -255,6 +255,7 @@ export interface IdentityUpsert {
 function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
   return {
     ...data,
+    siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
     status: (typeof data.status === "string"
       ? data.status.toLowerCase()
       : data.status) as IdentityUpsert["status"],
