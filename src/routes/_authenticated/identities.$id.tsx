@@ -47,6 +47,7 @@ function IdentityDetail() {
 
   const identitySiteId = query.data
     ? ((query.data as unknown as { siteId?: string }).siteId ??
+        (query.data.companyData as { siteId?: string } | null | undefined)?.siteId ??
         (query.data.systemData as { siteId?: string } | null | undefined)?.siteId ??
         siteId ??
         undefined)
