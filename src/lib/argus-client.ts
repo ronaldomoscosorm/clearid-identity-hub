@@ -234,6 +234,7 @@ export interface IdentityUpsert {
   email: string;
   status: "Active" | "Inactive";
   customFields?: Record<string, string>;
+  siteId?: string | null;
   // Campos opcionais preservados ao editar (ClearID PUT é replace
   // completo e pode rejeitar com 400 se omitidos).
   identityType?: string | null;
@@ -255,6 +256,7 @@ export interface IdentityUpsert {
 function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
   return {
     ...data,
+    siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
     status: (typeof data.status === "string"
       ? data.status.toLowerCase()
       : data.status) as IdentityUpsert["status"],
