@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { Plus, Trash2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { IdentityUpsert } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 
 const baseSchema = z.object({
   externalId: z.string().trim().min(1, "Obrigatório").max(120),
@@ -44,6 +46,20 @@ export function IdentityForm({
   const [lastName, setLastName] = useState(initial?.lastName ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
+  const defaultSiteId = useDefaultSiteId();
+  const [siteId, setSiteId] = useState<string>(initial?.siteId ?? defaultSiteId ?? "");
+  useEffect(() => {
+    if (!siteId && defaultSiteId) setSiteId(defaultSiteId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSiteId]);
+  const sitesQuery = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => argusApi.listSites(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const sites = (sitesQuery.data ?? []).slice().sort((a, b) =>
+    (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"),
+  );
   const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(
     Object.entries(initial?.customFields ?? {}).map(([key, value]) => ({
       key,
@@ -64,7 +80,7 @@ export function IdentityForm({
     setErrors({});
     const cf: Record<string, string> = {};
     for (const { key, value } of customFields) if (key.trim()) cf[key.trim()] = value;
-    onSubmit({ ...parsed.data, customFields: cf });
+    onSubmit({ ...parsed.data, customFields: cf, siteId: siteId || undefined });
   };
 
   return (
@@ -109,6 +125,21 @@ export function IdentityForm({
               <SelectContent>
                 <SelectItem value="Active">Ativo</SelectItem>
                 <SelectItem value="Inactive">Inativo</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Site</Label>
+            <Select value={siteId} onValueChange={setSiteId}>
+              <SelectTrigger>
+                <SelectValue placeholder={sitesQuery.isLoading ? "Carregando..." : "Selecione um site"} />
+              </SelectTrigger>
+              <SelectContent>
+                {sites.map((s) => (
+                  <SelectItem key={s.siteId} value={s.siteId}>
+                    {s.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
