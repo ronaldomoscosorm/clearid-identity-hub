@@ -620,6 +620,9 @@ export function getClearIdExternalId(i: Pick<ClearIdIdentity, "externalId" | "sy
 }
 
 export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { identityId: string } {
+  const company = (i.companyData ?? null) as Record<string, unknown> | null;
+  const siteIdFromCompany =
+    company && typeof company.siteId === "string" ? (company.siteId as string) : undefined;
   return {
     identityId: i.identityId,
     externalId: getClearIdExternalId(i),
@@ -628,5 +631,8 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     email: i.email ?? "",
     status: (i.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
     customFields: customFieldsToRecord(i.systemData?.customFields),
+    siteId:
+      siteIdFromCompany ??
+      ((i as unknown as { siteId?: string }).siteId ?? undefined),
   };
 }
