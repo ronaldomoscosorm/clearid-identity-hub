@@ -234,6 +234,7 @@ export interface IdentityUpsert {
   email: string;
   status: "Active" | "Inactive";
   customFields?: Record<string, string>;
+  siteId?: string | null;
   // Campos opcionais preservados ao editar (ClearID PUT é replace
   // completo e pode rejeitar com 400 se omitidos).
   identityType?: string | null;
