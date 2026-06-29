@@ -39,6 +39,22 @@ function IdentityDetail() {
   });
   const externalId = query.data ? getClearIdExternalId(query.data) : "";
 
+  const sitesQuery = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => argusApi.listSites(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const identitySiteId = query.data
+    ? ((query.data as unknown as { siteId?: string }).siteId ??
+        (query.data.systemData as { siteId?: string } | null | undefined)?.siteId ??
+        siteId ??
+        undefined)
+    : undefined;
+  const siteName = identitySiteId
+    ? sitesQuery.data?.find((s) => s.siteId === identitySiteId)?.name
+    : undefined;
+
   const update = useMutation({
     mutationFn: (data: Parameters<typeof argusApi.updateIdentity>[1]) => argusApi.updateIdentity(id, data),
     onSuccess: () => {
@@ -81,6 +97,13 @@ function IdentityDetail() {
           <p className="mt-1 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">External ID:</span>{" "}
             <span className="font-mono">{externalId}</span>
+          </p>
+        )}
+        {identitySiteId && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Site:</span>{" "}
+            <span>{siteName ?? "—"}</span>{" "}
+            <span className="font-mono text-[10px] opacity-70">({identitySiteId})</span>
           </p>
         )}
       </div>
