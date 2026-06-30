@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, PowerOff } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
-import { clearIdToFormValues, getClearIdExternalId } from "@/lib/argus-client";
+import { clearIdToFormValues } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
