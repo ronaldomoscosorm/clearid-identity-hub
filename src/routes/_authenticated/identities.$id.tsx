@@ -37,8 +37,6 @@ function IdentityDetail() {
     queryFn: () => argusApi.getIdentity(id),
     retry: false,
   });
-  const externalId = query.data ? getClearIdExternalId(query.data) : "";
-
   const sitesQuery = useQuery({
     queryKey: ["sites"],
     queryFn: () => argusApi.listSites(),
@@ -94,12 +92,6 @@ function IdentityDetail() {
           {query.data ? `${query.data.firstName} ${query.data.lastName}` : "Identity"}
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{id}</p>
-        {externalId && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">External ID:</span>{" "}
-            <span className="font-mono">{externalId}</span>
-          </p>
-        )}
         {identitySiteId && (
           <p className="mt-1 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">Site:</span>{" "}
