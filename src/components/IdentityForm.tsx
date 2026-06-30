@@ -90,17 +90,6 @@ export function IdentityForm({
           <CardTitle className="text-base">Identificação</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="externalId">External ID</Label>
-            <Input
-              id="externalId"
-              value={externalId}
-              onChange={(e) => setExternalId(e.target.value)}
-              disabled={mode === "edit"}
-              placeholder="ex: RM-12345"
-            />
-            {errors.externalId && <p className="text-xs text-destructive">{errors.externalId}</p>}
-          </div>
           <div className="space-y-2">
             <Label htmlFor="firstName">Nome</Label>
             <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
