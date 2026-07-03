@@ -1,11 +1,10 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
-import { LogOut, Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe } from "lucide-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, type ReactNode } from "react";
+import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { PoweredBy } from "@/components/PoweredBy";
 import {
@@ -77,14 +76,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const currentSite = sitesQuery.data?.find((s) => s.siteId === siteId);
   const branding = useBranding();
   useApplyBranding();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [email, setEmail] = useState<string | null>(null);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
-  }, []);
 
   // Invalidate page-level queries, but keep shell-owned queries (sites
   // list, env/diagnostics) untouched so the top menu doesn't flicker
@@ -110,13 +103,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     invalidatePageQueries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId]);
-
-  const handleSignOut = async () => {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
-  };
 
   return (
     <SidebarProvider>
