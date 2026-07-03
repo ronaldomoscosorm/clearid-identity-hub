@@ -412,13 +412,13 @@ export const argusApi = {
     return data?.sites ?? [];
   },
 
-  listTeams: async (params?: { name?: string; take?: number }): Promise<ClearIdTeam[]> => {
+  listTeams: async (params?: { name?: string; take?: number; allSites?: boolean }): Promise<ClearIdTeam[]> => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
     q.set("take", String(params?.take ?? 200));
     if (params?.name) q.set("name", params.name);
     const data = await unwrap<{ teams?: ClearIdTeam[] } | ClearIdTeam[]>(
-      argusFetch(`/api/teams?${q.toString()}`),
+      argusFetch(`/api/teams?${q.toString()}`, undefined, { allSites: params?.allSites }),
     );
     if (Array.isArray(data)) return data;
     return data?.teams ?? [];
