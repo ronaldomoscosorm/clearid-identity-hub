@@ -204,21 +204,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </DropdownMenuContent>
               </DropdownMenu>
               <EnvBadge env={env} />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="font-normal">
-                    {email ?? "Conta"}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>{email ?? "Operador"}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sair
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </header>
 
