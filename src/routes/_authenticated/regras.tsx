@@ -78,12 +78,11 @@ function RegrasPage() {
   const siteId = useDefaultSiteId();
   const [addOpen, setAddOpen] = useState(false);
   const [pictureFor, setPictureFor] = useState<{ id: string; name: string } | null>(null);
-  const [allSites, setAllSites] = useState(false);
 
   const teamsQuery = useQuery({
-    queryKey: ["teams", siteId, allSites],
-    queryFn: () => argusApi.listTeams({ take: 100, allSites }),
-    enabled: !!siteId || allSites,
+    queryKey: ["teams", siteId],
+    queryFn: () => argusApi.listTeams({ take: 100 }),
+    enabled: !!siteId,
     retry: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
@@ -93,7 +92,7 @@ function RegrasPage() {
   // Sempre que a página de regras for exibida, refaz o fetch para verificar
   // se há novas regras cadastradas.
   useEffect(() => {
-    if (!siteId && !allSites) return;
+    if (!siteId) return;
     const toastId = toast.loading("Verificando novas regras...");
     teamsQuery
       .refetch()
@@ -109,7 +108,7 @@ function RegrasPage() {
         toast.error(`Falha ao atualizar regras: ${msg}`, { id: toastId });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteId, allSites]);
+  }, [siteId]);
 
   const sortedTeams = (teamsQuery.data ?? [])
     .slice()
@@ -150,12 +149,12 @@ function RegrasPage() {
             <Select
               value={teamId ?? ""}
               onValueChange={setTeam}
-              disabled={(!siteId && !allSites) || teamsQuery.isLoading || !!teamsQuery.error}
+              disabled={!siteId || teamsQuery.isLoading || !!teamsQuery.error}
             >
               <SelectTrigger id="team">
                 <SelectValue
                   placeholder={
-                    !siteId && !allSites
+                    !siteId
                       ? "Selecione um site padrão em Configurações"
                       : teamsQuery.isLoading
                       ? "Carregando regras..."
@@ -173,19 +172,6 @@ function RegrasPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex items-center gap-2 pb-2">
-            <Checkbox
-              id="all-sites"
-              checked={allSites}
-              onCheckedChange={(v) => {
-                setAllSites(!!v);
-                setTeam("");
-              }}
-            />
-            <Label htmlFor="all-sites" className="cursor-pointer text-sm font-normal">
-              Todos os sites
-            </Label>
           </div>
           {teamId && (
             <>
