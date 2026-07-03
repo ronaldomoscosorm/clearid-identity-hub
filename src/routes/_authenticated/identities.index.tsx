@@ -6,6 +6,7 @@ import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -65,6 +66,7 @@ function IdentitiesList() {
   const [fJobTitle, setFJobTitle] = useState("");
   const [fDepartment, setFDepartment] = useState("");
   const [fStatus, setFStatus] = useState<string>("all");
+  const [fAllSites, setFAllSites] = useState(false);
 
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
   const [hasSearched, setHasSearched] = useState(false);
@@ -75,7 +77,8 @@ function IdentitiesList() {
     jobTitle: string;
     department: string;
     status: string;
-  }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
+    allSites: boolean;
+  }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", allSites: false });
 
   const query = useQuery({
     queryKey: ["identities", siteId, applied],
@@ -87,6 +90,7 @@ function IdentitiesList() {
         jobTitle: applied.jobTitle || undefined,
         department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
+        allSites: applied.allSites,
       }),
     enabled: hasSearched,
     retry: false,
@@ -126,6 +130,7 @@ function IdentitiesList() {
       jobTitle: fJobTitle.trim(),
       department: fDepartment.trim(),
       status: fStatus,
+      allSites: fAllSites,
     });
   };
 
@@ -136,8 +141,9 @@ function IdentitiesList() {
     setFJobTitle("");
     setFDepartment("");
     setFStatus("all");
+    setFAllSites(false);
     setHasSearched(false);
-    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all" });
+    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", allSites: false });
   };
 
   return (
@@ -219,6 +225,16 @@ function IdentitiesList() {
             </div>
           </div>
           <div className="flex items-center justify-end gap-2">
+            <div className="mr-auto flex items-center gap-2">
+              <Checkbox
+                id="f-all-sites"
+                checked={fAllSites}
+                onCheckedChange={(v) => setFAllSites(!!v)}
+              />
+              <Label htmlFor="f-all-sites" className="cursor-pointer text-sm font-normal">
+                Todos os sites
+              </Label>
+            </div>
             <Button type="button" variant="ghost" onClick={onClear} disabled={query.isFetching}>
               Limpar
             </Button>
