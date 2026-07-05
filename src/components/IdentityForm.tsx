@@ -32,6 +32,7 @@ export type IdentityFormProps = {
   onSubmit: (data: IdentityUpsert) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
+  showCustomFields?: boolean;
 };
 
 export function IdentityForm({
@@ -41,6 +42,7 @@ export function IdentityForm({
   onSubmit,
   onCancel,
   extraActions,
+  showCustomFields = false,
 }: IdentityFormProps) {
   const [externalId, setExternalId] = useState(initial?.externalId ?? "");
   const [firstName, setFirstName] = useState(initial?.firstName ?? "");
@@ -178,6 +180,7 @@ export function IdentityForm({
         </CardContent>
       </Card>
 
+      {showCustomFields && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Atributos customizados</CardTitle>
@@ -255,6 +258,7 @@ export function IdentityForm({
           )}
         </CardContent>
       </Card>
+      )}
 
       <div className="flex items-center justify-end gap-2">
         {extraActions}
