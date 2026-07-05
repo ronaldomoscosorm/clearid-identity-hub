@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
@@ -35,6 +35,7 @@ import { useQueryClient } from "@tanstack/react-query";
 const NAV_ITEMS = [
   { to: "/identities", icon: Users, label: "Identities" },
   { to: "/regras", icon: ShieldCheck, label: "Regras" },
+  { to: "/terceirizados", icon: HardHat, label: "Terceirizados" },
   { to: "/campos-personalizados", icon: ListChecks, label: "Campos personalizados" },
   { to: "/diagnostics", icon: Activity, label: "Diagnóstico" },
   { to: "/settings", icon: SettingsIcon, label: "Configurações" },
