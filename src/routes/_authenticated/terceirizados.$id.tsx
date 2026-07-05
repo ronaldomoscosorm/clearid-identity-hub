@@ -21,7 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export const Route = createFileRoute("/_authenticated/identities/$id")({
+export const Route = createFileRoute("/_authenticated/terceirizados/$id")({
   head: () => ({ meta: [{ title: "Identity — Argus ClearID" }] }),
   component: IdentityDetail,
 });
