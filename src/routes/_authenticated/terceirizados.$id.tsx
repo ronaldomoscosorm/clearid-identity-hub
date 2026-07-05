@@ -119,6 +119,7 @@ function IdentityDetail() {
           </Card>
           <IdentityForm
           mode="edit"
+          showCustomFields
           initial={clearIdToFormValues(query.data)}
           submitting={update.isPending}
           onSubmit={(data) => {
