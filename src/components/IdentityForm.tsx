@@ -213,6 +213,7 @@ export function IdentityForm({
                           <Input
                             id={`cf-${name}`}
                             type="date"
+                            lang="pt-BR"
                             value={toDateInputValue(value)}
                             onChange={(e) => setField(name, e.target.value)}
                             disabled={f.isReadOnly}
