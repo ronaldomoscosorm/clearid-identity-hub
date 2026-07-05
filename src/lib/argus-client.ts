@@ -189,6 +189,13 @@ export async function argusFetch<T = unknown>(
   if (accountId && !headers.has("X-Account-Id")) {
     headers.set("X-Account-Id", accountId);
   }
+  const systemObjectId = getSystemObjectId();
+  if (systemObjectId && !headers.has("X-System-Object-Id")) {
+    headers.set("X-System-Object-Id", systemObjectId);
+  }
+  if (systemObjectId && !/[?&]systemObjectId=/.test(url)) {
+    url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(systemObjectId);
+  }
   if (!headers.has("X-ClearId-Environment")) {
     headers.set("X-ClearId-Environment", "Demo");
   }
