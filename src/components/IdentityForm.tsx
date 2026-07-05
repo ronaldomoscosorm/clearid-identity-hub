@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { Plus, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -60,13 +61,34 @@ export function IdentityForm({
   const sites = (sitesQuery.data ?? []).slice().sort((a, b) =>
     (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"),
   );
-  const [customFields, setCustomFields] = useState<Array<{ key: string; value: string }>>(
-    Object.entries(initial?.customFields ?? {}).map(([key, value]) => ({
-      key,
-      value: String(value ?? ""),
-    })),
+  const [customFields, setCustomFields] = useState<Record<string, string>>(
+    { ...(initial?.customFields ?? {}) },
   );
+  const fieldsQuery = useQuery({
+    queryKey: ["custom-fields"],
+    queryFn: () => argusApi.listCustomFields(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const defs = (fieldsQuery.data ?? []).filter((f) => !f.isDeleted);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const setField = (name: string, value: string) =>
+    setCustomFields((prev) => ({ ...prev, [name]: value }));
+
+  const typeOf = (t?: string | null) => (t ?? "").toLowerCase();
+  const isDate = (t?: string | null) => typeOf(t) === "date" || typeOf(t) === "datetime";
+  const isBool = (t?: string | null) =>
+    ["bool", "boolean", "switch", "toggle"].includes(typeOf(t));
+
+  const toDateInputValue = (v: string) => {
+    if (!v) return "";
+    // Accept ISO or yyyy-MM-dd already
+    if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return "";
+  };
+  const isTruthy = (v: string) => ["true", "1", "yes", "sim"].includes(v.toLowerCase());
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,9 +101,15 @@ export function IdentityForm({
     }
     setErrors({});
     const cf: Record<string, string> = {};
-    for (const { key, value } of customFields) if (key.trim()) cf[key.trim()] = value;
+    for (const [k, v] of Object.entries(customFields)) if (k.trim()) cf[k.trim()] = v ?? "";
     onSubmit({ ...parsed.data, customFields: cf, siteId: siteId || undefined });
   };
+
+  const dateDefs = defs.filter((f) => isDate(f.customFieldType));
+  const boolDefs = defs.filter((f) => isBool(f.customFieldType));
+  const textDefs = defs.filter(
+    (f) => !isDate(f.customFieldType) && !isBool(f.customFieldType),
+  );
 
   return (
     <form onSubmit={submit} className="space-y-6">
@@ -140,47 +168,76 @@ export function IdentityForm({
           <CardTitle className="text-base">Atributos customizados</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {customFields.length === 0 && (
-            <p className="text-xs text-muted-foreground">Nenhum atributo. Adicione abaixo.</p>
-          )}
-          {customFields.map((row, idx) => (
-            <div key={idx} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
-              <Input
-                placeholder="chave"
-                value={row.key}
-                onChange={(e) => {
-                  const copy = [...customFields];
-                  copy[idx] = { ...copy[idx], key: e.target.value };
-                  setCustomFields(copy);
-                }}
-              />
-              <Input
-                placeholder="valor"
-                value={row.value}
-                onChange={(e) => {
-                  const copy = [...customFields];
-                  copy[idx] = { ...copy[idx], value: e.target.value };
-                  setCustomFields(copy);
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => setCustomFields(customFields.filter((_, i) => i !== idx))}
-              >
-                <Trash2 className="h-4 w-4 text-muted-foreground" />
-              </Button>
+          {fieldsQuery.isLoading ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
             </div>
-          ))}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setCustomFields([...customFields, { key: "", value: "" }])}
-          >
-            <Plus className="mr-1 h-4 w-4" /> Adicionar atributo
-          </Button>
+          ) : defs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Nenhum campo personalizado definido.
+            </p>
+          ) : (
+            <div className="space-y-6">
+              {(dateDefs.length > 0 || textDefs.length > 0) && (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {[...dateDefs, ...textDefs].map((f) => {
+                    const name = f.customFieldName;
+                    const label = f.displayName || name;
+                    const value = customFields[name] ?? "";
+                    return (
+                      <div key={name} className="space-y-1.5">
+                        <Label htmlFor={`cf-${name}`} className="text-xs text-muted-foreground">
+                          {label}
+                        </Label>
+                        {isDate(f.customFieldType) ? (
+                          <Input
+                            id={`cf-${name}`}
+                            type="date"
+                            value={toDateInputValue(value)}
+                            onChange={(e) => setField(name, e.target.value)}
+                            disabled={f.isReadOnly}
+                            className="rounded-full"
+                          />
+                        ) : (
+                          <Input
+                            id={`cf-${name}`}
+                            value={value}
+                            onChange={(e) => setField(name, e.target.value)}
+                            disabled={f.isReadOnly}
+                            className="rounded-full"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {boolDefs.length > 0 && (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {boolDefs.map((f) => {
+                    const name = f.customFieldName;
+                    const label = f.displayName || name;
+                    const value = customFields[name] ?? "";
+                    return (
+                      <div key={name} className="flex items-center gap-2">
+                        <Switch
+                          id={`cf-${name}`}
+                          checked={isTruthy(value)}
+                          onCheckedChange={(v) => setField(name, v ? "true" : "false")}
+                          disabled={f.isReadOnly}
+                        />
+                        <Label htmlFor={`cf-${name}`} className="cursor-pointer text-sm font-normal">
+                          {label}
+                        </Label>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
