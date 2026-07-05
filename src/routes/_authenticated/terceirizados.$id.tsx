@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/terceirizados/$id")({
-  head: () => ({ meta: [{ title: "Identity — Argus ClearID" }] }),
+  head: () => ({ meta: [{ title: "Terceirizado — Argus ClearID" }] }),
   component: IdentityDetail,
 });
 
@@ -72,7 +72,7 @@ function IdentityDetail() {
     onSuccess: () => {
       toast.success("Identity desativada");
       qc.invalidateQueries({ queryKey: ["identities"] });
-      navigate({ to: "/identities" });
+      navigate({ to: "/terceirizados" });
     },
     onError: (e) => {
       const err = e as ArgusApiError;
@@ -84,7 +84,7 @@ function IdentityDetail() {
     <div className="space-y-6">
       <div>
         <Button asChild variant="ghost" size="sm" className="-ml-2">
-          <Link to="/identities">
+          <Link to="/terceirizados">
             <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
           </Link>
         </Button>
@@ -142,7 +142,7 @@ function IdentityDetail() {
               systemData: original.systemData ?? undefined,
             });
           }}
-          onCancel={() => navigate({ to: "/identities" })}
+          onCancel={() => navigate({ to: "/terceirizados" })}
           extraActions={
             <AlertDialog>
               <AlertDialogTrigger asChild>
