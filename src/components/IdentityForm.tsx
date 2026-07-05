@@ -262,22 +262,26 @@ export function IdentityForm({
                           {label}
                         </Label>
                         {isDate(f.customFieldType) ? (
-                          <Input
-                            id={`cf-${name}`}
-                            type={toDateInputValue(value) ? "date" : "text"}
-                            lang="pt-BR"
-                            placeholder=""
-                            value={toDateInputValue(value)}
-                            onFocus={(e) => {
-                              if (e.currentTarget.type === "text") e.currentTarget.type = "date";
-                            }}
-                            onBlur={(e) => {
-                              if (!e.currentTarget.value) e.currentTarget.type = "text";
-                            }}
-                            onChange={(e) => setField(name, e.target.value)}
-                            disabled={f.isReadOnly}
-                            className="rounded-full"
-                          />
+                          <>
+                            <Input
+                              id={`cf-${name}`}
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="dd/mm/aaaa"
+                              maxLength={10}
+                              value={
+                                /^\d{4}-\d{2}-\d{2}/.test(value)
+                                  ? isoToBr(toDateInputValue(value))
+                                  : maskDateInput(value)
+                              }
+                              onChange={(e) => setField(name, maskDateInput(e.target.value))}
+                              disabled={f.isReadOnly}
+                              className="rounded-full"
+                            />
+                            {errors[`cf-${name}`] && (
+                              <p className="text-xs text-destructive">{errors[`cf-${name}`]}</p>
+                            )}
+                          </>
                         ) : (
                           <Input
                             id={`cf-${name}`}
