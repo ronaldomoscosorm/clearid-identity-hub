@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
-import { argusApi, customFieldsToRecord, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { IdentityThumb } from "@/components/IdentityThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
