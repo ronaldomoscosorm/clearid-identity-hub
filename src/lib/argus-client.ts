@@ -393,6 +393,21 @@ export interface ClearIdLocation {
   siteOwners?: string[];
 }
 
+export interface ClearIdCustomFieldDef {
+  customFieldName: string;
+  displayName?: string | null;
+  customFieldType?: string | null;
+  isReadOnly?: boolean;
+  synchronizationEnabled?: boolean;
+  createdBy?: string | null;
+  creationDateUtc?: string | null;
+  lastModifiedBy?: string | null;
+  lastModificationDateUtc?: string | null;
+  eTag?: string | null;
+  isDeleting?: boolean;
+  isDeleted?: boolean;
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
