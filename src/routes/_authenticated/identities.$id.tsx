@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
 import { IdentityPicturePanel } from "@/components/IdentityPicturePanel";
+import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -177,7 +178,9 @@ function IdentityDetail() {
             </span>
           }
           extraActions={
-            <AlertDialog>
+            <>
+              <CredentialsDialog identityId={id} />
+              <AlertDialog>
               <AlertDialogTrigger asChild>
                 {isActive ? (
                   <Button type="button" variant="destructive">
@@ -209,7 +212,8 @@ function IdentityDetail() {
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
-            </AlertDialog>
+              </AlertDialog>
+            </>
           }
           />
         </>
