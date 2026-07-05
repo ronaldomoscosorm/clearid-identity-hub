@@ -512,6 +512,36 @@ export interface CustomFieldPatchValue {
   customFieldValue: string | null;
 }
 
+// ---- Credential DTOs ----
+
+export interface CredentialFormat {
+  formatId: string;
+  name: string;
+  description?: string | null;
+}
+
+export interface CredentialRecord {
+  credentialId?: string;
+  identityId?: string;
+  formatId?: string;
+  formatName?: string | null;
+  facilityCode?: string | number | null;
+  cardNumber?: string | number | null;
+  activationDateUtc?: string | null;
+  expirationDateUtc?: string | null;
+  status?: string | null;
+  [k: string]: unknown;
+}
+
+export interface CredentialUpsert {
+  identityId: string;
+  formatId: string;
+  facilityCode?: string | null;
+  cardNumber: string;
+  activationDateUtc?: string | null;
+  expirationDateUtc?: string | null;
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
