@@ -19,6 +19,7 @@ import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedCamposPersonalizadosRouteImport } from './routes/_authenticated/campos-personalizados'
 import { Route as AuthenticatedBrandingRouteImport } from './routes/_authenticated/branding'
 import { Route as AuthenticatedIdentitiesIndexRouteImport } from './routes/_authenticated/identities.index'
+import { Route as AuthenticatedTerceirizadosIdRouteImport } from './routes/_authenticated/terceirizados.$id'
 import { Route as AuthenticatedIdentitiesNewRouteImport } from './routes/_authenticated/identities.new'
 import { Route as AuthenticatedIdentitiesIdRouteImport } from './routes/_authenticated/identities.$id'
 
@@ -75,6 +76,12 @@ const AuthenticatedIdentitiesIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedIdentitiesRoute,
   } as any)
+const AuthenticatedTerceirizadosIdRoute =
+  AuthenticatedTerceirizadosIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedTerceirizadosRoute,
+  } as any)
 const AuthenticatedIdentitiesNewRoute =
   AuthenticatedIdentitiesNewRouteImport.update({
     id: '/new',
@@ -96,9 +103,10 @@ export interface FileRoutesByFullPath {
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/terceirizados': typeof AuthenticatedTerceirizadosRoute
+  '/terceirizados': typeof AuthenticatedTerceirizadosRouteWithChildren
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
+  '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/identities/': typeof AuthenticatedIdentitiesIndexRoute
 }
 export interface FileRoutesByTo {
@@ -108,9 +116,10 @@ export interface FileRoutesByTo {
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/terceirizados': typeof AuthenticatedTerceirizadosRoute
+  '/terceirizados': typeof AuthenticatedTerceirizadosRouteWithChildren
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
+  '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/identities': typeof AuthenticatedIdentitiesIndexRoute
 }
 export interface FileRoutesById {
@@ -123,9 +132,10 @@ export interface FileRoutesById {
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/terceirizados': typeof AuthenticatedTerceirizadosRoute
+  '/_authenticated/terceirizados': typeof AuthenticatedTerceirizadosRouteWithChildren
   '/_authenticated/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/_authenticated/identities/new': typeof AuthenticatedIdentitiesNewRoute
+  '/_authenticated/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/_authenticated/identities/': typeof AuthenticatedIdentitiesIndexRoute
 }
 export interface FileRouteTypes {
@@ -141,6 +151,7 @@ export interface FileRouteTypes {
     | '/terceirizados'
     | '/identities/$id'
     | '/identities/new'
+    | '/terceirizados/$id'
     | '/identities/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
     | '/terceirizados'
     | '/identities/$id'
     | '/identities/new'
+    | '/terceirizados/$id'
     | '/identities'
   id:
     | '__root__'
@@ -167,6 +179,7 @@ export interface FileRouteTypes {
     | '/_authenticated/terceirizados'
     | '/_authenticated/identities/$id'
     | '/_authenticated/identities/new'
+    | '/_authenticated/terceirizados/$id'
     | '/_authenticated/identities/'
   fileRoutesById: FileRoutesById
 }
@@ -247,6 +260,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIdentitiesIndexRouteImport
       parentRoute: typeof AuthenticatedIdentitiesRoute
     }
+    '/_authenticated/terceirizados/$id': {
+      id: '/_authenticated/terceirizados/$id'
+      path: '/$id'
+      fullPath: '/terceirizados/$id'
+      preLoaderRoute: typeof AuthenticatedTerceirizadosIdRouteImport
+      parentRoute: typeof AuthenticatedTerceirizadosRoute
+    }
     '/_authenticated/identities/new': {
       id: '/_authenticated/identities/new'
       path: '/new'
@@ -282,6 +302,20 @@ const AuthenticatedIdentitiesRouteWithChildren =
     AuthenticatedIdentitiesRouteChildren,
   )
 
+interface AuthenticatedTerceirizadosRouteChildren {
+  AuthenticatedTerceirizadosIdRoute: typeof AuthenticatedTerceirizadosIdRoute
+}
+
+const AuthenticatedTerceirizadosRouteChildren: AuthenticatedTerceirizadosRouteChildren =
+  {
+    AuthenticatedTerceirizadosIdRoute: AuthenticatedTerceirizadosIdRoute,
+  }
+
+const AuthenticatedTerceirizadosRouteWithChildren =
+  AuthenticatedTerceirizadosRoute._addFileChildren(
+    AuthenticatedTerceirizadosRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedBrandingRoute: typeof AuthenticatedBrandingRoute
   AuthenticatedCamposPersonalizadosRoute: typeof AuthenticatedCamposPersonalizadosRoute
@@ -289,7 +323,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedTerceirizadosRoute: typeof AuthenticatedTerceirizadosRoute
+  AuthenticatedTerceirizadosRoute: typeof AuthenticatedTerceirizadosRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -300,7 +334,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedTerceirizadosRoute: AuthenticatedTerceirizadosRoute,
+  AuthenticatedTerceirizadosRoute: AuthenticatedTerceirizadosRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =
