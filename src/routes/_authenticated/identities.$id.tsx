@@ -163,10 +163,19 @@ function IdentityDetail() {
               <span
                 aria-label={isActive ? "Ativo" : "Inativo"}
                 title={isActive ? "Ativo" : "Inativo"}
-                className={`inline-block h-3 w-3 rounded-full ${
-                  isActive ? "bg-green-500" : "bg-red-500"
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold shadow-sm ${
+                  isActive
+                    ? "border-green-600 bg-green-100 text-green-800"
+                    : "border-red-600 bg-red-100 text-red-800"
                 }`}
-              />
+              >
+                <span
+                  className={`inline-block h-2.5 w-2.5 rounded-full ${
+                    isActive ? "bg-green-600 animate-pulse" : "bg-red-600"
+                  }`}
+                />
+                {isActive ? "Ativo" : "Inativo"}
+              </span>
               <AlertDialog>
               <AlertDialogTrigger asChild>
                 {isActive ? (
