@@ -131,6 +131,9 @@ export async function argusFetch<T = unknown>(
   if (accountId && !headers.has("X-Account-Id")) {
     headers.set("X-Account-Id", accountId);
   }
+  if (!headers.has("X-ClearId-Environment")) {
+    headers.set("X-ClearId-Environment", "Demo");
+  }
   if (!opts.allSites && siteIdForQuery && !headers.has("X-Site-Id")) {
     headers.set("X-Site-Id", siteIdForQuery);
   }
