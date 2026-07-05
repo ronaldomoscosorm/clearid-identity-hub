@@ -289,7 +289,11 @@ export function IdentityForm({
                             {(() => {
                               const iso = toDateInputValue(value);
                               const selected = iso ? parse(iso, "yyyy-MM-dd", new Date()) : undefined;
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              const isExpired = !!selected && selected < today;
                               return (
+                                <>
                                 <Popover>
                                   <PopoverTrigger asChild>
                                     <Button
@@ -300,10 +304,17 @@ export function IdentityForm({
                                       className={cn(
                                         "w-full justify-start rounded-full text-left font-normal",
                                         !selected && "text-muted-foreground",
+                                        isExpired &&
+                                          "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
                                       )}
                                     >
                                       <CalendarIcon className="mr-2 h-4 w-4" />
                                       {selected ? format(selected, "dd/MM/yyyy", { locale: ptBR }) : "dd/mm/aaaa"}
+                                      {isExpired && (
+                                        <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
+                                          Vencida
+                                        </span>
+                                      )}
                                     </Button>
                                   </PopoverTrigger>
                                   <PopoverContent className="w-auto p-0" align="start">
@@ -332,6 +343,12 @@ export function IdentityForm({
                                     )}
                                   </PopoverContent>
                                 </Popover>
+                                {isExpired && (
+                                  <p className="text-xs font-medium text-destructive">
+                                    Data vencida
+                                  </p>
+                                )}
+                                </>
                               );
                             })()}
                             {errors[`cf-${name}`] && (
