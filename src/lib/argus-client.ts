@@ -273,13 +273,26 @@ function customFieldsToClearIdArray(
 ) {
   if (!fields) return undefined;
   const existingByName = new Map((existing ?? []).map((field) => [field.customFieldName, field]));
-  return Object.entries(fields)
-    .filter(([name]) => name.trim())
-    .map(([customFieldName, customFieldValue]) => ({
-      customFieldType: existingByName.get(customFieldName.trim())?.customFieldType,
-      customFieldName: customFieldName.trim(),
-      customFieldValue: customFieldValue ?? "",
-    }));
+  const seen = new Set<string>();
+  const merged: ClearIdCustomField[] = [];
+  for (const [rawName, rawValue] of Object.entries(fields)) {
+    const customFieldName = rawName.trim();
+    if (!customFieldName) continue;
+    seen.add(customFieldName);
+    merged.push({
+      customFieldType: existingByName.get(customFieldName)?.customFieldType,
+      customFieldName,
+      customFieldValue: rawValue ?? "",
+    });
+  }
+  // Preserva quaisquer campos existentes que não estavam no formulário,
+  // já que o PUT do ClearID substitui a lista inteira.
+  for (const field of existing ?? []) {
+    if (field.customFieldName && !seen.has(field.customFieldName)) {
+      merged.push(field);
+    }
+  }
+  return merged;
 }
 
 function toClearIdName(value: string | null | undefined, fallback: string) {
