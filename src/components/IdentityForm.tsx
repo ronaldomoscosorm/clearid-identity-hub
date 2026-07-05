@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
+import { format, parse } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -263,21 +269,54 @@ export function IdentityForm({
                         </Label>
                         {isDate(f.customFieldType) ? (
                           <>
-                            <Input
-                              id={`cf-${name}`}
-                              type="text"
-                              inputMode="numeric"
-                              placeholder="dd/mm/aaaa"
-                              maxLength={10}
-                              value={
-                                /^\d{4}-\d{2}-\d{2}/.test(value)
-                                  ? isoToBr(toDateInputValue(value))
-                                  : maskDateInput(value)
-                              }
-                              onChange={(e) => setField(name, maskDateInput(e.target.value))}
-                              disabled={f.isReadOnly}
-                              className="rounded-full"
-                            />
+                            {(() => {
+                              const iso = toDateInputValue(value);
+                              const selected = iso ? parse(iso, "yyyy-MM-dd", new Date()) : undefined;
+                              return (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      id={`cf-${name}`}
+                                      type="button"
+                                      variant="outline"
+                                      disabled={f.isReadOnly}
+                                      className={cn(
+                                        "w-full justify-start rounded-full text-left font-normal",
+                                        !selected && "text-muted-foreground",
+                                      )}
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {selected ? format(selected, "dd/MM/yyyy", { locale: ptBR }) : "dd/mm/aaaa"}
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                      mode="single"
+                                      locale={ptBR}
+                                      selected={selected}
+                                      onSelect={(d) =>
+                                        setField(name, d ? format(d, "yyyy-MM-dd") : "")
+                                      }
+                                      initialFocus
+                                      className={cn("p-3 pointer-events-auto")}
+                                    />
+                                    {selected && !f.isReadOnly && (
+                                      <div className="border-t p-2">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          className="w-full"
+                                          onClick={() => setField(name, "")}
+                                        >
+                                          Limpar
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </PopoverContent>
+                                </Popover>
+                              );
+                            })()}
                             {errors[`cf-${name}`] && (
                               <p className="text-xs text-destructive">{errors[`cf-${name}`]}</p>
                             )}
