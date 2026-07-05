@@ -393,6 +393,21 @@ export interface ClearIdLocation {
   siteOwners?: string[];
 }
 
+export interface ClearIdCustomFieldDef {
+  customFieldName: string;
+  displayName?: string | null;
+  customFieldType?: string | null;
+  isReadOnly?: boolean;
+  synchronizationEnabled?: boolean;
+  createdBy?: string | null;
+  creationDateUtc?: string | null;
+  lastModifiedBy?: string | null;
+  lastModificationDateUtc?: string | null;
+  eTag?: string | null;
+  isDeleting?: boolean;
+  isDeleted?: boolean;
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
@@ -444,6 +459,17 @@ export const argusApi = {
     >(argusFetch(`/api/locations?${q.toString()}`));
     if (Array.isArray(data)) return data;
     return data?.results ?? [];
+  },
+
+  listCustomFields: async (): Promise<ClearIdCustomFieldDef[]> => {
+    const accountId = getAccountId();
+    const q = new URLSearchParams();
+    if (accountId) q.set("accountId", accountId);
+    const data = await unwrap<
+      { customFields?: ClearIdCustomFieldDef[] } | ClearIdCustomFieldDef[]
+    >(argusFetch(`/api/custom-fields?${q.toString()}`, undefined, { allSites: true }));
+    if (Array.isArray(data)) return data;
+    return data?.customFields ?? [];
   },
 
   addTeamMembers: (
