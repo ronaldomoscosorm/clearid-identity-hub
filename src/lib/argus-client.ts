@@ -461,6 +461,17 @@ export const argusApi = {
     return data?.results ?? [];
   },
 
+  listCustomFields: async (): Promise<ClearIdCustomFieldDef[]> => {
+    const accountId = getAccountId();
+    const q = new URLSearchParams();
+    if (accountId) q.set("accountId", accountId);
+    const data = await unwrap<
+      { customFields?: ClearIdCustomFieldDef[] } | ClearIdCustomFieldDef[]
+    >(argusFetch(`/api/custom-fields?${q.toString()}`, undefined, { allSites: true }));
+    if (Array.isArray(data)) return data;
+    return data?.customFields ?? [];
+  },
+
   addTeamMembers: (
     teamId: string,
     payload: {
