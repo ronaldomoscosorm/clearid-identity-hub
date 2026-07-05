@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, PowerOff } from "lucide-react";
+import { ArrowLeft, Power, PowerOff } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
 import { clearIdToFormValues } from "@/lib/argus-client";
@@ -72,13 +72,28 @@ function IdentityDetail() {
     onSuccess: () => {
       toast.success("Identity desativada");
       qc.invalidateQueries({ queryKey: ["identities"] });
-      navigate({ to: "/identities" });
+      qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
     onError: (e) => {
       const err = e as ArgusApiError;
       toast.error(err.message, { description: err.traceId ? `TraceId: ${err.traceId}` : undefined });
     },
   });
+
+  const activate = useMutation({
+    mutationFn: () => argusApi.activateIdentity(id),
+    onSuccess: () => {
+      toast.success("Identity ativada");
+      qc.invalidateQueries({ queryKey: ["identities"] });
+      qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
+    },
+    onError: (e) => {
+      const err = e as ArgusApiError;
+      toast.error(err.message, { description: err.traceId ? `TraceId: ${err.traceId}` : undefined });
+    },
+  });
+
+  const isActive = String(query.data?.status ?? "").toLowerCase() === "active";
 
   return (
     <div className="space-y-6">
@@ -146,20 +161,34 @@ function IdentityDetail() {
           extraActions={
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button type="button" variant="destructive">
-                  <PowerOff className="mr-1 h-4 w-4" /> Desativar
-                </Button>
+                {isActive ? (
+                  <Button type="button" variant="destructive">
+                    <PowerOff className="mr-1 h-4 w-4" /> Desativar
+                  </Button>
+                ) : (
+                  <Button type="button" variant="secondary">
+                    <Power className="mr-1 h-4 w-4" /> Ativar
+                  </Button>
+                )}
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Desativar esta identity?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    {isActive ? "Desativar esta identity?" : "Ativar esta identity?"}
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    O registro será marcado como inativo no ClearID. Esta ação pode ser revertida pela atualização do status.
+                    {isActive
+                      ? "O registro será marcado como inativo no ClearID."
+                      : "O registro será marcado como ativo no ClearID."}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => deactivate.mutate()}>Desativar</AlertDialogAction>
+                  <AlertDialogAction
+                    onClick={() => (isActive ? deactivate.mutate() : activate.mutate())}
+                  >
+                    {isActive ? "Desativar" : "Ativar"}
+                  </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>

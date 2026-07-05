@@ -235,18 +235,6 @@ export function IdentityForm({
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
           </div>
           <div className="space-y-2">
-            <Label>Status</Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as "Active" | "Inactive")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Active">Ativo</SelectItem>
-                <SelectItem value="Inactive">Inativo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
             <Label>Site</Label>
             <Select value={siteId} onValueChange={setSiteId}>
               <SelectTrigger>
