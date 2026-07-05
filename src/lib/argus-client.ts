@@ -282,8 +282,23 @@ function customFieldsToClearIdArray(
     const customFieldName = rawName.trim();
     if (!customFieldName) continue;
     seen.add(customFieldName);
+    const existingType = existingByName.get(customFieldName)?.customFieldType;
+    const typeLc = (existingType ?? "").toLowerCase();
+    const value = rawValue ?? "";
+    const trimmed = typeof value === "string" ? value.trim() : value;
+    // Não envie "" para campos tipados (Date/Boolean/Numeric) — o ClearID
+    // rejeita com 400. Preserve o valor original se existir, senão pule.
+    const isTypedField =
+      typeLc === "date" || typeLc === "datetime" ||
+      typeLc === "bool" || typeLc === "boolean" ||
+      typeLc === "numeric" || typeLc === "number";
+    if (isTypedField && !trimmed) {
+      const prev = existingByName.get(customFieldName);
+      if (prev && prev.customFieldValue) merged.push(prev);
+      continue;
+    }
     merged.push({
-      customFieldType: existingByName.get(customFieldName)?.customFieldType,
+      customFieldType: existingType,
       customFieldName,
       customFieldValue: rawValue ?? "",
     });
@@ -296,6 +311,58 @@ function customFieldsToClearIdArray(
     }
   }
   return merged;
+}
+
+/**
+ * Converte valores do formulário em payload PATCH para
+ * /api/identities/{id}/custom-fields, respeitando as regras por tipo.
+ * Campos vazios viram `null` (limpar). Retorna apenas os que mudaram em
+ * relação aos valores atuais.
+ */
+export function serializeCustomFieldsForPatch(
+  defs: ClearIdCustomFieldDef[],
+  values: Record<string, string>,
+  current?: ClearIdCustomField[] | null,
+): CustomFieldPatchValue[] {
+  const currentByName = new Map(
+    (current ?? []).map((f) => [f.customFieldName, f.customFieldValue ?? ""]),
+  );
+  const out: CustomFieldPatchValue[] = [];
+  for (const def of defs) {
+    const name = def.customFieldName;
+    if (!(name in values)) continue;
+    if (def.isReadOnly) continue;
+    const typeLc = (def.customFieldType ?? "").toLowerCase();
+    const raw = (values[name] ?? "").trim();
+    let serialized: string | null;
+    if (!raw) {
+      serialized = null;
+    } else if (typeLc === "date" || typeLc === "datetime") {
+      // Aceita ISO (yyyy-MM-dd) ou dd/MM/yyyy
+      const iso = /^\d{4}-\d{2}-\d{2}/.test(raw)
+        ? raw.slice(0, 10)
+        : (() => {
+            const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+            return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+          })();
+      if (!iso) continue; // ignora datas inválidas
+      serialized = iso;
+    } else if (typeLc === "bool" || typeLc === "boolean") {
+      serialized = ["true", "1", "yes", "sim"].includes(raw.toLowerCase())
+        ? "true"
+        : "false";
+    } else if (typeLc === "numeric" || typeLc === "number") {
+      const cleaned = raw.replace(/[^0-9.\-]/g, "");
+      serialized = cleaned || null;
+    } else {
+      serialized = raw;
+    }
+    const currentValue = currentByName.get(name);
+    const currentNorm = currentValue == null || currentValue === "" ? null : currentValue;
+    if (serialized === currentNorm) continue; // não mudou
+    out.push({ customFieldName: name, customFieldValue: serialized });
+  }
+  return out;
 }
 
 function toClearIdName(value: string | null | undefined, fallback: string) {
