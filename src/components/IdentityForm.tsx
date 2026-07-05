@@ -32,6 +32,7 @@ export type IdentityFormProps = {
   onSubmit: (data: IdentityUpsert) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
+  showCustomFields?: boolean;
 };
 
 export function IdentityForm({
@@ -41,6 +42,7 @@ export function IdentityForm({
   onSubmit,
   onCancel,
   extraActions,
+  showCustomFields = false,
 }: IdentityFormProps) {
   const [externalId, setExternalId] = useState(initial?.externalId ?? "");
   const [firstName, setFirstName] = useState(initial?.firstName ?? "");
