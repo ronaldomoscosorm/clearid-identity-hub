@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
 import { argusApi, customFieldsToRecord, useDefaultSiteId } from "@/lib/argus-client";
+import { IdentityThumb } from "@/components/IdentityThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,14 +69,7 @@ function TerceirizadosPage() {
     retry: false,
   });
 
-  const fieldsQuery = useQuery({
-    queryKey: ["custom-fields"],
-    queryFn: () => argusApi.listCustomFields(),
-    staleTime: 5 * 60 * 1000,
-  });
-  const cfDefs = (fieldsQuery.data ?? []).filter((f) => !f.isDeleted);
-  const baseCols = 5;
-  const totalCols = baseCols + cfDefs.length;
+  const totalCols = 5;
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,14 +203,11 @@ function TerceirizadosPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-14"></TableHead>
+              <TableHead>Identity ID</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>E-mail</TableHead>
-              <TableHead>Empresa</TableHead>
-              <TableHead>Cargo</TableHead>
               <TableHead>Status</TableHead>
-              {cfDefs.map((f) => (
-                <TableHead key={f.customFieldName}>{f.displayName || f.customFieldName}</TableHead>
-              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -252,9 +243,14 @@ function TerceirizadosPage() {
               query.data.items.map((it) => {
                 const status = String(it.status ?? "");
                 const isActive = status.toLowerCase() === "active";
-                const cfMap = customFieldsToRecord(it.systemData?.customFields);
                 return (
                   <TableRow key={it.identityId}>
+                    <TableCell>
+                      <IdentityThumb identityId={it.identityId} />
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {it.identityId}
+                    </TableCell>
                     <TableCell className="font-medium">
                       <Link
                         to="/identities/$id"
@@ -265,25 +261,11 @@ function TerceirizadosPage() {
                       </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{it.email ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {(it as unknown as { companyName?: string }).companyName ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {(it as unknown as { jobTitle?: string }).jobTitle ?? "—"}
-                    </TableCell>
                     <TableCell>
                       <Badge variant={isActive ? "default" : "secondary"}>
                         {isActive ? "Active" : status || "—"}
                       </Badge>
                     </TableCell>
-                    {cfDefs.map((f) => {
-                      const v = cfMap[f.customFieldName] ?? "";
-                      return (
-                        <TableCell key={f.customFieldName} className="text-muted-foreground">
-                          {v || "—"}
-                        </TableCell>
-                      );
-                    })}
                   </TableRow>
                 );
               })
