@@ -253,7 +253,7 @@ function TerceirizadosPage() {
                     </TableCell>
                     <TableCell className="font-medium">
                       <Link
-                        to="/identities/$id"
+                        to="/terceirizados/$id"
                         params={{ id: it.identityId }}
                         className="hover:underline"
                       >
