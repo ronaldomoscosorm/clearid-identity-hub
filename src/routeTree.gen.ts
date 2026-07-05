@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedTerceirizadosRouteImport } from './routes/_authenticated/terceirizados'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedRegrasRouteImport } from './routes/_authenticated/regras'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
@@ -30,6 +31,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedTerceirizadosRoute =
+  AuthenticatedTerceirizadosRouteImport.update({
+    id: '/terceirizados',
+    path: '/terceirizados',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -89,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/terceirizados': typeof AuthenticatedTerceirizadosRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/identities/': typeof AuthenticatedIdentitiesIndexRoute
@@ -100,6 +108,7 @@ export interface FileRoutesByTo {
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/terceirizados': typeof AuthenticatedTerceirizadosRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/identities': typeof AuthenticatedIdentitiesIndexRoute
@@ -114,6 +123,7 @@ export interface FileRoutesById {
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/terceirizados': typeof AuthenticatedTerceirizadosRoute
   '/_authenticated/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/_authenticated/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/_authenticated/identities/': typeof AuthenticatedIdentitiesIndexRoute
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/identities'
     | '/regras'
     | '/settings'
+    | '/terceirizados'
     | '/identities/$id'
     | '/identities/new'
     | '/identities/'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/diagnostics'
     | '/regras'
     | '/settings'
+    | '/terceirizados'
     | '/identities/$id'
     | '/identities/new'
     | '/identities'
@@ -152,6 +164,7 @@ export interface FileRouteTypes {
     | '/_authenticated/identities'
     | '/_authenticated/regras'
     | '/_authenticated/settings'
+    | '/_authenticated/terceirizados'
     | '/_authenticated/identities/$id'
     | '/_authenticated/identities/new'
     | '/_authenticated/identities/'
@@ -177,6 +190,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/terceirizados': {
+      id: '/_authenticated/terceirizados'
+      path: '/terceirizados'
+      fullPath: '/terceirizados'
+      preLoaderRoute: typeof AuthenticatedTerceirizadosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
@@ -269,6 +289,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedTerceirizadosRoute: typeof AuthenticatedTerceirizadosRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -279,6 +300,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedTerceirizadosRoute: AuthenticatedTerceirizadosRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
