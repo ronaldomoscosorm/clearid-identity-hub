@@ -160,7 +160,12 @@ export function IdentityForm({
       if (!key) continue;
       if (dateFieldNames.has(key)) {
         const raw = (v ?? "").trim();
-        if (!raw) continue; // ignora datas vazias
+        if (!raw) {
+          // Mantém o campo no payload (PUT do ClearID é replace);
+          // valor vazio significa "sem data".
+          cf[key] = "";
+          continue;
+        }
         // Aceita ISO (vindo do GET sem edição) ou dd/MM/yyyy
         const iso = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : brToIso(raw);
         if (iso === null || iso === "") {
