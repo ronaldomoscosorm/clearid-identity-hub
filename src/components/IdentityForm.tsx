@@ -212,9 +212,16 @@ export function IdentityForm({
                         {isDate(f.customFieldType) ? (
                           <Input
                             id={`cf-${name}`}
-                            type="date"
+                            type={toDateInputValue(value) ? "date" : "text"}
                             lang="pt-BR"
+                            placeholder=""
                             value={toDateInputValue(value)}
+                            onFocus={(e) => {
+                              if (e.currentTarget.type === "text") e.currentTarget.type = "date";
+                            }}
+                            onBlur={(e) => {
+                              if (!e.currentTarget.value) e.currentTarget.type = "text";
+                            }}
                             onChange={(e) => setField(name, e.target.value)}
                             disabled={f.isReadOnly}
                             className="rounded-full"
