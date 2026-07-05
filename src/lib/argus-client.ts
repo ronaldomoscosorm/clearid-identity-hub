@@ -674,8 +674,23 @@ export const argusApi = {
       }),
     ),
 
-  deactivateIdentity: (id: string) =>
-    argusFetch<void>(`/api/identities/${encodeURIComponent(id)}/deactivate`, { method: "POST" }),
+  deactivateIdentity: async (id: string) => {
+    const current = await argusApi.getIdentity(id);
+    await argusApi.updateIdentity(id, {
+      ...clearIdToFormValues(current),
+      status: "Inactive",
+      identityType: current.identityType ?? "Employee",
+      eTag: current.eTag,
+      description: current.description ?? undefined,
+      countryCode: current.countryCode ?? undefined,
+      culture: current.culture ?? undefined,
+      middleName: current.middleName ?? undefined,
+      displayName: current.displayName ?? undefined,
+      privateData: current.privateData ?? undefined,
+      companyData: current.companyData ?? undefined,
+      systemData: current.systemData ?? undefined,
+    });
+  },
 
   activateIdentity: (id: string) =>
     argusFetch<void>(`/api/identities/${encodeURIComponent(id)}/activate`, { method: "POST" }),
