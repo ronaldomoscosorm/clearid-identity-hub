@@ -80,15 +80,30 @@ export function IdentityForm({
   const isBool = (t?: string | null) =>
     ["bool", "boolean", "switch", "toggle"].includes(typeOf(t));
 
+  const isBlank = (v: string | null | undefined) => {
+    if (v == null) return true;
+    const s = String(v).trim();
+    return s === "" || s.toLowerCase() === "null" || s.toLowerCase() === "undefined";
+  };
+  const toTextValue = (v: string) => (isBlank(v) ? "" : v);
   const toDateInputValue = (v: string) => {
-    if (!v) return "";
+    if (isBlank(v)) return "";
     // Accept ISO or yyyy-MM-dd already
-    if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+    const iso = /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : "";
+    if (iso) {
+      // Ignore sentinel epoch dates the API sometimes returns for "no value".
+      if (iso.startsWith("0001-") || iso === "1900-01-01" || iso === "1970-01-01") return "";
+      return iso;
+    }
     const d = new Date(v);
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    if (!isNaN(d.getTime())) {
+      const out = d.toISOString().slice(0, 10);
+      if (out.startsWith("0001-")) return "";
+      return out;
+    }
     return "";
   };
-  const isTruthy = (v: string) => ["true", "1", "yes", "sim"].includes(v.toLowerCase());
+  const isTruthy = (v: string) => !isBlank(v) && ["true", "1", "yes", "sim"].includes(v.toLowerCase());
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,7 +218,7 @@ export function IdentityForm({
                         ) : (
                           <Input
                             id={`cf-${name}`}
-                            value={value}
+                            value={toTextValue(value)}
                             onChange={(e) => setField(name, e.target.value)}
                             disabled={f.isReadOnly}
                             className="rounded-full"
