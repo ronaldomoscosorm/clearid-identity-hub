@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
-import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, customFieldsToRecord, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,6 +67,15 @@ function TerceirizadosPage() {
     enabled: hasSearched,
     retry: false,
   });
+
+  const fieldsQuery = useQuery({
+    queryKey: ["custom-fields"],
+    queryFn: () => argusApi.listCustomFields(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const cfDefs = (fieldsQuery.data ?? []).filter((f) => !f.isDeleted);
+  const baseCols = 5;
+  const totalCols = baseCols + cfDefs.length;
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
