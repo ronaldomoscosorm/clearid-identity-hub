@@ -498,6 +498,40 @@ export const argusApi = {
     return data?.customFields ?? [];
   },
 
+  getCustomFieldSection: async (
+    sectionName: string,
+  ): Promise<ClearIdCustomFieldSection | null> => {
+    try {
+      const data = await unwrap<ClearIdCustomFieldSection>(
+        argusFetch(
+          `/api/custom-fields/sections/${encodeURIComponent(sectionName)}`,
+          undefined,
+          { allSites: true },
+        ),
+      );
+      return data ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Grava apenas os campos personalizados alterados. Valores nulos limpam o
+   * campo. Nunca envie string vazia para tipos Date/Boolean/Numeric — use
+   * null. Este endpoint substitui o PUT completo para salvar documentos.
+   */
+  patchIdentityCustomFields: (
+    id: string,
+    values: CustomFieldPatchValue[],
+  ) =>
+    argusFetch<unknown>(
+      `/api/identities/${encodeURIComponent(id)}/custom-fields`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ values }),
+      },
+    ),
+
   addTeamMembers: (
     teamId: string,
     payload: {
