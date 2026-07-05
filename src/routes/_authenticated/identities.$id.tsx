@@ -174,7 +174,7 @@ function IdentityDetail() {
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    {isActive ? "Desativar esta identity?" : "Ativar esta identity?"}
+                    {isActive ? "Deseja desativar?" : "Deseja ativar?"}
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     {isActive
