@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, PowerOff } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
-import { clearIdToFormValues } from "@/lib/argus-client";
+import { clearIdToFormValues, serializeCustomFieldsForPatch } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
@@ -55,7 +55,25 @@ function IdentityDetail() {
     : undefined;
 
   const update = useMutation({
-    mutationFn: (data: Parameters<typeof argusApi.updateIdentity>[1]) => argusApi.updateIdentity(id, data),
+    mutationFn: async (data: Parameters<typeof argusApi.updateIdentity>[1]) => {
+      // 1) Grava dados gerais (nome/e-mail/status) via PUT — sem custom fields.
+      const { customFields, ...general } = data;
+      await argusApi.updateIdentity(id, { ...general, customFields: undefined });
+      // 2) Grava campos personalizados via PATCH dedicado.
+      if (customFields) {
+        const defs = (await argusApi.listCustomFields()).filter(
+          (f) => !f.isDeleted && f.customFieldName.startsWith("Vylor_"),
+        );
+        const patch = serializeCustomFieldsForPatch(
+          defs,
+          customFields,
+          query.data?.systemData?.customFields ?? null,
+        );
+        if (patch.length > 0) {
+          await argusApi.patchIdentityCustomFields(id, patch);
+        }
+      }
+    },
     onSuccess: () => {
       toast.success("Identity atualizada");
       qc.invalidateQueries({ queryKey: ["identities"] });
