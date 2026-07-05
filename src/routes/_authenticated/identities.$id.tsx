@@ -159,7 +159,15 @@ function IdentityDetail() {
           }}
           onCancel={() => navigate({ to: "/identities" })}
           extraActions={
-            <AlertDialog>
+            <div className="flex items-center gap-2">
+              <span
+                aria-label={isActive ? "Ativo" : "Inativo"}
+                title={isActive ? "Ativo" : "Inativo"}
+                className={`inline-block h-3 w-3 rounded-full ${
+                  isActive ? "bg-green-500" : "bg-red-500"
+                }`}
+              />
+              <AlertDialog>
               <AlertDialogTrigger asChild>
                 {isActive ? (
                   <Button type="button" variant="destructive">
@@ -191,7 +199,8 @@ function IdentityDetail() {
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
-            </AlertDialog>
+              </AlertDialog>
+            </div>
           }
           />
         </>
