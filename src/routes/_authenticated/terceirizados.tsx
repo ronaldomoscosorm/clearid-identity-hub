@@ -8,6 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/_authenticated/terceirizados")({
   head: () => ({ meta: [{ title: "Terceirizados — Argus ClearID" }] }),
@@ -16,20 +23,36 @@ export const Route = createFileRoute("/_authenticated/terceirizados")({
 
 function TerceirizadosPage() {
   const siteId = useDefaultSiteId();
-  const [fName, setFName] = useState("");
+  const [fFirstName, setFFirstName] = useState("");
+  const [fEmail, setFEmail] = useState("");
   const [fCompany, setFCompany] = useState("");
+  const [fJobTitle, setFJobTitle] = useState("");
+  const [fDepartment, setFDepartment] = useState("");
+  const [fStatus, setFStatus] = useState<string>("all");
   const [fAllSites, setFAllSites] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [applied, setApplied] = useState({ name: "", company: "", allSites: false });
 
-  const identitiesQuery = useQuery({
+  const [hasSearched, setHasSearched] = useState(false);
+  const [applied, setApplied] = useState({
+    firstName: "",
+    email: "",
+    company: "",
+    jobTitle: "",
+    department: "",
+    status: "all",
+    allSites: false,
+  });
+
+  const query = useQuery({
     queryKey: ["terceirizados", siteId, applied],
     queryFn: () =>
       argusApi.listIdentities({
-        firstName: applied.name || undefined,
+        firstName: applied.firstName || undefined,
+        email: applied.email || undefined,
         company: applied.company || undefined,
+        jobTitle: applied.jobTitle || undefined,
+        department: applied.department || undefined,
+        status: applied.status === "all" ? undefined : applied.status,
         allSites: applied.allSites,
-        take: 100,
       }),
     enabled: hasSearched,
     retry: false,
@@ -38,15 +61,27 @@ function TerceirizadosPage() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setHasSearched(true);
-    setApplied({ name: fName.trim(), company: fCompany.trim(), allSites: fAllSites });
+    setApplied({
+      firstName: fFirstName.trim(),
+      email: fEmail.trim(),
+      company: fCompany.trim(),
+      jobTitle: fJobTitle.trim(),
+      department: fDepartment.trim(),
+      status: fStatus,
+      allSites: fAllSites,
+    });
   };
 
   const onClear = () => {
-    setFName("");
+    setFFirstName("");
+    setFEmail("");
     setFCompany("");
+    setFJobTitle("");
+    setFDepartment("");
+    setFStatus("all");
     setFAllSites(false);
     setHasSearched(false);
-    setApplied({ name: "", company: "", allSites: false });
+    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", allSites: false });
   };
 
   return (
@@ -60,14 +95,23 @@ function TerceirizadosPage() {
 
       <Card className="p-4">
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
-              <Label htmlFor="t-name">Nome</Label>
+              <Label htmlFor="t-first-name">Nome</Label>
               <Input
-                id="t-name"
-                value={fName}
-                onChange={(e) => setFName(e.target.value)}
+                id="t-first-name"
+                value={fFirstName}
+                onChange={(e) => setFFirstName(e.target.value)}
                 placeholder="Ex: Maria"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="t-email">E-mail</Label>
+              <Input
+                id="t-email"
+                value={fEmail}
+                onChange={(e) => setFEmail(e.target.value)}
+                placeholder="usuario@empresa.com"
               />
             </div>
             <div className="space-y-1.5">
@@ -78,6 +122,37 @@ function TerceirizadosPage() {
                 onChange={(e) => setFCompany(e.target.value)}
                 placeholder="Empresa"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="t-job-title">Cargo</Label>
+              <Input
+                id="t-job-title"
+                value={fJobTitle}
+                onChange={(e) => setFJobTitle(e.target.value)}
+                placeholder="Cargo"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="t-department">Departamento</Label>
+              <Input
+                id="t-department"
+                value={fDepartment}
+                onChange={(e) => setFDepartment(e.target.value)}
+                placeholder="Departamento"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={fStatus} onValueChange={setFStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Ativos</SelectItem>
+                  <SelectItem value="Inactive">Inativos</SelectItem>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex items-center justify-end gap-2">
@@ -91,20 +166,20 @@ function TerceirizadosPage() {
                 Todos os sites
               </Label>
             </div>
-            <Button type="button" variant="ghost" onClick={onClear} disabled={identitiesQuery.isFetching}>
+            <Button type="button" variant="ghost" onClick={onClear} disabled={query.isFetching}>
               Limpar
             </Button>
             <Button
               type="button"
               variant="outline"
               size="icon"
-              onClick={() => identitiesQuery.refetch()}
-              disabled={identitiesQuery.isFetching || !hasSearched}
+              onClick={() => query.refetch()}
+              disabled={query.isFetching || !hasSearched}
               title="Recarregar"
             >
-              <RefreshCw className={identitiesQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
             </Button>
-            <Button type="submit" disabled={identitiesQuery.isFetching}>
+            <Button type="submit" disabled={query.isFetching}>
               <Search className="mr-1 h-4 w-4" /> Pesquisar
             </Button>
           </div>
