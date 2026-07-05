@@ -105,6 +105,36 @@ export function IdentityForm({
     }
     return "";
   };
+  // Converte ISO (yyyy-MM-dd) -> dd/MM/yyyy para exibição
+  const isoToBr = (iso: string) => {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-");
+    if (!y || !m || !d) return "";
+    return `${d}/${m}/${y}`;
+  };
+  // Valida dd/MM/yyyy: retorna ISO se válida, null se inválida, "" se vazia
+  const brToIso = (v: string): string | null => {
+    const s = (v ?? "").trim();
+    if (!s) return "";
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+    if (!m) return null;
+    const [, dd, mm, yyyy] = m;
+    const d = Number(dd), mo = Number(mm), y = Number(yyyy);
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 1900 || y > 2999) return null;
+    const dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+    return `${yyyy}-${mm}-${dd}`;
+  };
+  // Aplica máscara dd/MM/yyyy ao digitar
+  const maskDateInput = (raw: string) => {
+    const digits = raw.replace(/\D/g, "").slice(0, 8);
+    const p1 = digits.slice(0, 2);
+    const p2 = digits.slice(2, 4);
+    const p3 = digits.slice(4, 8);
+    if (digits.length <= 2) return p1;
+    if (digits.length <= 4) return `${p1}/${p2}`;
+    return `${p1}/${p2}/${p3}`;
+  };
   const isTruthy = (v: string) => !isBlank(v) && ["true", "1", "yes", "sim"].includes(v.toLowerCase());
 
   const submit = (e: React.FormEvent) => {
@@ -116,9 +146,31 @@ export function IdentityForm({
       setErrors(out);
       return;
     }
-    setErrors({});
+    const cfErrors: Record<string, string> = {};
+    const dateFieldNames = new Set(defs.filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName));
     const cf: Record<string, string> = {};
-    for (const [k, v] of Object.entries(customFields)) if (k.trim()) cf[k.trim()] = v ?? "";
+    for (const [k, v] of Object.entries(customFields)) {
+      const key = k.trim();
+      if (!key) continue;
+      if (dateFieldNames.has(key)) {
+        const raw = (v ?? "").trim();
+        if (!raw) continue; // ignora datas vazias
+        // Aceita ISO (vindo do GET sem edição) ou dd/MM/yyyy
+        const iso = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : brToIso(raw);
+        if (iso === null || iso === "") {
+          cfErrors[`cf-${key}`] = "Data inválida (use dd/mm/aaaa)";
+          continue;
+        }
+        cf[key] = iso;
+      } else {
+        cf[key] = v ?? "";
+      }
+    }
+    if (Object.keys(cfErrors).length) {
+      setErrors(cfErrors);
+      return;
+    }
+    setErrors({});
     onSubmit({ ...parsed.data, customFields: cf, siteId: siteId || undefined });
   };
 
