@@ -11,13 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedTerceirizadosRouteImport } from './routes/_authenticated/terceirizados'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedRegrasRouteImport } from './routes/_authenticated/regras'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedCamposPersonalizadosRouteImport } from './routes/_authenticated/campos-personalizados'
 import { Route as AuthenticatedBrandingRouteImport } from './routes/_authenticated/branding'
+import { Route as AuthenticatedTerceirizadosIndexRouteImport } from './routes/_authenticated/terceirizados.index'
 import { Route as AuthenticatedIdentitiesIndexRouteImport } from './routes/_authenticated/identities.index'
 import { Route as AuthenticatedTerceirizadosIdRouteImport } from './routes/_authenticated/terceirizados.$id'
 import { Route as AuthenticatedIdentitiesNewRouteImport } from './routes/_authenticated/identities.new'
@@ -32,12 +32,6 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedTerceirizadosRoute =
-  AuthenticatedTerceirizadosRouteImport.update({
-    id: '/terceirizados',
-    path: '/terceirizados',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -70,6 +64,12 @@ const AuthenticatedBrandingRoute = AuthenticatedBrandingRouteImport.update({
   path: '/branding',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTerceirizadosIndexRoute =
+  AuthenticatedTerceirizadosIndexRouteImport.update({
+    id: '/terceirizados/',
+    path: '/terceirizados/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedIdentitiesIndexRoute =
   AuthenticatedIdentitiesIndexRouteImport.update({
     id: '/',
@@ -78,9 +78,9 @@ const AuthenticatedIdentitiesIndexRoute =
   } as any)
 const AuthenticatedTerceirizadosIdRoute =
   AuthenticatedTerceirizadosIdRouteImport.update({
-    id: '/$id',
-    path: '/$id',
-    getParentRoute: () => AuthenticatedTerceirizadosRoute,
+    id: '/terceirizados/$id',
+    path: '/terceirizados/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedIdentitiesNewRoute =
   AuthenticatedIdentitiesNewRouteImport.update({
@@ -103,11 +103,11 @@ export interface FileRoutesByFullPath {
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/terceirizados': typeof AuthenticatedTerceirizadosRouteWithChildren
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/identities/': typeof AuthenticatedIdentitiesIndexRoute
+  '/terceirizados/': typeof AuthenticatedTerceirizadosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -116,11 +116,11 @@ export interface FileRoutesByTo {
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/terceirizados': typeof AuthenticatedTerceirizadosRouteWithChildren
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/identities': typeof AuthenticatedIdentitiesIndexRoute
+  '/terceirizados': typeof AuthenticatedTerceirizadosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -132,11 +132,11 @@ export interface FileRoutesById {
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/terceirizados': typeof AuthenticatedTerceirizadosRouteWithChildren
   '/_authenticated/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/_authenticated/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/_authenticated/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/_authenticated/identities/': typeof AuthenticatedIdentitiesIndexRoute
+  '/_authenticated/terceirizados/': typeof AuthenticatedTerceirizadosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -148,11 +148,11 @@ export interface FileRouteTypes {
     | '/identities'
     | '/regras'
     | '/settings'
-    | '/terceirizados'
     | '/identities/$id'
     | '/identities/new'
     | '/terceirizados/$id'
     | '/identities/'
+    | '/terceirizados/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -161,11 +161,11 @@ export interface FileRouteTypes {
     | '/diagnostics'
     | '/regras'
     | '/settings'
-    | '/terceirizados'
     | '/identities/$id'
     | '/identities/new'
     | '/terceirizados/$id'
     | '/identities'
+    | '/terceirizados'
   id:
     | '__root__'
     | '/'
@@ -176,11 +176,11 @@ export interface FileRouteTypes {
     | '/_authenticated/identities'
     | '/_authenticated/regras'
     | '/_authenticated/settings'
-    | '/_authenticated/terceirizados'
     | '/_authenticated/identities/$id'
     | '/_authenticated/identities/new'
     | '/_authenticated/terceirizados/$id'
     | '/_authenticated/identities/'
+    | '/_authenticated/terceirizados/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -203,13 +203,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/terceirizados': {
-      id: '/_authenticated/terceirizados'
-      path: '/terceirizados'
-      fullPath: '/terceirizados'
-      preLoaderRoute: typeof AuthenticatedTerceirizadosRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
@@ -253,6 +246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBrandingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/terceirizados/': {
+      id: '/_authenticated/terceirizados/'
+      path: '/terceirizados'
+      fullPath: '/terceirizados/'
+      preLoaderRoute: typeof AuthenticatedTerceirizadosIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/identities/': {
       id: '/_authenticated/identities/'
       path: '/'
@@ -262,10 +262,10 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/terceirizados/$id': {
       id: '/_authenticated/terceirizados/$id'
-      path: '/$id'
+      path: '/terceirizados/$id'
       fullPath: '/terceirizados/$id'
       preLoaderRoute: typeof AuthenticatedTerceirizadosIdRouteImport
-      parentRoute: typeof AuthenticatedTerceirizadosRoute
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/identities/new': {
       id: '/_authenticated/identities/new'
@@ -302,20 +302,6 @@ const AuthenticatedIdentitiesRouteWithChildren =
     AuthenticatedIdentitiesRouteChildren,
   )
 
-interface AuthenticatedTerceirizadosRouteChildren {
-  AuthenticatedTerceirizadosIdRoute: typeof AuthenticatedTerceirizadosIdRoute
-}
-
-const AuthenticatedTerceirizadosRouteChildren: AuthenticatedTerceirizadosRouteChildren =
-  {
-    AuthenticatedTerceirizadosIdRoute: AuthenticatedTerceirizadosIdRoute,
-  }
-
-const AuthenticatedTerceirizadosRouteWithChildren =
-  AuthenticatedTerceirizadosRoute._addFileChildren(
-    AuthenticatedTerceirizadosRouteChildren,
-  )
-
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedBrandingRoute: typeof AuthenticatedBrandingRoute
   AuthenticatedCamposPersonalizadosRoute: typeof AuthenticatedCamposPersonalizadosRoute
@@ -323,7 +309,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedTerceirizadosRoute: typeof AuthenticatedTerceirizadosRouteWithChildren
+  AuthenticatedTerceirizadosIdRoute: typeof AuthenticatedTerceirizadosIdRoute
+  AuthenticatedTerceirizadosIndexRoute: typeof AuthenticatedTerceirizadosIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -334,7 +321,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedTerceirizadosRoute: AuthenticatedTerceirizadosRouteWithChildren,
+  AuthenticatedTerceirizadosIdRoute: AuthenticatedTerceirizadosIdRoute,
+  AuthenticatedTerceirizadosIndexRoute: AuthenticatedTerceirizadosIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export const Route = createFileRoute("/_authenticated/terceirizados")({
+export const Route = createFileRoute("/_authenticated/terceirizados/")({
   head: () => ({ meta: [{ title: "Terceirizados — Argus ClearID" }] }),
   component: TerceirizadosPage,
 });
