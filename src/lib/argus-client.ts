@@ -424,6 +424,16 @@ export interface ClearIdCustomFieldDef {
   isDeleted?: boolean;
 }
 
+export interface ClearIdCustomFieldSection {
+  sectionName: string;
+  identityCustomFields?: Array<{ name: string; index: number }>;
+}
+
+export interface CustomFieldPatchValue {
+  customFieldName: string;
+  customFieldValue: string | null;
+}
+
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   const r = (await p) as ApiEnvelope<T> | T;
   if (r && typeof r === "object" && "data" in (r as Record<string, unknown>)) {
