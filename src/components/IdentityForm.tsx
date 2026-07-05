@@ -38,6 +38,7 @@ export type IdentityFormProps = {
   onSubmit: (data: IdentityUpsert) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
+  statusBadge?: React.ReactNode;
   showCustomFields?: boolean;
 };
 
@@ -48,6 +49,7 @@ export function IdentityForm({
   onSubmit,
   onCancel,
   extraActions,
+  statusBadge,
   showCustomFields = false,
 }: IdentityFormProps) {
   const [externalId, setExternalId] = useState(initial?.externalId ?? "");
@@ -215,8 +217,9 @@ export function IdentityForm({
   return (
     <form onSubmit={submit} className="space-y-6">
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">Identificação</CardTitle>
+          {statusBadge}
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">

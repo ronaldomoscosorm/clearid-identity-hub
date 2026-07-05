@@ -177,25 +177,26 @@ function IdentityDetail() {
             });
           }}
           onCancel={() => navigate({ to: "/terceirizados" })}
-          extraActions={
-            <div className="flex items-center gap-2">
+          statusBadge={
+            <span
+              aria-label={isActive ? "Ativo" : "Inativo"}
+              title={isActive ? "Ativo" : "Inativo"}
+              className={`inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-bold uppercase tracking-wide shadow-sm sm:gap-2 sm:px-3.5 sm:py-1.5 sm:text-sm ${
+                isActive
+                  ? "border-green-700 bg-green-600 text-white dark:border-green-400 dark:bg-green-500"
+                  : "border-red-700 bg-red-600 text-white dark:border-red-400 dark:bg-red-500"
+              }`}
+            >
               <span
-                aria-label={isActive ? "Ativo" : "Inativo"}
-                title={isActive ? "Ativo" : "Inativo"}
-                className={`inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-bold uppercase tracking-wide shadow-sm sm:gap-2 sm:px-3.5 sm:py-1.5 sm:text-sm ${
-                  isActive
-                    ? "border-green-700 bg-green-600 text-white dark:border-green-400 dark:bg-green-500"
-                    : "border-red-700 bg-red-600 text-white dark:border-red-400 dark:bg-red-500"
+                className={`inline-block h-2 w-2 rounded-full bg-white ring-2 ring-white/40 sm:h-2.5 sm:w-2.5 ${
+                  isActive ? "animate-pulse" : ""
                 }`}
-              >
-                <span
-                  className={`inline-block h-2 w-2 rounded-full bg-white ring-2 ring-white/40 sm:h-2.5 sm:w-2.5 ${
-                    isActive ? "animate-pulse" : ""
-                  }`}
-                />
-                {isActive ? "Ativo" : "Inativo"}
-              </span>
-              <AlertDialog>
+              />
+              {isActive ? "Ativo" : "Inativo"}
+            </span>
+          }
+          extraActions={
+            <AlertDialog>
               <AlertDialogTrigger asChild>
                 {isActive ? (
                   <Button type="button" variant="destructive">
@@ -227,8 +228,7 @@ function IdentityDetail() {
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
-              </AlertDialog>
-            </div>
+            </AlertDialog>
           }
           />
         </>
