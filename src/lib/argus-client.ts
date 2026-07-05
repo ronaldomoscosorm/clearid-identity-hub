@@ -736,6 +736,31 @@ export const argusApi = {
   activateIdentity: (id: string) =>
     argusFetch<void>(`/api/identities/${encodeURIComponent(id)}/activate`, { method: "POST" }),
 
+  // ---- Credentials ----
+  listCredentialFormats: async (): Promise<CredentialFormat[]> => {
+    const data = await unwrap<
+      { formats?: CredentialFormat[] } | CredentialFormat[]
+    >(argusFetch(`/api/credential/format`, undefined, { allSites: true }));
+    if (Array.isArray(data)) return data;
+    return data?.formats ?? [];
+  },
+
+  listCredentials: async (identityId: string): Promise<CredentialRecord[]> => {
+    const data = await unwrap<
+      { credentials?: CredentialRecord[] } | CredentialRecord[]
+    >(argusFetch(`/api/credentials/${encodeURIComponent(identityId)}`));
+    if (Array.isArray(data)) return data;
+    return data?.credentials ?? [];
+  },
+
+  createCredential: (payload: CredentialUpsert) =>
+    unwrap<CredentialRecord>(
+      argusFetch(`/api/credentials`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    ),
+
   /** Baixa a foto da identidade como Blob. Retorna null em 404. */
   getIdentityPicture: async (id: string): Promise<Blob | null> => {
     const cfg = getConfig();
