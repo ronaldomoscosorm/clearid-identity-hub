@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { customFieldsToRecord } from "@/lib/argus-client";
 import { IdentityThumb } from "@/components/IdentityThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,7 +70,29 @@ function TerceirizadosPage() {
     retry: false,
   });
 
-  const totalCols = 5;
+  const fieldsQuery = useQuery({
+    queryKey: ["custom-fields"],
+    queryFn: () => argusApi.listCustomFields(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const customFieldDefs = (fieldsQuery.data ?? []).filter((f) => !f.isDeleted);
+  const totalCols = 5 + customFieldDefs.length;
+
+  const formatCustomFieldValue = (value: string, type?: string | null) => {
+    if (!value) return "—";
+    const t = (type ?? "").toLowerCase();
+    if (["bool", "boolean", "switch", "toggle"].includes(t)) {
+      return ["true", "1", "yes", "sim"].includes(value.toLowerCase()) ? "Sim" : "Não";
+    }
+    if (t === "date" || t === "datetime") {
+      const d = new Date(value);
+      if (!isNaN(d.getTime()) && !value.startsWith("0001-")) {
+        return d.toLocaleDateString("pt-BR");
+      }
+      return "—";
+    }
+    return value;
+  };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,6 +231,9 @@ function TerceirizadosPage() {
               <TableHead>Nome</TableHead>
               <TableHead>E-mail</TableHead>
               <TableHead>Status</TableHead>
+              {customFieldDefs.map((f) => (
+                <TableHead key={f.customFieldName}>{f.displayName || f.customFieldName}</TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -243,6 +269,7 @@ function TerceirizadosPage() {
               query.data.items.map((it) => {
                 const status = String(it.status ?? "");
                 const isActive = status.toLowerCase() === "active";
+                const cfMap = customFieldsToRecord(it.systemData?.customFields);
                 return (
                   <TableRow key={it.identityId}>
                     <TableCell>
@@ -266,6 +293,11 @@ function TerceirizadosPage() {
                         {isActive ? "Active" : status || "—"}
                       </Badge>
                     </TableCell>
+                    {customFieldDefs.map((f) => (
+                      <TableCell key={f.customFieldName} className="text-sm text-muted-foreground">
+                        {formatCustomFieldValue(cfMap[f.customFieldName] ?? "", f.customFieldType)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 );
               })
