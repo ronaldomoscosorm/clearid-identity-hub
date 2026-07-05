@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
@@ -34,16 +34,8 @@ export const Route = createFileRoute("/_authenticated/terceirizados/")({
 
 function TerceirizadosPage() {
   const siteId = useDefaultSiteId();
-  const [fFirstName, setFFirstName] = useState("");
-  const [fEmail, setFEmail] = useState("");
-  const [fCompany, setFCompany] = useState("");
-  const [fJobTitle, setFJobTitle] = useState("");
-  const [fDepartment, setFDepartment] = useState("");
-  const [fStatus, setFStatus] = useState<string>("all");
-  const [fAllSites, setFAllSites] = useState(false);
-
-  const [hasSearched, setHasSearched] = useState(false);
-  const [applied, setApplied] = useState({
+  const SEARCH_KEY = "terceirizados:last-search";
+  const emptyApplied = {
     firstName: "",
     email: "",
     company: "",
@@ -51,7 +43,27 @@ function TerceirizadosPage() {
     department: "",
     status: "all",
     allSites: false,
-  });
+  };
+  const saved = (() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = sessionStorage.getItem(SEARCH_KEY);
+      return raw ? (JSON.parse(raw) as typeof emptyApplied) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const [fFirstName, setFFirstName] = useState(saved?.firstName ?? "");
+  const [fEmail, setFEmail] = useState(saved?.email ?? "");
+  const [fCompany, setFCompany] = useState(saved?.company ?? "");
+  const [fJobTitle, setFJobTitle] = useState(saved?.jobTitle ?? "");
+  const [fDepartment, setFDepartment] = useState(saved?.department ?? "");
+  const [fStatus, setFStatus] = useState<string>(saved?.status ?? "all");
+  const [fAllSites, setFAllSites] = useState<boolean>(saved?.allSites ?? false);
+
+  const [hasSearched, setHasSearched] = useState<boolean>(!!saved);
+  const [applied, setApplied] = useState(saved ?? emptyApplied);
 
   const query = useQuery({
     queryKey: ["terceirizados", siteId, applied],
@@ -73,7 +85,7 @@ function TerceirizadosPage() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setHasSearched(true);
-    setApplied({
+    const next = {
       firstName: fFirstName.trim(),
       email: fEmail.trim(),
       company: fCompany.trim(),
@@ -81,7 +93,13 @@ function TerceirizadosPage() {
       department: fDepartment.trim(),
       status: fStatus,
       allSites: fAllSites,
-    });
+    };
+    setApplied(next);
+    try {
+      sessionStorage.setItem(SEARCH_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore quota errors */
+    }
   };
 
   const onClear = () => {
@@ -93,7 +111,12 @@ function TerceirizadosPage() {
     setFStatus("all");
     setFAllSites(false);
     setHasSearched(false);
-    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", allSites: false });
+    setApplied(emptyApplied);
+    try {
+      sessionStorage.removeItem(SEARCH_KEY);
+    } catch {
+      /* ignore */
+    }
   };
 
   return (
