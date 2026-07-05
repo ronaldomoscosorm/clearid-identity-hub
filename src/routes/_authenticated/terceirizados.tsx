@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
@@ -8,6 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -184,6 +194,81 @@ function TerceirizadosPage() {
             </Button>
           </div>
         </form>
+      </Card>
+
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead>E-mail</TableHead>
+              <TableHead>Empresa</TableHead>
+              <TableHead>Cargo</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {!hasSearched ? (
+              <TableRow>
+                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                  Informe filtros e clique em <span className="font-medium text-foreground">Pesquisar</span> para listar terceirizados.
+                </TableCell>
+              </TableRow>
+            ) : query.isLoading || query.isFetching ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: 5 }).map((__, j) => (
+                    <TableCell key={j}>
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : query.isError ? (
+              <TableRow>
+                <TableCell colSpan={5} className="py-10 text-center text-sm text-destructive">
+                  {(query.error as Error).message}
+                </TableCell>
+              </TableRow>
+            ) : !query.data?.items?.length ? (
+              <TableRow>
+                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                  Nenhum terceirizado encontrado para os filtros informados.
+                </TableCell>
+              </TableRow>
+            ) : (
+              query.data.items.map((it) => {
+                const status = String(it.status ?? "");
+                const isActive = status.toLowerCase() === "active";
+                return (
+                  <TableRow key={it.identityId}>
+                    <TableCell className="font-medium">
+                      <Link
+                        to="/identities/$id"
+                        params={{ id: it.identityId }}
+                        className="hover:underline"
+                      >
+                        {it.firstName} {it.lastName}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{it.email ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {(it as unknown as { companyName?: string }).companyName ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {(it as unknown as { jobTitle?: string }).jobTitle ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={isActive ? "default" : "secondary"}>
+                        {isActive ? "Active" : status || "—"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
       </Card>
     </div>
   );
