@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
-import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, customFieldsToRecord, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,6 +67,15 @@ function TerceirizadosPage() {
     enabled: hasSearched,
     retry: false,
   });
+
+  const fieldsQuery = useQuery({
+    queryKey: ["custom-fields"],
+    queryFn: () => argusApi.listCustomFields(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const cfDefs = (fieldsQuery.data ?? []).filter((f) => !f.isDeleted);
+  const baseCols = 5;
+  const totalCols = baseCols + cfDefs.length;
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,19 +214,22 @@ function TerceirizadosPage() {
               <TableHead>Empresa</TableHead>
               <TableHead>Cargo</TableHead>
               <TableHead>Status</TableHead>
+              {cfDefs.map((f) => (
+                <TableHead key={f.customFieldName}>{f.displayName || f.customFieldName}</TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {!hasSearched ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={totalCols} className="py-10 text-center text-sm text-muted-foreground">
                   Informe filtros e clique em <span className="font-medium text-foreground">Pesquisar</span> para listar terceirizados.
                 </TableCell>
               </TableRow>
             ) : query.isLoading || query.isFetching ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 5 }).map((__, j) => (
+                  {Array.from({ length: totalCols }).map((__, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -226,13 +238,13 @@ function TerceirizadosPage() {
               ))
             ) : query.isError ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-destructive">
+                <TableCell colSpan={totalCols} className="py-10 text-center text-sm text-destructive">
                   {(query.error as Error).message}
                 </TableCell>
               </TableRow>
             ) : !query.data?.items?.length ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={totalCols} className="py-10 text-center text-sm text-muted-foreground">
                   Nenhum terceirizado encontrado para os filtros informados.
                 </TableCell>
               </TableRow>
@@ -240,6 +252,7 @@ function TerceirizadosPage() {
               query.data.items.map((it) => {
                 const status = String(it.status ?? "");
                 const isActive = status.toLowerCase() === "active";
+                const cfMap = customFieldsToRecord(it.systemData?.customFields);
                 return (
                   <TableRow key={it.identityId}>
                     <TableCell className="font-medium">
@@ -263,6 +276,14 @@ function TerceirizadosPage() {
                         {isActive ? "Active" : status || "—"}
                       </Badge>
                     </TableCell>
+                    {cfDefs.map((f) => {
+                      const v = cfMap[f.customFieldName] ?? "";
+                      return (
+                        <TableCell key={f.customFieldName} className="text-muted-foreground">
+                          {v || "—"}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 );
               })
