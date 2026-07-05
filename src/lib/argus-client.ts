@@ -84,6 +84,64 @@ export function withAccountId(path: string): string {
   return id ? path.replace(/\{accountId\}/g, encodeURIComponent(id)) : path;
 }
 
+// --- SystemObjectId cache (selecionado nas Configurações) ---
+let cachedSystemObjectId: string | null = null;
+const SYSTEM_KEY = "argus.systemObjectId";
+const systemListeners = new Set<() => void>();
+
+export function getSystemObjectId(): string | null {
+  if (cachedSystemObjectId) return cachedSystemObjectId;
+  if (typeof window !== "undefined") {
+    try {
+      const stored = window.localStorage.getItem(SYSTEM_KEY);
+      if (stored) cachedSystemObjectId = stored;
+    } catch { /* ignore */ }
+  }
+  return cachedSystemObjectId;
+}
+
+export function setSystemObjectId(id: string | null) {
+  cachedSystemObjectId = id || null;
+  if (typeof window !== "undefined") {
+    try {
+      if (id) window.localStorage.setItem(SYSTEM_KEY, id);
+      else window.localStorage.removeItem(SYSTEM_KEY);
+    } catch { /* ignore */ }
+  }
+  for (const cb of systemListeners) cb();
+}
+
+function subscribeSystem(cb: () => void) {
+  systemListeners.add(cb);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === SYSTEM_KEY) {
+      cachedSystemObjectId = e.newValue || null;
+      cb();
+    }
+  };
+  if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
+  return () => {
+    systemListeners.delete(cb);
+    if (typeof window !== "undefined") window.removeEventListener("storage", onStorage);
+  };
+}
+
+export function useSystemObjectId(): string | null {
+  return useSyncExternalStore(
+    subscribeSystem,
+    () => getSystemObjectId(),
+    () => null,
+  );
+}
+
+export interface ClearIdSystem {
+  systemObjectId: string;
+  name: string;
+  description?: string | null;
+  accountId?: string;
+  [k: string]: unknown;
+}
+
 export interface ArgusError {
   status: number;
   message: string;
@@ -559,6 +617,32 @@ export const argusApi = {
     );
     if (Array.isArray(data)) return data;
     return data?.sites ?? [];
+  },
+
+  listSystems: async (): Promise<ClearIdSystem[]> => {
+    const accountId = getAccountId();
+    const q = new URLSearchParams();
+    if (accountId) q.set("accountId", accountId);
+    const data = await unwrap<
+      { systems?: unknown[] } | unknown[]
+    >(argusFetch(`/api/systems?${q.toString()}`, undefined, { allSites: true }));
+    const raw = Array.isArray(data) ? data : (data?.systems ?? []);
+    return (raw as Array<Record<string, unknown>>).map((s) => ({
+      systemObjectId:
+        (s.systemObjectId as string | undefined) ??
+        (s.SystemObjectId as string | undefined) ??
+        (s.systemId as string | undefined) ??
+        (s.id as string | undefined) ??
+        "",
+      name:
+        (s.name as string | undefined) ??
+        (s.Name as string | undefined) ??
+        (s.displayName as string | undefined) ??
+        "",
+      description: (s.description as string | undefined) ?? null,
+      accountId: s.accountId as string | undefined,
+      ...s,
+    })).filter((s) => s.systemObjectId);
   },
 
   listTeams: async (params?: { name?: string; take?: number; allSites?: boolean }): Promise<ClearIdTeam[]> => {
