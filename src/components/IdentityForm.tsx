@@ -77,7 +77,28 @@ export function IdentityForm({
     queryFn: () => argusApi.listCustomFields(),
     staleTime: 5 * 60 * 1000,
   });
-  const defs = (fieldsQuery.data ?? []).filter((f) => !f.isDeleted);
+  const sectionQuery = useQuery({
+    queryKey: ["custom-fields-section", "VylorTerceiros"],
+    queryFn: () => argusApi.getCustomFieldSection("VylorTerceiros"),
+    staleTime: 5 * 60 * 1000,
+    enabled: showCustomFields,
+  });
+  const orderMap = new Map(
+    (sectionQuery.data?.identityCustomFields ?? []).map((f) => [f.name, f.index]),
+  );
+  const defs = (fieldsQuery.data ?? [])
+    .filter((f) => !f.isDeleted && f.customFieldName.startsWith("Vylor_"))
+    .sort((a, b) => {
+      const ai = orderMap.get(a.customFieldName);
+      const bi = orderMap.get(b.customFieldName);
+      if (ai != null && bi != null) return ai - bi;
+      if (ai != null) return -1;
+      if (bi != null) return 1;
+      return (a.displayName ?? a.customFieldName).localeCompare(
+        b.displayName ?? b.customFieldName,
+        "pt-BR",
+      );
+    });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const setField = (name: string, value: string) =>
