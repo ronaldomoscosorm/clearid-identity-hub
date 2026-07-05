@@ -24,7 +24,7 @@ import type { IdentityUpsert } from "@/lib/argus-client";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 
 const baseSchema = z.object({
-  externalId: z.string().trim().min(1, "Obrigatório").max(120),
+  externalId: z.string().trim().max(120).optional().default(""),
   firstName: z.string().trim().min(1, "Obrigatório").max(100),
   lastName: z.string().trim().min(1, "Obrigatório").max(100),
   email: z.string().trim().email("E-mail inválido").max(255),
