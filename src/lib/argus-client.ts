@@ -140,6 +140,17 @@ export async function argusFetch<T = unknown>(
 
   let response: Response;
   try {
+    // Salvaguarda: nunca permitir DELETE em /api/identities/* — desativação
+    // deve ser sempre via PUT de status para "Inactive". Isso impede que
+    // um bug futuro (ou chamada equivocada) exclua registros no ClearID.
+    const method = (init.method ?? "GET").toUpperCase();
+    if (method === "DELETE" && /\/api\/identities(\/|$|\?)/i.test(path)) {
+      throw new ArgusApiError({
+        status: 0,
+        message:
+          "Operação bloqueada: DELETE em /api/identities não é permitido. Use updateIdentity com status='Inactive'.",
+      });
+    }
     response = await fetch(url, { ...init, headers });
   } catch (e) {
     throw new ArgusApiError({
