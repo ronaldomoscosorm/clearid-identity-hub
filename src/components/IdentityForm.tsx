@@ -180,6 +180,7 @@ export function IdentityForm({
         </CardContent>
       </Card>
 
+      {showCustomFields && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Atributos customizados</CardTitle>
@@ -257,6 +258,7 @@ export function IdentityForm({
           )}
         </CardContent>
       </Card>
+      )}
 
       <div className="flex items-center justify-end gap-2">
         {extraActions}
