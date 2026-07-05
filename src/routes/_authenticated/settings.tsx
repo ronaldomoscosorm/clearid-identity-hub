@@ -9,7 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getConfig, saveConfig, type ArgusEnvConfig } from "@/lib/argus-env";
-import { argusApi, getDefaultSiteId, setDefaultSiteId, type DiagnosticsResult } from "@/lib/argus-client";
+import {
+  argusApi,
+  getDefaultSiteId,
+  setDefaultSiteId,
+  getSystemObjectId,
+  setSystemObjectId,
+  type DiagnosticsResult,
+} from "@/lib/argus-client";
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -21,11 +28,18 @@ function Settings() {
   const [cfg, setCfg] = useState<ArgusEnvConfig>(() => getConfig());
   const [lastResult, setLastResult] = useState<DiagnosticsResult | null>(null);
   const [siteId, setSiteId] = useState<string>(() => getDefaultSiteId() ?? "");
+  const [systemObjectId, setSystemObjectIdState] = useState<string>(() => getSystemObjectId() ?? "");
   const qc = useQueryClient();
 
   const sitesQuery = useQuery({
     queryKey: ["argus", "sites"],
     queryFn: argusApi.listSites,
+    staleTime: 60_000,
+  });
+
+  const systemsQuery = useQuery({
+    queryKey: ["argus", "systems"],
+    queryFn: argusApi.listSystems,
     staleTime: 60_000,
   });
 
@@ -44,6 +58,7 @@ function Settings() {
   const handleSave = () => {
     saveConfig(cfg);
     setDefaultSiteId(siteId || null);
+    setSystemObjectId(systemObjectId || null);
     setCfg((c) => ({ ...c, defaultSiteId: siteId || undefined, defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name }));
     qc.invalidateQueries();
     toast.success("Configurações salvas");
@@ -159,6 +174,55 @@ function Settings() {
               <p className="text-sm text-destructive">
                 {(sitesQuery.error as Error).message}
               </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Sistema (SystemObjectId)</CardTitle>
+          <CardDescription>
+            Sistema padrão do ClearID usado nas operações que exigem systemObjectId.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="system">Sistema</Label>
+            <Select
+              value={systemObjectId}
+              onValueChange={setSystemObjectIdState}
+              disabled={systemsQuery.isLoading || !!systemsQuery.error}
+            >
+              <SelectTrigger id="system">
+                <SelectValue
+                  placeholder={
+                    systemsQuery.isLoading
+                      ? "Carregando sistemas..."
+                      : systemsQuery.error
+                      ? "Falha ao carregar sistemas"
+                      : "Selecione um sistema"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {(systemsQuery.data ?? [])
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }))
+                  .map((s) => (
+                    <SelectItem key={s.systemObjectId} value={s.systemObjectId}>
+                      {s.name || s.systemObjectId}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {systemsQuery.error && (
+              <p className="text-sm text-destructive">
+                {(systemsQuery.error as Error).message}
+              </p>
+            )}
+            {systemObjectId && (
+              <p className="font-mono text-xs text-muted-foreground">{systemObjectId}</p>
             )}
           </div>
         </CardContent>
