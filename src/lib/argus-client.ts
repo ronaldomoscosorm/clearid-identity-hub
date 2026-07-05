@@ -619,6 +619,32 @@ export const argusApi = {
     return data?.sites ?? [];
   },
 
+  listSystems: async (): Promise<ClearIdSystem[]> => {
+    const accountId = getAccountId();
+    const q = new URLSearchParams();
+    if (accountId) q.set("accountId", accountId);
+    const data = await unwrap<
+      { systems?: unknown[] } | unknown[]
+    >(argusFetch(`/api/systems?${q.toString()}`, undefined, { allSites: true }));
+    const raw = Array.isArray(data) ? data : (data?.systems ?? []);
+    return (raw as Array<Record<string, unknown>>).map((s) => ({
+      systemObjectId:
+        (s.systemObjectId as string | undefined) ??
+        (s.SystemObjectId as string | undefined) ??
+        (s.systemId as string | undefined) ??
+        (s.id as string | undefined) ??
+        "",
+      name:
+        (s.name as string | undefined) ??
+        (s.Name as string | undefined) ??
+        (s.displayName as string | undefined) ??
+        "",
+      description: (s.description as string | undefined) ?? null,
+      accountId: s.accountId as string | undefined,
+      ...s,
+    })).filter((s) => s.systemObjectId);
+  },
+
   listTeams: async (params?: { name?: string; take?: number; allSites?: boolean }): Promise<ClearIdTeam[]> => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
