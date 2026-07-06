@@ -835,18 +835,24 @@ export const argusApi = {
     if (systemObjectId) q.set("systemObjectId", systemObjectId);
     if (accountId) q.set("accountId", accountId);
     const data = await unwrap<
-      { formats?: CredentialFormat[] } | CredentialFormat[]
+      { credentialFormats?: CredentialFormat[]; formats?: CredentialFormat[] } | CredentialFormat[]
     >(argusFetch(`/api/credentials/formats?${q.toString()}`, undefined, { allSites: true }));
     if (Array.isArray(data)) return data;
-    return data?.formats ?? [];
+    return data?.credentialFormats ?? data?.formats ?? [];
   },
 
   listCredentials: async (identityId: string): Promise<CredentialRecord[]> => {
-    const data = await unwrap<
-      { credentials?: CredentialRecord[] } | CredentialRecord[]
-    >(argusFetch(`/api/credentials/${encodeURIComponent(identityId)}`));
-    if (Array.isArray(data)) return data;
-    return data?.credentials ?? [];
+    try {
+      const data = await unwrap<
+        { credentials?: CredentialRecord[] } | CredentialRecord[]
+      >(argusFetch(`/api/credentials/${encodeURIComponent(identityId)}`));
+      if (Array.isArray(data)) return data;
+      return data?.credentials ?? [];
+    } catch (e) {
+      // 404 = identidade sem credenciais cadastradas.
+      if (e instanceof ArgusApiError && e.status === 404) return [];
+      throw e;
+    }
   },
 
   createCredential: (payload: CredentialUpsert) =>
