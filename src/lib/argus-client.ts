@@ -504,6 +504,7 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     culture: data.culture ?? null,
     email: data.email,
     identityType: toClearIdName(data.identityType, "Employee"),
+    workerTypeCode: data.workerTypeCode ?? null,
     eTag: data.eTag,
   };
 }
