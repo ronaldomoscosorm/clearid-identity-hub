@@ -62,7 +62,7 @@ function TerceirizadosPage() {
   const [fStatus, setFStatus] = useState<string>(saved?.status ?? "all");
   const [fAllSites, setFAllSites] = useState<boolean>(saved?.allSites ?? false);
 
-  const [hasSearched, setHasSearched] = useState<boolean>(!!saved);
+  const [hasSearched, setHasSearched] = useState<boolean>(true);
   const [applied, setApplied] = useState(saved ?? emptyApplied);
 
   const query = useQuery({
@@ -111,7 +111,6 @@ function TerceirizadosPage() {
     setFDepartment("");
     setFStatus("all");
     setFAllSites(false);
-    setHasSearched(false);
     setApplied(emptyApplied);
     try {
       sessionStorage.removeItem(SEARCH_KEY);
@@ -131,6 +130,20 @@ function TerceirizadosPage() {
 
       <Card className="p-4">
         <form onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Tipo do Trabalhador</Label>
+            <Select value="Terceiros" disabled>
+              <SelectTrigger className="w-full sm:w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Terceiros">Terceiros</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Filtro fixo desta tela; não pode ser alterado.
+            </p>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
               <Label htmlFor="t-first-name">Nome</Label>
