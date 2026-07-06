@@ -197,9 +197,9 @@ export async function argusFetch<T = unknown>(
   if (systemObjectId && !/[?&]systemObjectId=/.test(url)) {
     url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(systemObjectId);
   }
-  if (!headers.has("X-ClearId-Environment")) {
-    headers.set("X-ClearId-Environment", "Demo");
-  }
+  // Ambiente é decidido pelo backend (ArgusClearId.Api). Não forçamos
+  // X-ClearId-Environment aqui — enviar "Demo" fazia o backend responder
+  // Demo mesmo quando o ambiente configurado era Production.
   if (!opts.allSites && siteIdForQuery && !headers.has("X-Site-Id")) {
     headers.set("X-Site-Id", siteIdForQuery);
   }
