@@ -170,12 +170,19 @@ export function IdentityForm({
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = baseSchema.safeParse({ externalId, firstName, lastName, email, status });
+    const out: Record<string, string> = {};
     if (!parsed.success) {
-      const out: Record<string, string> = {};
       for (const i of parsed.error.issues) out[i.path[0] as string] = i.message;
+    }
+    if (!workerTypeCode) {
+      out.workerTypeCode = "Selecione o tipo do trabalhador";
+    }
+    if (Object.keys(out).length) {
       setErrors(out);
       return;
     }
+    const parsedData = parsed.success ? parsed.data : null;
+    if (!parsedData) return;
     const cfErrors: Record<string, string> = {};
     const dateFieldNames = new Set(defs.filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName));
     const cf: Record<string, string> = {};
@@ -207,7 +214,7 @@ export function IdentityForm({
     }
     setErrors({});
     onSubmit({
-      ...parsed.data,
+      ...parsedData,
       customFields: cf,
       siteId: siteId || undefined,
       workerTypeCode: workerTypeCode || undefined,
@@ -261,7 +268,7 @@ export function IdentityForm({
           <div className="space-y-2">
             <Label>Tipo do Trabalhador</Label>
             <Select value={workerTypeCode} onValueChange={setWorkerTypeCode}>
-              <SelectTrigger>
+              <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
                 <SelectValue placeholder="Selecione o tipo" />
               </SelectTrigger>
               <SelectContent>
@@ -269,6 +276,9 @@ export function IdentityForm({
                 <SelectItem value="Employee">Colaborador</SelectItem>
               </SelectContent>
             </Select>
+            {errors.workerTypeCode && (
+              <p className="text-xs text-destructive">{errors.workerTypeCode}</p>
+            )}
           </div>
         </CardContent>
       </Card>
