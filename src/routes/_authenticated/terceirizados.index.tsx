@@ -67,17 +67,23 @@ function TerceirizadosPage() {
 
   const query = useQuery({
     queryKey: ["terceirizados", siteId, applied],
-    queryFn: () =>
-      argusApi.listIdentities({
+    queryFn: () => {
+      // Filtro obrigatório desta tela: sempre "Terceiros". Ignora qualquer
+      // valor vindo do estado, query params ou objeto `applied`.
+      const params = {
         firstName: applied.firstName || undefined,
         email: applied.email || undefined,
         company: applied.company || undefined,
         jobTitle: applied.jobTitle || undefined,
         department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
-        workerTypeCode: "Terceiros",
         allSites: applied.allSites,
-      }),
+      };
+      return argusApi.listIdentities({
+        ...params,
+        workerTypeCode: "Terceiros",
+      });
+    },
     enabled: hasSearched,
     retry: false,
   });
