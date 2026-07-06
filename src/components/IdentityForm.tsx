@@ -272,8 +272,8 @@ export function IdentityForm({
                 <SelectValue placeholder="Selecione o tipo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Contractor">Terceiros</SelectItem>
-                <SelectItem value="Employee">Colaborador</SelectItem>
+                <SelectItem value="Terceiros">Terceiros</SelectItem>
+                <SelectItem value="Colaborador">Colaborador</SelectItem>
               </SelectContent>
             </Select>
             {errors.workerTypeCode && (

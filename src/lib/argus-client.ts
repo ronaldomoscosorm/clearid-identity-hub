@@ -343,10 +343,10 @@ function assertWorkerTypeCode(code: string | null | undefined) {
       message: "workerTypeCode é obrigatório (Tipo do Trabalhador).",
     });
   }
-  if (v !== "Contractor" && v !== "Employee") {
+  if (v !== "Terceiros" && v !== "Colaborador") {
     throw new ArgusApiError({
       status: 400,
-      message: "workerTypeCode inválido: use 'Contractor' ou 'Employee'.",
+      message: "workerTypeCode inválido: use 'Terceiros' ou 'Colaborador'.",
     });
   }
 }
@@ -357,6 +357,11 @@ function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
     ...data,
     siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
     workerTypeCode: data.workerTypeCode ?? undefined,
+    companyData: {
+      ...(data.companyData ?? {}),
+      ...(data.siteId ? { siteId: data.siteId } : {}),
+      workerTypeCode: data.workerTypeCode ?? null,
+    },
     status: (typeof data.status === "string"
       ? data.status.toLowerCase()
       : data.status) as IdentityUpsert["status"],
@@ -504,11 +509,15 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     ([data.lastName, data.firstName].filter(Boolean).join(", ") ||
       `${data.firstName} ${data.lastName}`.trim());
 
+  const companyData: Record<string, unknown> = {
+    ...(data.companyData ?? {}),
+    workerTypeCode: data.workerTypeCode ?? null,
+  };
+  if (data.siteId) companyData.siteId = data.siteId;
+
   return {
     systemData,
-    companyData: data.siteId
-      ? { ...(data.companyData ?? {}), siteId: data.siteId }
-      : data.companyData ?? undefined,
+    companyData,
     description: data.description ?? null,
     status:
       typeof data.status === "string"
@@ -1123,6 +1132,10 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
   const company = (i.companyData ?? null) as Record<string, unknown> | null;
   const siteIdFromCompany =
     company && typeof company.siteId === "string" ? (company.siteId as string) : undefined;
+  const workerTypeFromCompany =
+    company && typeof company.workerTypeCode === "string"
+      ? (company.workerTypeCode as string)
+      : undefined;
   return {
     identityId: i.identityId,
     externalId: getClearIdExternalId(i),
@@ -1134,6 +1147,6 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     siteId:
       siteIdFromCompany ??
       ((i as unknown as { siteId?: string }).siteId ?? undefined),
-    workerTypeCode: i.workerTypeCode ?? undefined,
+    workerTypeCode: workerTypeFromCompany ?? i.workerTypeCode ?? undefined,
   };
 }
