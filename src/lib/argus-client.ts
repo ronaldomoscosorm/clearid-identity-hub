@@ -1116,5 +1116,6 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     siteId:
       siteIdFromCompany ??
       ((i as unknown as { siteId?: string }).siteId ?? undefined),
+    workerTypeCode: i.workerTypeCode ?? undefined,
   };
 }
