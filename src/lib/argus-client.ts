@@ -856,11 +856,16 @@ export const argusApi = {
   getIdentityPicture: async (id: string): Promise<Blob | null> => {
     const cfg = getConfig();
     if (!cfg.baseUrl) return null;
-    const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
+    let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     const acc = getAccountId();
     if (acc) headers.set("X-Account-Id", acc);
+    const sys = getSystemObjectId();
+    if (sys) {
+      headers.set("X-System-Object-Id", sys);
+      url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
+    }
     const res = await fetch(url, { headers });
     if (res.status === 404) return null;
     if (!res.ok) throw new ArgusApiError({ status: res.status, message: res.statusText });
@@ -871,13 +876,18 @@ export const argusApi = {
   uploadIdentityPicture: async (id: string, blob: Blob): Promise<void> => {
     const cfg = getConfig();
     if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
-    const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
+    let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const form = new FormData();
     form.append("picture", blob, "capture.jpg");
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     const acc = getAccountId();
     if (acc) headers.set("X-Account-Id", acc);
+    const sys = getSystemObjectId();
+    if (sys) {
+      headers.set("X-System-Object-Id", sys);
+      url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
+    }
     const res = await fetch(url, { method: "POST", headers, body: form });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
