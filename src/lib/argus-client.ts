@@ -595,6 +595,10 @@ export interface CredentialRecord {
   activationDateUtc?: string | null;
   expirationDateUtc?: string | null;
   status?: string | null;
+  name?: string | null;
+  description?: string | null;
+  expirationMode?: string | null;
+  expirationDurationInDays?: number | null;
   [k: string]: unknown;
 }
 
