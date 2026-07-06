@@ -849,11 +849,10 @@ export const argusApi = {
 
   listCredentials: async (identityId: string): Promise<CredentialRecord[]> => {
     try {
-      const data = await unwrap<
-        { credentials?: CredentialRecord[] } | CredentialRecord[]
-      >(argusFetch(`/api/identities/${encodeURIComponent(identityId)}/credentials`));
-      if (Array.isArray(data)) return data;
-      return data?.credentials ?? [];
+      const data = await unwrap<unknown>(
+        argusFetch(`/api/identities/${encodeURIComponent(identityId)}/credentials`),
+      );
+      return parseCredentialsResponse(data);
     } catch (e) {
       // 404 = identidade sem credenciais cadastradas.
       if (e instanceof ArgusApiError && e.status === 404) return [];
