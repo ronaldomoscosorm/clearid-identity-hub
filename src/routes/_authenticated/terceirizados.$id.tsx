@@ -43,6 +43,10 @@ function IdentityDetail() {
     queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60 * 1000,
   });
+  const credentialsQuery = useQuery({
+    queryKey: ["credentials", id],
+    queryFn: () => argusApi.listCredentials(id),
+  });
 
   const identitySiteId = query.data
     ? ((query.data as unknown as { siteId?: string }).siteId ??
@@ -113,12 +117,21 @@ function IdentityDetail() {
   });
 
   const isActive = String(query.data?.status ?? "").toLowerCase() === "active";
-  const activationDate = query.data?.creationDateUtc;
+  const activationDate = (() => {
+    const creds = credentialsQuery.data ?? [];
+    const dates = creds
+      .map((c) => c.activationDateUtc)
+      .filter((d): d is string => !!d)
+      .map((d) => new Date(d).getTime())
+      .filter((t) => !Number.isNaN(t));
+    if (dates.length === 0) return null;
+    return new Date(Math.min(...dates)).toISOString();
+  })();
   const fmtDate = (v?: string | null) => {
     if (!v) return "—";
     const d = new Date(v);
     if (Number.isNaN(d.getTime())) return v;
-    return d.toLocaleString("pt-BR");
+    return d.toLocaleDateString("pt-BR");
   };
 
   return (
