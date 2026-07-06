@@ -258,6 +258,18 @@ export function IdentityForm({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label>Tipo do Trabalhador</Label>
+            <Select value={workerTypeCode} onValueChange={setWorkerTypeCode}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Contractor">Terceiros</SelectItem>
+                <SelectItem value="Employee">Colaborador</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
