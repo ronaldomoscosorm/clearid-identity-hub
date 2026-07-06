@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Plus, Loader2 } from "lucide-react";
+import { KeyRound, Plus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, getAccountId, useSystemObjectId } from "@/lib/argus-client";
 import type { CredentialUpsert } from "@/lib/argus-client";
@@ -32,6 +32,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 function fmtDate(v?: string | null) {
   if (!v) return "—";
@@ -86,6 +97,20 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
       setCardNumber("");
       setActivation("");
       setExpiration("");
+    },
+    onError: (e) => {
+      const err = e as ArgusApiError;
+      toast.error(err.message, {
+        description: err.traceId ? `TraceId: ${err.traceId}` : undefined,
+      });
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: (credentialId: string) => argusApi.deleteCredential(credentialId),
+    onSuccess: () => {
+      toast.success("Credencial excluída");
+      qc.invalidateQueries({ queryKey: ["credentials", identityId] });
     },
     onError: (e) => {
       const err = e as ArgusApiError;
@@ -250,6 +275,7 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
                     <TableHead>Ativação</TableHead>
                     <TableHead>Expiração</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -262,6 +288,41 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
                       <TableCell>{fmtDate(c.activationDateUtc)}</TableCell>
                       <TableCell>{fmtDate(c.expirationDateUtc)}</TableCell>
                       <TableCell>{c.status ?? "—"}</TableCell>
+                      <TableCell>
+                        {c.credentialId ? (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                disabled={remove.isPending}
+                                aria-label="Excluir credencial"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Excluir credencial?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Esta ação não pode ser desfeita. A credencial{" "}
+                                  {c.name ?? c.cardNumber ?? ""} será removida.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => remove.mutate(c.credentialId!)}
+                                >
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        ) : null}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
