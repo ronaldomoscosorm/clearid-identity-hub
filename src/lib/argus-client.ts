@@ -983,6 +983,13 @@ export const argusApi = {
     );
   },
 
+  deleteCredential: (credentialId: string) =>
+    unwrap<void>(
+      argusFetch(`/api/credentials/${encodeURIComponent(credentialId)}`, {
+        method: "DELETE",
+      }),
+    ),
+
   /** Baixa a foto da identidade como Blob. Retorna null em 404. */
   getIdentityPicture: async (id: string): Promise<Blob | null> => {
     const cfg = getConfig();
