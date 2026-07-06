@@ -343,10 +343,10 @@ function assertWorkerTypeCode(code: string | null | undefined) {
       message: "workerTypeCode é obrigatório (Tipo do Trabalhador).",
     });
   }
-  if (v !== "Contractor" && v !== "Employee") {
+  if (v !== "Terceiros" && v !== "Colaborador") {
     throw new ArgusApiError({
       status: 400,
-      message: "workerTypeCode inválido: use 'Contractor' ou 'Employee'.",
+      message: "workerTypeCode inválido: use 'Terceiros' ou 'Colaborador'.",
     });
   }
 }
@@ -357,6 +357,11 @@ function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
     ...data,
     siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
     workerTypeCode: data.workerTypeCode ?? undefined,
+    companyData: {
+      ...(data.companyData ?? {}),
+      ...(data.siteId ? { siteId: data.siteId } : {}),
+      workerTypeCode: data.workerTypeCode ?? null,
+    },
     status: (typeof data.status === "string"
       ? data.status.toLowerCase()
       : data.status) as IdentityUpsert["status"],
