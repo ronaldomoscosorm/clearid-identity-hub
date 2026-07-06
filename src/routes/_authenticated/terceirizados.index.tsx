@@ -68,8 +68,10 @@ function TerceirizadosPage() {
   const query = useQuery({
     queryKey: ["terceirizados", siteId, applied],
     queryFn: async () => {
-      // A API não filtra por workerTypeCode — aplicamos o filtro
-      // "Terceiros" no cliente sobre o resultado retornado.
+      // A API de /search não filtra por workerTypeCode e nem retorna esse
+      // campo na listagem. Buscamos os detalhes de cada identity em paralelo
+      // (onde workerTypeCode existe em companyData) e filtramos por
+      // "Terceiros" no cliente.
       const res = await argusApi.listIdentities({
         firstName: applied.firstName || undefined,
         email: applied.email || undefined,
@@ -79,7 +81,18 @@ function TerceirizadosPage() {
         status: applied.status === "all" ? undefined : applied.status,
         allSites: applied.allSites,
       });
-      const items = (res.items ?? []).filter((it) => {
+      const base = res.items ?? [];
+      const details = await Promise.all(
+        base.map(async (it) => {
+          try {
+            const full = await argusApi.getIdentity(it.identityId);
+            return { ...it, ...full };
+          } catch {
+            return it;
+          }
+        }),
+      );
+      const items = details.filter((it) => {
         const company = (it.companyData ?? null) as Record<string, unknown> | null;
         const code =
           (company && typeof company.workerTypeCode === "string"
