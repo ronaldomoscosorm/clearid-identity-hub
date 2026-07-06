@@ -268,7 +268,7 @@ export function IdentityForm({
           <div className="space-y-2">
             <Label>Tipo do Trabalhador</Label>
             <Select value={workerTypeCode} onValueChange={setWorkerTypeCode}>
-              <SelectTrigger>
+              <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
                 <SelectValue placeholder="Selecione o tipo" />
               </SelectTrigger>
               <SelectContent>
@@ -276,6 +276,9 @@ export function IdentityForm({
                 <SelectItem value="Employee">Colaborador</SelectItem>
               </SelectContent>
             </Select>
+            {errors.workerTypeCode && (
+              <p className="text-xs text-destructive">{errors.workerTypeCode}</p>
+            )}
           </div>
         </CardContent>
       </Card>
