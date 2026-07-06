@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { argusApi, setDefaultSiteId, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
   const env = envQuery.data?.environment ?? "…";
   const siteId = useDefaultSiteId();
+  const systemObjectId = useSystemObjectId();
   const sitesQuery = useQuery({
     queryKey: ["argus", "sites"],
     queryFn: argusApi.listSites,
@@ -105,6 +106,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     invalidatePageQueries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId]);
+
+  useEffect(() => {
+    invalidatePageQueries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemObjectId]);
 
   return (
     <SidebarProvider>
