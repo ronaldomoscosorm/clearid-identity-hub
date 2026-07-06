@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
@@ -169,6 +170,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:px-6">
             <SidebarTrigger className="-ml-1" />
             <div className="ml-auto flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 font-normal"
+                title="Recarregar dados do ArgusClearId.Api"
+                onClick={async () => {
+                  await queryClient.invalidateQueries();
+                  toast.success("Dados do ArgusClearId.Api recarregados");
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs">Atualizar</span>
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
