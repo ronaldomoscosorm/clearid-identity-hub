@@ -243,21 +243,25 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Nome</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Facility</TableHead>
                     <TableHead>Card</TableHead>
                     <TableHead>Ativação</TableHead>
                     <TableHead>Expiração</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(credsQuery.data ?? []).map((c, i) => (
                     <TableRow key={c.credentialId ?? i}>
+                      <TableCell>{c.name ?? "—"}</TableCell>
                       <TableCell>{c.formatName ?? formatName(c.formatId)}</TableCell>
                       <TableCell>{c.facilityCode ?? "—"}</TableCell>
                       <TableCell>{c.cardNumber ?? "—"}</TableCell>
                       <TableCell>{fmtDate(c.activationDateUtc)}</TableCell>
                       <TableCell>{fmtDate(c.expirationDateUtc)}</TableCell>
+                      <TableCell>{c.status ?? "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
