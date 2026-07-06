@@ -622,6 +622,90 @@ async function unwrap<T>(p: Promise<unknown>): Promise<T> {
   return r as T;
 }
 
+// ---- Credential response schema ----
+
+const credentialFieldSchema = z.object({
+  name: z.string(),
+  value: z.union([z.string(), z.number(), z.null()]).optional(),
+});
+
+const credentialFormatSchema = z.object({
+  formatId: z.string().optional().nullable(),
+  facilityCode: z.union([z.string(), z.number(), z.null()]).optional(),
+  cardNumber: z.union([z.string(), z.number(), z.null()]).optional(),
+  fields: z.array(credentialFieldSchema).optional().nullable(),
+}).passthrough();
+
+const credentialStatusSchema = z.object({
+  state: z.string().optional().nullable(),
+  activationDateUtc: z.string().optional().nullable(),
+  expirationDateUtc: z.string().optional().nullable(),
+  expirationMode: z.string().optional().nullable(),
+  expirationDurationInDays: z.number().nullable().optional(),
+}).passthrough();
+
+const credentialItemSchema = z.object({
+  globalId: z.string().optional(),
+  credentialId: z.string().optional(),
+  identityId: z.string().optional(),
+  name: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  credentialType: z.string().nullable().optional(),
+  credentialFormat: credentialFormatSchema.optional().nullable(),
+  status: credentialStatusSchema.optional().nullable(),
+}).passthrough();
+
+const credentialsResponseSchema = z.union([
+  z.array(credentialItemSchema),
+  z.object({ credentials: z.array(credentialItemSchema).optional().nullable() }).passthrough(),
+]);
+
+function fieldValue(
+  fields: Array<{ name: string; value?: string | number | null }> | null | undefined,
+  name: string,
+): string | null {
+  if (!fields) return null;
+  const found = fields.find((f) => f.name?.toLowerCase() === name.toLowerCase());
+  if (!found || found.value == null) return null;
+  return String(found.value);
+}
+
+export function parseCredentialsResponse(raw: unknown): CredentialRecord[] {
+  const parsed = credentialsResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`Resposta inválida de credenciais: ${parsed.error.message}`);
+  }
+  const items = Array.isArray(parsed.data)
+    ? parsed.data
+    : (parsed.data.credentials ?? []);
+  return items.map((it) => {
+    const fmt = it.credentialFormat ?? undefined;
+    const st = it.status ?? undefined;
+    const facility =
+      fmt?.facilityCode != null && fmt.facilityCode !== ""
+        ? String(fmt.facilityCode)
+        : fieldValue(fmt?.fields, "FacilityCode");
+    const card =
+      fmt?.cardNumber != null && fmt.cardNumber !== ""
+        ? String(fmt.cardNumber)
+        : fieldValue(fmt?.fields, "CardNumber");
+    return {
+      credentialId: it.credentialId ?? it.globalId,
+      identityId: it.identityId,
+      formatId: fmt?.formatId ?? undefined,
+      facilityCode: facility,
+      cardNumber: card,
+      name: it.name ?? null,
+      description: it.description ?? null,
+      activationDateUtc: st?.activationDateUtc ?? null,
+      expirationDateUtc: st?.expirationDateUtc ?? null,
+      expirationMode: st?.expirationMode ?? null,
+      expirationDurationInDays: st?.expirationDurationInDays ?? null,
+      status: st?.state ?? null,
+    };
+  });
+}
+
 // ---- API helpers ----
 
 export const argusApi = {
