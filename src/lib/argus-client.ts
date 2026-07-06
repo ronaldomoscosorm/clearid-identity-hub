@@ -336,6 +336,7 @@ export interface IdentityUpsert {
  * externalId/customFields ficam dentro de systemData e eTag é obrigatório.
  */
 function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
+  assertWorkerTypeCode(data.workerTypeCode);
   return {
     ...data,
     siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
@@ -469,6 +470,7 @@ function sanitizeResourceFilters(value: unknown) {
 }
 
 function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, unknown> {
+  assertWorkerTypeCode(data.workerTypeCode);
   if (!data.eTag) {
     throw new ArgusApiError({
       status: 0,
