@@ -855,6 +855,7 @@ export const argusApi = {
     skip?: number;
     take?: number;
     allSites?: boolean;
+    workerTypeCode?: string;
   }) => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
@@ -868,6 +869,7 @@ export const argusApi = {
     if (params?.jobTitle) q.set("jobTitle", params.jobTitle);
     if (params?.department) q.set("department", params.department);
     if (params?.status) q.set("status", params.status.toLowerCase());
+    if (params?.workerTypeCode) q.set("workerTypeCode", params.workerTypeCode);
     const data = await unwrap<IdentitySearchResult>(
       argusFetch(
         `/api/identities/search?${q.toString()}`,
