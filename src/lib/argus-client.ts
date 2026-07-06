@@ -829,9 +829,14 @@ export const argusApi = {
 
   // ---- Credentials ----
   listCredentialFormats: async (): Promise<CredentialFormat[]> => {
+    const accountId = getAccountId();
+    const systemObjectId = getSystemObjectId();
+    const q = new URLSearchParams();
+    if (systemObjectId) q.set("systemObjectId", systemObjectId);
+    if (accountId) q.set("accountId", accountId);
     const data = await unwrap<
       { formats?: CredentialFormat[] } | CredentialFormat[]
-    >(argusFetch(`/api/credential/format`, undefined, { allSites: true }));
+    >(argusFetch(`/api/credentials/formats?${q.toString()}`, undefined, { allSites: true }));
     if (Array.isArray(data)) return data;
     return data?.formats ?? [];
   },
