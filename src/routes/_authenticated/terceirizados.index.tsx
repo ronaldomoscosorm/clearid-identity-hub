@@ -75,6 +75,7 @@ function TerceirizadosPage() {
         jobTitle: applied.jobTitle || undefined,
         department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
+        workerTypeCode: "Terceiros",
         allSites: applied.allSites,
       }),
     enabled: hasSearched,
