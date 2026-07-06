@@ -335,7 +335,24 @@ export interface IdentityUpsert {
  * ClearID v4 exige formatos diferentes para criação e atualização: no PUT,
  * externalId/customFields ficam dentro de systemData e eTag é obrigatório.
  */
+function assertWorkerTypeCode(code: string | null | undefined) {
+  const v = (code ?? "").trim();
+  if (!v) {
+    throw new ArgusApiError({
+      status: 400,
+      message: "workerTypeCode é obrigatório (Tipo do Trabalhador).",
+    });
+  }
+  if (v !== "Contractor" && v !== "Employee") {
+    throw new ArgusApiError({
+      status: 400,
+      message: "workerTypeCode inválido: use 'Contractor' ou 'Employee'.",
+    });
+  }
+}
+
 function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
+  assertWorkerTypeCode(data.workerTypeCode);
   return {
     ...data,
     siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
@@ -469,6 +486,7 @@ function sanitizeResourceFilters(value: unknown) {
 }
 
 function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, unknown> {
+  assertWorkerTypeCode(data.workerTypeCode);
   if (!data.eTag) {
     throw new ArgusApiError({
       status: 0,
