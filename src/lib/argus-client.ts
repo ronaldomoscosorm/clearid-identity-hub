@@ -605,6 +605,8 @@ export interface CredentialUpsert {
   cardNumber: string;
   activationDateUtc?: string | null;
   expirationDateUtc?: string | null;
+  name?: string | null;
+  description?: string | null;
 }
 
 async function unwrap<T>(p: Promise<unknown>): Promise<T> {
@@ -855,13 +857,43 @@ export const argusApi = {
     }
   },
 
-  createCredential: (payload: CredentialUpsert) =>
-    unwrap<CredentialRecord>(
+  createCredential: (payload: CredentialUpsert) => {
+    const status: Record<string, unknown> = { state: "Active" };
+    if (payload.activationDateUtc) {
+      status.activationDateUtc = payload.activationDateUtc;
+    }
+    if (payload.expirationDateUtc) {
+      status.expirationDateUtc = payload.expirationDateUtc;
+      const start = payload.activationDateUtc
+        ? new Date(payload.activationDateUtc)
+        : new Date();
+      const end = new Date(payload.expirationDateUtc);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+        const days = Math.max(
+          0,
+          Math.round((end.getTime() - start.getTime()) / 86400000),
+        );
+        status.expirationDurationInDays = days;
+      }
+    }
+    const body: Record<string, unknown> = {
+      credentialFormat: {
+        formatId: payload.formatId,
+        facilityCode: payload.facilityCode ?? null,
+        cardNumber: payload.cardNumber,
+      },
+      name: payload.name ?? `Cred ${payload.cardNumber}`,
+      identityId: payload.identityId,
+      status,
+    };
+    if (payload.description) body.description = payload.description;
+    return unwrap<CredentialRecord>(
       argusFetch(`/api/credentials`, {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       }),
-    ),
+    );
+  },
 
   /** Baixa a foto da identidade como Blob. Retorna null em 404. */
   getIdentityPicture: async (id: string): Promise<Blob | null> => {
