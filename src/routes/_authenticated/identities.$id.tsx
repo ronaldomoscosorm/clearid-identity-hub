@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Power, PowerOff, Hourglass } from "lucide-react";
+import { ArrowLeft, Power, PowerOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
 import { clearIdToFormValues } from "@/lib/argus-client";
@@ -186,7 +186,7 @@ function IdentityDetail() {
                 {isActive ? (
                   <Button type="button" variant="destructive" disabled={isToggling}>
                     {isToggling ? (
-                      <Hourglass className="mr-1 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                     ) : (
                       <PowerOff className="mr-1 h-4 w-4" />
                     )}
@@ -195,7 +195,7 @@ function IdentityDetail() {
                 ) : (
                   <Button type="button" variant="secondary" disabled={isToggling}>
                     {isToggling ? (
-                      <Hourglass className="mr-1 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                     ) : (
                       <Power className="mr-1 h-4 w-4" />
                     )}
