@@ -279,6 +279,7 @@ export interface ClearIdIdentity {
   email?: string | null;
   identityType?: string | null;
   externalId?: string | null;
+  workerTypeCode?: string | null;
   picture?: unknown;
   privateData?: Record<string, unknown> | null;
   companyData?: Record<string, unknown> | null;
@@ -315,6 +316,7 @@ export interface IdentityUpsert {
   status: "Active" | "Inactive";
   customFields?: Record<string, string>;
   siteId?: string | null;
+  workerTypeCode?: string | null;
   // Campos opcionais preservados ao editar (ClearID PUT é replace
   // completo e pode rejeitar com 400 se omitidos).
   identityType?: string | null;
@@ -337,6 +339,7 @@ function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
   return {
     ...data,
     siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
+    workerTypeCode: data.workerTypeCode ?? undefined,
     status: (typeof data.status === "string"
       ? data.status.toLowerCase()
       : data.status) as IdentityUpsert["status"],
@@ -501,6 +504,7 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     culture: data.culture ?? null,
     email: data.email,
     identityType: toClearIdName(data.identityType, "Employee"),
+    workerTypeCode: data.workerTypeCode ?? null,
     eTag: data.eTag,
   };
 }
@@ -1112,5 +1116,6 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     siteId:
       siteIdFromCompany ??
       ((i as unknown as { siteId?: string }).siteId ?? undefined),
+    workerTypeCode: i.workerTypeCode ?? undefined,
   };
 }

@@ -57,6 +57,7 @@ export function IdentityForm({
   const [lastName, setLastName] = useState(initial?.lastName ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
+  const [workerTypeCode, setWorkerTypeCode] = useState<string>(initial?.workerTypeCode ?? "");
   const defaultSiteId = useDefaultSiteId();
   const [siteId, setSiteId] = useState<string>(initial?.siteId ?? defaultSiteId ?? "");
   useEffect(() => {
@@ -205,7 +206,12 @@ export function IdentityForm({
       return;
     }
     setErrors({});
-    onSubmit({ ...parsed.data, customFields: cf, siteId: siteId || undefined });
+    onSubmit({
+      ...parsed.data,
+      customFields: cf,
+      siteId: siteId || undefined,
+      workerTypeCode: workerTypeCode || undefined,
+    });
   };
 
   const dateDefs = defs.filter((f) => isDate(f.customFieldType));
@@ -249,6 +255,18 @@ export function IdentityForm({
                     {s.name}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Tipo do Trabalhador</Label>
+            <Select value={workerTypeCode} onValueChange={setWorkerTypeCode}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Contractor">Terceiros</SelectItem>
+                <SelectItem value="Employee">Colaborador</SelectItem>
               </SelectContent>
             </Select>
           </div>
