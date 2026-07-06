@@ -847,7 +847,7 @@ export const argusApi = {
     try {
       const data = await unwrap<
         { credentials?: CredentialRecord[] } | CredentialRecord[]
-      >(argusFetch(`/api/credentials/${encodeURIComponent(identityId)}`));
+      >(argusFetch(`/api/identities/${encodeURIComponent(identityId)}/credentials`));
       if (Array.isArray(data)) return data;
       return data?.credentials ?? [];
     } catch (e) {
