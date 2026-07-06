@@ -236,8 +236,8 @@ function IdentitiesList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os tipos</SelectItem>
-                  <SelectItem value="Contractor">Terceiros</SelectItem>
-                  <SelectItem value="Employee">Colaborador</SelectItem>
+                  <SelectItem value="Terceiros">Terceiros</SelectItem>
+                  <SelectItem value="Colaborador">Colaborador</SelectItem>
                 </SelectContent>
               </Select>
             </div>
