@@ -509,11 +509,15 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     ([data.lastName, data.firstName].filter(Boolean).join(", ") ||
       `${data.firstName} ${data.lastName}`.trim());
 
+  const companyData: Record<string, unknown> = {
+    ...(data.companyData ?? {}),
+    workerTypeCode: data.workerTypeCode ?? null,
+  };
+  if (data.siteId) companyData.siteId = data.siteId;
+
   return {
     systemData,
-    companyData: data.siteId
-      ? { ...(data.companyData ?? {}), siteId: data.siteId }
-      : data.companyData ?? undefined,
+    companyData,
     description: data.description ?? null,
     status:
       typeof data.status === "string"
