@@ -1132,6 +1132,10 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
   const company = (i.companyData ?? null) as Record<string, unknown> | null;
   const siteIdFromCompany =
     company && typeof company.siteId === "string" ? (company.siteId as string) : undefined;
+  const workerTypeFromCompany =
+    company && typeof company.workerTypeCode === "string"
+      ? (company.workerTypeCode as string)
+      : undefined;
   return {
     identityId: i.identityId,
     externalId: getClearIdExternalId(i),
@@ -1143,6 +1147,6 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     siteId:
       siteIdFromCompany ??
       ((i as unknown as { siteId?: string }).siteId ?? undefined),
-    workerTypeCode: i.workerTypeCode ?? undefined,
+    workerTypeCode: workerTypeFromCompany ?? i.workerTypeCode ?? undefined,
   };
 }
