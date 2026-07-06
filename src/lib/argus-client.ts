@@ -279,6 +279,7 @@ export interface ClearIdIdentity {
   email?: string | null;
   identityType?: string | null;
   externalId?: string | null;
+  workerTypeCode?: string | null;
   picture?: unknown;
   privateData?: Record<string, unknown> | null;
   companyData?: Record<string, unknown> | null;
