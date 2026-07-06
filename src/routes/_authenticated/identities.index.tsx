@@ -66,6 +66,7 @@ function IdentitiesList() {
   const [fJobTitle, setFJobTitle] = useState("");
   const [fDepartment, setFDepartment] = useState("");
   const [fStatus, setFStatus] = useState<string>("all");
+  const [fWorkerType, setFWorkerType] = useState<string>("all");
   const [fAllSites, setFAllSites] = useState(false);
 
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
@@ -77,8 +78,9 @@ function IdentitiesList() {
     jobTitle: string;
     department: string;
     status: string;
+    workerTypeCode: string;
     allSites: boolean;
-  }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", allSites: false });
+  }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", workerTypeCode: "all", allSites: false });
 
   const query = useQuery({
     queryKey: ["identities", siteId, applied],
@@ -90,6 +92,7 @@ function IdentitiesList() {
         jobTitle: applied.jobTitle || undefined,
         department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
+        workerTypeCode: applied.workerTypeCode === "all" ? undefined : applied.workerTypeCode,
         allSites: applied.allSites,
       }),
     enabled: hasSearched,
@@ -130,6 +133,7 @@ function IdentitiesList() {
       jobTitle: fJobTitle.trim(),
       department: fDepartment.trim(),
       status: fStatus,
+      workerTypeCode: fWorkerType,
       allSites: fAllSites,
     });
   };
@@ -141,9 +145,10 @@ function IdentitiesList() {
     setFJobTitle("");
     setFDepartment("");
     setFStatus("all");
+    setFWorkerType("all");
     setFAllSites(false);
     setHasSearched(false);
-    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", allSites: false });
+    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", workerTypeCode: "all", allSites: false });
   };
 
   return (
@@ -220,6 +225,19 @@ function IdentitiesList() {
                   <SelectItem value="Active">Ativos</SelectItem>
                   <SelectItem value="Inactive">Inativos</SelectItem>
                   <SelectItem value="all">Todos os status</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Tipo do Trabalhador</Label>
+              <Select value={fWorkerType} onValueChange={setFWorkerType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  <SelectItem value="Contractor">Terceiros</SelectItem>
+                  <SelectItem value="Employee">Colaborador</SelectItem>
                 </SelectContent>
               </Select>
             </div>
