@@ -113,6 +113,13 @@ function IdentityDetail() {
   });
 
   const isActive = String(query.data?.status ?? "").toLowerCase() === "active";
+  const activationDate = query.data?.creationDateUtc;
+  const fmtDate = (v?: string | null) => {
+    if (!v) return "—";
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return v;
+    return d.toLocaleString("pt-BR");
+  };
 
   return (
     <div className="space-y-6">
@@ -131,6 +138,12 @@ function IdentityDetail() {
             <span className="font-medium text-foreground">Site:</span>{" "}
             <span>{siteName ?? "—"}</span>{" "}
             <span className="font-mono text-[10px] opacity-70">({identitySiteId})</span>
+          </p>
+        )}
+        {activationDate && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Data de ativação:</span>{" "}
+            <span>{fmtDate(activationDate)}</span>
           </p>
         )}
       </div>
