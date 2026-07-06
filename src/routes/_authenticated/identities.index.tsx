@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff, Camera, Hourglass } from "lucide-react";
+import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff, Camera, Loader2 } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -420,7 +420,7 @@ function IdentitiesList() {
             >
               {toggleStatus.isPending ? (
                 <>
-                  <Hourglass className="mr-1 h-4 w-4 animate-spin" /> Processando...
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Processando...
                 </>
               ) : (
                 "Confirmar"
