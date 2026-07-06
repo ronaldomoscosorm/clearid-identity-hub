@@ -67,10 +67,10 @@ function TerceirizadosPage() {
 
   const query = useQuery({
     queryKey: ["terceirizados", siteId, applied],
-    queryFn: () => {
-      // Filtro obrigatório desta tela: sempre "Terceiros". Ignora qualquer
-      // valor vindo do estado, query params ou objeto `applied`.
-      const params = {
+    queryFn: async () => {
+      // A API não filtra por workerTypeCode — aplicamos o filtro
+      // "Terceiros" no cliente sobre o resultado retornado.
+      const res = await argusApi.listIdentities({
         firstName: applied.firstName || undefined,
         email: applied.email || undefined,
         company: applied.company || undefined,
@@ -78,11 +78,18 @@ function TerceirizadosPage() {
         department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
         allSites: applied.allSites,
-      };
-      return argusApi.listIdentities({
-        ...params,
-        workerTypeCode: "Terceiros",
       });
+      const items = (res.items ?? []).filter((it) => {
+        const company = (it.companyData ?? null) as Record<string, unknown> | null;
+        const code =
+          (company && typeof company.workerTypeCode === "string"
+            ? (company.workerTypeCode as string)
+            : null) ??
+          it.workerTypeCode ??
+          "";
+        return code.trim().toLowerCase() === "terceiros";
+      });
+      return { items, total: items.length };
     },
     enabled: hasSearched,
     retry: false,
