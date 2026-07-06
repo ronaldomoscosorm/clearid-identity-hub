@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Power, PowerOff } from "lucide-react";
+import { ArrowLeft, Power, PowerOff, Hourglass } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
 import { clearIdToFormValues } from "@/lib/argus-client";
@@ -95,6 +95,7 @@ function IdentityDetail() {
   });
 
   const isActive = String(query.data?.status ?? "").toLowerCase() === "active";
+  const isToggling = deactivate.isPending || activate.isPending;
 
   return (
     <div className="space-y-6">
@@ -183,12 +184,22 @@ function IdentityDetail() {
               <AlertDialog>
               <AlertDialogTrigger asChild>
                 {isActive ? (
-                  <Button type="button" variant="destructive">
-                    <PowerOff className="mr-1 h-4 w-4" /> Desativar
+                  <Button type="button" variant="destructive" disabled={isToggling}>
+                    {isToggling ? (
+                      <Hourglass className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <PowerOff className="mr-1 h-4 w-4" />
+                    )}
+                    {isToggling ? "Processando..." : "Desativar"}
                   </Button>
                 ) : (
-                  <Button type="button" variant="secondary">
-                    <Power className="mr-1 h-4 w-4" /> Ativar
+                  <Button type="button" variant="secondary" disabled={isToggling}>
+                    {isToggling ? (
+                      <Hourglass className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Power className="mr-1 h-4 w-4" />
+                    )}
+                    {isToggling ? "Processando..." : "Ativar"}
                   </Button>
                 )}
               </AlertDialogTrigger>
