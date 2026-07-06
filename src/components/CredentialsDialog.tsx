@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError } from "@/lib/argus-client";
+import { argusApi, ArgusApiError, getAccountId, useSystemObjectId } from "@/lib/argus-client";
 import type { CredentialUpsert } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,9 @@ export interface CredentialsDialogProps {
 
 export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
   const [open, setOpen] = useState(false);
+  const systemObjectId = useSystemObjectId();
+  const accountId = getAccountId();
+  const canQuery = Boolean(systemObjectId && accountId);
   const [formatId, setFormatId] = useState("");
   const [facilityCode, setFacilityCode] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -61,9 +64,9 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
   const qc = useQueryClient();
 
   const formatsQuery = useQuery({
-    queryKey: ["credential-formats"],
+    queryKey: ["credential-formats", systemObjectId, accountId],
     queryFn: () => argusApi.listCredentialFormats(),
-    enabled: open,
+    enabled: open && canQuery,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -128,11 +131,23 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
         <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label htmlFor="cred-format">Tipo de credencial</Label>
-            <Select value={formatId} onValueChange={setFormatId}>
+            <Select
+              value={formatId}
+              onValueChange={setFormatId}
+              disabled={!canQuery || formatsQuery.isLoading || !!formatsQuery.error}
+            >
               <SelectTrigger id="cred-format">
                 <SelectValue
                   placeholder={
-                    formatsQuery.isLoading ? "Carregando..." : "Selecione o tipo"
+                    !canQuery
+                      ? "Configure systemObjectId em Configurações"
+                      : formatsQuery.isLoading
+                      ? "Carregando..."
+                      : formatsQuery.error
+                      ? "Falha ao carregar formatos"
+                      : (formatsQuery.data ?? []).length === 0
+                      ? "Nenhum formato disponível"
+                      : "Selecione o tipo"
                   }
                 />
               </SelectTrigger>
@@ -144,6 +159,22 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
                 ))}
               </SelectContent>
             </Select>
+            {formatsQuery.error && (
+              <p className="mt-1 text-xs text-destructive">
+                {(formatsQuery.error as Error).message}
+              </p>
+            )}
+            {!canQuery && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Defina o systemObjectId em Configurações e faça o diagnóstico para
+                carregar o accountId.
+              </p>
+            )}
+            {canQuery && !formatsQuery.isLoading && !formatsQuery.error && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {(formatsQuery.data ?? []).length} formato(s) disponível(is).
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="cred-facility">Facility code</Label>
