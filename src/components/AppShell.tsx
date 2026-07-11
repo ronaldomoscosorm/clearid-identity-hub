@@ -4,6 +4,7 @@ import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
+import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   useApplyBranding();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // Carrega o catálogo de campos personalizados (Argus) e espelha no Supabase
+  // ao abrir qualquer página, para que fique disponível em todo o app.
+  const customFieldsQuery = useQuery({
+    queryKey: ["custom-fields"],
+    queryFn: () => argusApi.listCustomFields(),
+    staleTime: 5 * 60 * 1000,
+  });
+  useEffect(() => {
+    const defs = customFieldsQuery.data;
+    if (defs?.length) void mirrorCustomFieldDefs(defs.filter((d) => !d.isDeleted));
+  }, [customFieldsQuery.data]);
 
   // Invalidate page-level queries, but keep shell-owned queries (sites
   // list, env/diagnostics) untouched so the top menu doesn't flicker
