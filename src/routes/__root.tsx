@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { hydrateSettings } from "@/lib/supabase-settings";
 
 function NotFoundComponent() {
   return (
@@ -120,8 +121,12 @@ function RootComponent() {
   const router = useRouter();
 
   useEffect(() => {
+    // Hidrata as configurações locais a partir do Supabase se já houver sessão.
+    void hydrateSettings();
+
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      if (event === "SIGNED_IN") void hydrateSettings();
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });

@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
+import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,6 +39,11 @@ function CustomFieldsPage() {
   });
 
   const items = (query.data ?? []).filter((f) => !f.isDeleted);
+
+  // Espelha as definições de campos para o Supabase (cache local, best-effort).
+  useEffect(() => {
+    if (query.data?.length) void mirrorCustomFieldDefs(query.data);
+  }, [query.data]);
 
   return (
     <div className="space-y-6">

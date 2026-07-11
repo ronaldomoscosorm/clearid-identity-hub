@@ -18,6 +18,7 @@ import {
   type DiagnosticsResult,
 } from "@/lib/argus-client";
 import { Badge } from "@/components/ui/badge";
+import { pushSettings } from "@/lib/supabase-settings";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "Configurações — Argus ClearID" }] }),
@@ -61,7 +62,9 @@ function Settings() {
     setSystemObjectId(systemObjectId || null);
     setCfg((c) => ({ ...c, defaultSiteId: siteId || undefined, defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name }));
     qc.invalidateQueries();
-    toast.success("Configurações salvas");
+    pushSettings()
+      .then(() => toast.success("Configurações salvas"))
+      .catch(() => toast.warning("Salvo localmente, mas falhou ao sincronizar com o Supabase"));
   };
 
   return (

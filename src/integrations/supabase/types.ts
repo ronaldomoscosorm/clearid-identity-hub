@@ -12,9 +12,270 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  public: {
+  graphql_public: {
     Tables: {
       [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  public: {
+    Tables: {
+      custom_field_definitions: {
+        Row: {
+          created_at: string
+          custom_field_name: string
+          custom_field_type: string | null
+          display_index: number | null
+          display_name: string | null
+          etag: string | null
+          id: string
+          is_deleted: boolean
+          is_read_only: boolean
+          section_name: string | null
+          synchronization_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_field_name: string
+          custom_field_type?: string | null
+          display_index?: number | null
+          display_name?: string | null
+          etag?: string | null
+          id?: string
+          is_deleted?: boolean
+          is_read_only?: boolean
+          section_name?: string | null
+          synchronization_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          custom_field_name?: string
+          custom_field_type?: string | null
+          display_index?: number | null
+          display_name?: string | null
+          etag?: string | null
+          id?: string
+          is_deleted?: boolean
+          is_read_only?: boolean
+          section_name?: string | null
+          synchronization_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      identities: {
+        Row: {
+          account_id: string | null
+          company_data: Json | null
+          country_code: string | null
+          created_at: string
+          creation_date_utc: string | null
+          culture: string | null
+          description: string | null
+          display_name: string | null
+          email: string | null
+          etag: string | null
+          external_id: string | null
+          first_name: string
+          id: string
+          identity_id: string | null
+          identity_type: string | null
+          last_modification_date_utc: string | null
+          last_name: string
+          middle_name: string | null
+          picture: Json | null
+          private_data: Json | null
+          score: number | null
+          site_id: string | null
+          status: string
+          system_data: Json | null
+          updated_at: string
+          user_id: string
+          worker_type_code: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          company_data?: Json | null
+          country_code?: string | null
+          created_at?: string
+          creation_date_utc?: string | null
+          culture?: string | null
+          description?: string | null
+          display_name?: string | null
+          email?: string | null
+          etag?: string | null
+          external_id?: string | null
+          first_name: string
+          id?: string
+          identity_id?: string | null
+          identity_type?: string | null
+          last_modification_date_utc?: string | null
+          last_name: string
+          middle_name?: string | null
+          picture?: Json | null
+          private_data?: Json | null
+          score?: number | null
+          site_id?: string | null
+          status?: string
+          system_data?: Json | null
+          updated_at?: string
+          user_id?: string
+          worker_type_code?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          company_data?: Json | null
+          country_code?: string | null
+          created_at?: string
+          creation_date_utc?: string | null
+          culture?: string | null
+          description?: string | null
+          display_name?: string | null
+          email?: string | null
+          etag?: string | null
+          external_id?: string | null
+          first_name?: string
+          id?: string
+          identity_id?: string | null
+          identity_type?: string | null
+          last_modification_date_utc?: string | null
+          last_name?: string
+          middle_name?: string | null
+          picture?: Json | null
+          private_data?: Json | null
+          score?: number | null
+          site_id?: string | null
+          status?: string
+          system_data?: Json | null
+          updated_at?: string
+          user_id?: string
+          worker_type_code?: string | null
+        }
+        Relationships: []
+      }
+      identity_custom_fields: {
+        Row: {
+          created_at: string
+          custom_field_name: string
+          custom_field_value: string | null
+          definition_id: string | null
+          id: string
+          identity_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          custom_field_name: string
+          custom_field_value?: string | null
+          definition_id?: string | null
+          id?: string
+          identity_id: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          custom_field_name?: string
+          custom_field_value?: string | null
+          definition_id?: string | null
+          id?: string
+          identity_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identity_custom_fields_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "custom_field_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identity_custom_fields_identity_id_fkey"
+            columns: ["identity_id"]
+            isOneToOne: false
+            referencedRelation: "identities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      settings: {
+        Row: {
+          accent_color: string
+          account_id: string | null
+          argus_api_key: string | null
+          argus_base_url: string
+          client_logo: string
+          client_name: string
+          created_at: string
+          default_site_id: string | null
+          default_site_name: string | null
+          preferences: Json
+          primary_color: string
+          system_object_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accent_color?: string
+          account_id?: string | null
+          argus_api_key?: string | null
+          argus_base_url?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          default_site_id?: string | null
+          default_site_name?: string | null
+          preferences?: Json
+          primary_color?: string
+          system_object_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          accent_color?: string
+          account_id?: string | null
+          argus_api_key?: string | null
+          argus_base_url?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          default_site_id?: string | null
+          default_site_name?: string | null
+          preferences?: Json
+          primary_color?: string
+          system_object_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -149,6 +410,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

@@ -1,8 +1,10 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Power, PowerOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
+import { mirrorIdentities } from "@/lib/supabase-mirror";
 import { clearIdToFormValues } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -43,6 +45,11 @@ function IdentityDetail() {
     queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60 * 1000,
   });
+
+  // Espelha a identidade carregada para o Supabase (cobre visualização e refetch pós-update).
+  useEffect(() => {
+    if (query.data) void mirrorIdentities([query.data]);
+  }, [query.data]);
 
   const identitySiteId = query.data
     ? ((query.data as unknown as { siteId?: string }).siteId ??

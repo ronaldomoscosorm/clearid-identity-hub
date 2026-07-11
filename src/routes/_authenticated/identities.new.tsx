@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
+import { mirrorIdentities } from "@/lib/supabase-mirror";
 import { Button } from "@/components/ui/button";
 import { IdentityForm } from "@/components/IdentityForm";
 
@@ -18,6 +19,7 @@ function NewIdentity() {
     mutationFn: argusApi.createIdentity,
     onSuccess: (data) => {
       toast.success("Identity criada");
+      void mirrorIdentities([data]);
       qc.invalidateQueries({ queryKey: ["identities"] });
       navigate({ to: "/identities/$id", params: { id: data.identityId } });
     },

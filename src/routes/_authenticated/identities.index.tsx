@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { mirrorIdentities } from "@/lib/supabase-mirror";
 import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff, Camera, Loader2 } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,11 @@ function IdentitiesList() {
     enabled: hasSearched,
     retry: false,
   });
+
+  // Espelha as identidades retornadas para o Supabase (cache local, best-effort).
+  useEffect(() => {
+    if (query.data?.items?.length) void mirrorIdentities(query.data.items);
+  }, [query.data]);
 
   const toggleStatus = useMutation({
     mutationFn: async ({ id, activate }: { id: string; activate: boolean }) => {

@@ -21,6 +21,7 @@ import {
   type BrandingConfig,
 } from "@/lib/branding";
 import { PoweredBy } from "@/components/PoweredBy";
+import { pushSettings } from "@/lib/supabase-settings";
 
 export const Route = createFileRoute("/_authenticated/branding")({
   head: () => ({ meta: [{ title: "Identidade Visual — Argus ClearID" }] }),
@@ -47,13 +48,16 @@ function BrandingPage() {
   const handleSave = () => {
     saveBranding(cfg);
     applyBranding(cfg);
-    toast.success("Identidade visual aplicada");
+    pushSettings()
+      .then(() => toast.success("Identidade visual aplicada"))
+      .catch(() => toast.warning("Aplicada localmente, mas falhou ao sincronizar com o Supabase"));
   };
 
   const handleReset = () => {
     resetBranding();
     setCfg(DEFAULT_BRANDING);
     applyBranding(DEFAULT_BRANDING);
+    void pushSettings();
     toast.success("Identidade restaurada para o padrão");
   };
 
