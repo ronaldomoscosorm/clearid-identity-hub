@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { Activity, CheckCircle2, Database, RefreshCw, XCircle } from "lucide-react";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
+import { getSupabaseStatus } from "@/lib/supabase-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +41,13 @@ function Diagnostics() {
     retry: false,
   });
   const env = query.data?.environment ?? "—";
+
+  const supa = useQuery({
+    queryKey: ["supabase-status"],
+    queryFn: getSupabaseStatus,
+    refetchInterval: 60_000,
+    retry: false,
+  });
 
   return (
     <div className="space-y-6">
@@ -105,6 +113,58 @@ function Diagnostics() {
                   )}
                 <StatRow label="Última checagem" value={new Date(query.data.checkedAt).toLocaleTimeString()} />
               </>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Database className="h-4 w-4" /> Supabase / Banco de dados
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {supa.isLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : supa.isError ? (
+              <div className="text-sm text-destructive">
+                <div className="flex items-center gap-2 font-medium">
+                  <XCircle className="h-4 w-4" /> Inacessível
+                </div>
+                <p className="mt-2">{(supa.error as Error).message}</p>
+              </div>
+            ) : supa.data ? (
+              <div className="grid gap-x-8 gap-y-0 md:grid-cols-2">
+                <div>
+                  <StatRow
+                    label="Conexão"
+                    value={supa.data.reachable ? "OK" : "Falha"}
+                    ok={supa.data.reachable}
+                  />
+                  <StatRow label="Projeto" value={<code className="text-xs">{supa.data.projectId}</code>} />
+                  <StatRow label="URL" value={<code className="text-xs">{supa.data.url}</code>} />
+                  <StatRow
+                    label="Sessão autenticada"
+                    value={supa.data.authenticated ? "Sim" : "Não"}
+                    ok={supa.data.authenticated}
+                  />
+                </div>
+                <div>
+                  {supa.data.tables.map((t) => (
+                    <StatRow
+                      key={t.table}
+                      label={t.table}
+                      value={
+                        t.count === null ? (
+                          <span className="text-destructive">erro</span>
+                        ) : (
+                          <Badge variant="secondary">{t.count}</Badge>
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
             ) : null}
           </CardContent>
         </Card>
