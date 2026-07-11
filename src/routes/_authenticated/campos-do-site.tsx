@@ -5,7 +5,8 @@ import { Plus, RefreshCw, Pencil, Trash2, SlidersHorizontal } from "lucide-react
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { typeOf } from "@/lib/custom-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,8 +152,15 @@ function CamposDoSitePage() {
   });
 
   const defsQuery = useQuery({
-    queryKey: ["custom-field-definitions"],
+    queryKey: ["custom-field-definitions", siteId],
     queryFn: async (): Promise<Definition[]> => {
+      // Sincroniza o catálogo direto do Argus (não depende de visitar outra tela).
+      try {
+        const argusDefs = await argusApi.listCustomFields();
+        await mirrorCustomFieldDefs(argusDefs.filter((d) => !d.isDeleted));
+      } catch {
+        // Argus indisponível — segue com o que já houver no catálogo do Supabase.
+      }
       const { data, error } = await supabase
         .from("custom_field_definitions")
         .select("*")
@@ -371,7 +379,7 @@ function CamposDoSitePage() {
               {editing ? "Editar campo do site" : "Adicionar campo ao site"}
             </DialogTitle>
             <DialogDescription>
-              O catálogo de campos vem de <span className="font-medium">Campos personalizados</span>.
+              O catálogo de campos é sincronizado automaticamente do Argus (ClearID).
             </DialogDescription>
           </DialogHeader>
 
@@ -387,9 +395,13 @@ function CamposDoSitePage() {
                   <SelectValue placeholder="Selecione um campo do catálogo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableDefs.length === 0 ? (
+                  {defsQuery.isLoading ? (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Nenhum campo disponível — sincronize em Campos personalizados.
+                      Carregando campos do Argus...
+                    </div>
+                  ) : availableDefs.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Nenhum campo disponível para adicionar.
                     </div>
                   ) : (
                     availableDefs.map((d) => (
