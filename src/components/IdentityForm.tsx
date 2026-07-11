@@ -5,6 +5,7 @@ import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIdentityFieldLabels } from "@/lib/identity-labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -103,6 +104,7 @@ export function IdentityForm({
       );
     });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const { alias } = useIdentityFieldLabels();
 
   const setField = (name: string, value: string) =>
     setCustomFields((prev) => ({ ...prev, [name]: value }));
@@ -236,22 +238,22 @@ export function IdentityForm({
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="firstName">Nome</Label>
+            <Label htmlFor="firstName">{alias("first_name", "Nome")}</Label>
             <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
             {errors.firstName && <p className="text-xs text-destructive">{errors.firstName}</p>}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="lastName">Sobrenome</Label>
+            <Label htmlFor="lastName">{alias("last_name", "Sobrenome")}</Label>
             <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
             {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="email">E-mail</Label>
+            <Label htmlFor="email">{alias("email", "E-mail")}</Label>
             <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
           </div>
           <div className="space-y-2">
-            <Label>Site</Label>
+            <Label>{alias("company_site_id", "Site")}</Label>
             <Select value={siteId} onValueChange={setSiteId}>
               <SelectTrigger>
                 <SelectValue placeholder={sitesQuery.isLoading ? "Carregando..." : "Selecione um site"} />
@@ -266,7 +268,7 @@ export function IdentityForm({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Tipo do Trabalhador</Label>
+            <Label>{alias("company_worker_type_code", "Tipo do Trabalhador")}</Label>
             <Select value={workerTypeCode} onValueChange={setWorkerTypeCode}>
               <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
                 <SelectValue placeholder="Selecione o tipo" />
@@ -305,7 +307,7 @@ export function IdentityForm({
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   {[...dateDefs, ...textDefs].map((f) => {
                     const name = f.customFieldName;
-                    const label = f.displayName || name;
+                    const label = alias(name, f.displayName || name);
                     const value = customFields[name] ?? "";
                     return (
                       <div key={name} className="space-y-1.5">
@@ -401,7 +403,7 @@ export function IdentityForm({
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {boolDefs.map((f) => {
                     const name = f.customFieldName;
-                    const label = f.displayName || name;
+                    const label = alias(name, f.displayName || name);
                     const value = customFields[name] ?? "";
                     return (
                       <div key={name} className="flex items-center gap-2">

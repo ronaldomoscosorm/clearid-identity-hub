@@ -19,6 +19,7 @@ import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedCamposPersonalizadosRouteImport } from './routes/_authenticated/campos-personalizados'
 import { Route as AuthenticatedCamposDoSiteRouteImport } from './routes/_authenticated/campos-do-site'
 import { Route as AuthenticatedBrandingRouteImport } from './routes/_authenticated/branding'
+import { Route as AuthenticatedApelidosRouteImport } from './routes/_authenticated/apelidos'
 import { Route as AuthenticatedTerceirizadosIndexRouteImport } from './routes/_authenticated/terceirizados.index'
 import { Route as AuthenticatedIdentitiesIndexRouteImport } from './routes/_authenticated/identities.index'
 import { Route as AuthenticatedTerceirizadosIdRouteImport } from './routes/_authenticated/terceirizados.$id'
@@ -77,6 +78,11 @@ const AuthenticatedBrandingRoute = AuthenticatedBrandingRouteImport.update({
   path: '/branding',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedApelidosRoute = AuthenticatedApelidosRouteImport.update({
+  id: '/apelidos',
+  path: '/apelidos',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedTerceirizadosIndexRoute =
   AuthenticatedTerceirizadosIndexRouteImport.update({
     id: '/terceirizados/',
@@ -110,6 +116,7 @@ const AuthenticatedIdentitiesIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/apelidos': typeof AuthenticatedApelidosRoute
   '/branding': typeof AuthenticatedBrandingRoute
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/apelidos': typeof AuthenticatedApelidosRoute
   '/branding': typeof AuthenticatedBrandingRoute
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/_authenticated/apelidos': typeof AuthenticatedApelidosRoute
   '/_authenticated/branding': typeof AuthenticatedBrandingRoute
   '/_authenticated/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/_authenticated/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/apelidos'
     | '/branding'
     | '/campos-do-site'
     | '/campos-personalizados'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/apelidos'
     | '/branding'
     | '/campos-do-site'
     | '/campos-personalizados'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/_authenticated/apelidos'
     | '/_authenticated/branding'
     | '/_authenticated/campos-do-site'
     | '/_authenticated/campos-personalizados'
@@ -285,6 +297,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBrandingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/apelidos': {
+      id: '/_authenticated/apelidos'
+      path: '/apelidos'
+      fullPath: '/apelidos'
+      preLoaderRoute: typeof AuthenticatedApelidosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/terceirizados/': {
       id: '/_authenticated/terceirizados/'
       path: '/terceirizados'
@@ -342,6 +361,7 @@ const AuthenticatedIdentitiesRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedApelidosRoute: typeof AuthenticatedApelidosRoute
   AuthenticatedBrandingRoute: typeof AuthenticatedBrandingRoute
   AuthenticatedCamposDoSiteRoute: typeof AuthenticatedCamposDoSiteRoute
   AuthenticatedCamposPersonalizadosRoute: typeof AuthenticatedCamposPersonalizadosRoute
@@ -355,6 +375,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedApelidosRoute: AuthenticatedApelidosRoute,
   AuthenticatedBrandingRoute: AuthenticatedBrandingRoute,
   AuthenticatedCamposDoSiteRoute: AuthenticatedCamposDoSiteRoute,
   AuthenticatedCamposPersonalizadosRoute:
