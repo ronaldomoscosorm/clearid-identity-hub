@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useDefaultSiteId } from "@/lib/argus-client";
+import { typeOf } from "@/lib/custom-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -82,14 +83,6 @@ const EMPTY_FORM: FormState = {
   rangeMax: "",
   options: "",
 };
-
-function typeOf(t?: string | null): "number" | "date" | "list" | "text" {
-  const s = (t ?? "").toLowerCase();
-  if (/(number|numeric|int|decimal|float)/.test(s)) return "number";
-  if (/date|time/.test(s)) return "date";
-  if (/(list|enum|option|select)/.test(s)) return "list";
-  return "text";
-}
 
 function langFromJson(v: Json | null | undefined): MultiLang {
   const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;

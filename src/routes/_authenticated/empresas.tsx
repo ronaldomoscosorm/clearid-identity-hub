@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw, Pencil, Trash2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { useDefaultSiteId } from "@/lib/argus-client";
+import { typeOf, pickLang, optionsOf } from "@/lib/custom-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,14 @@ export const Route = createFileRoute("/_authenticated/empresas")({
 
 type Company = Database["public"]["Tables"]["companies"]["Row"];
 
+type SiteField = {
+  id: string;
+  is_required: boolean;
+  value_range: Json | null;
+  display_name_override: Json | null;
+  definition: { custom_field_name: string; custom_field_type: string | null } | null;
+};
+
 type FormState = {
   name: string;
   legal_name: string;
@@ -80,6 +89,10 @@ function toForm(c: Company): FormState {
   };
 }
 
+function fieldLabel(sf: SiteField): string {
+  return pickLang(sf.display_name_override) || sf.definition?.custom_field_name || "Campo";
+}
+
 function EmpresasPage() {
   const siteId = useDefaultSiteId();
   const qc = useQueryClient();
@@ -87,6 +100,7 @@ function EmpresasPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [toDelete, setToDelete] = useState<Company | null>(null);
 
   const query = useQuery({
@@ -101,6 +115,26 @@ function EmpresasPage() {
     enabled: Boolean(siteId),
   });
 
+  const siteFieldsQuery = useQuery({
+    queryKey: ["site-custom-fields-active", siteId],
+    queryFn: async (): Promise<SiteField[]> => {
+      const { data, error } = await supabase
+        .from("site_custom_fields")
+        .select(
+          "id, is_required, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type)",
+        )
+        .eq("site_id", siteId as string)
+        .eq("is_active", true)
+        .order("display_index", { ascending: true, nullsFirst: false })
+        .returns<SiteField[]>();
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    enabled: Boolean(siteId),
+  });
+
+  const siteFields = siteFieldsQuery.data ?? [];
+
   const upsert = useMutation({
     mutationFn: async (values: FormState) => {
       const payload = {
@@ -110,13 +144,31 @@ function EmpresasPage() {
         description: values.description.trim() || null,
         status: values.status,
       };
+
+      let companyId = editing?.id;
       if (editing) {
         const { error } = await supabase.from("companies").update(payload).eq("id", editing.id);
         if (error) throw new Error(error.message);
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("companies")
-          .insert({ ...payload, site_id: siteId as string });
+          .insert({ ...payload, site_id: siteId as string })
+          .select("id")
+          .single();
+        if (error) throw new Error(error.message);
+        companyId = data.id;
+      }
+
+      // Persiste os campos personalizados da empresa.
+      if (companyId && siteFields.length) {
+        const rows = siteFields.map((sf) => ({
+          company_id: companyId as string,
+          site_custom_field_id: sf.id,
+          value: customValues[sf.id]?.trim() ? customValues[sf.id].trim() : null,
+        }));
+        const { error } = await supabase
+          .from("company_custom_fields")
+          .upsert(rows, { onConflict: "company_id,site_custom_field_id" });
         if (error) throw new Error(error.message);
       }
     },
@@ -144,21 +196,38 @@ function EmpresasPage() {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setCustomValues({});
     setDialogOpen(true);
   };
-  const openEdit = (c: Company) => {
+
+  const openEdit = async (c: Company) => {
     setEditing(c);
     setForm(toForm(c));
+    setCustomValues({});
     setDialogOpen(true);
+    const { data } = await supabase
+      .from("company_custom_fields")
+      .select("site_custom_field_id, value")
+      .eq("company_id", c.id);
+    setCustomValues(
+      Object.fromEntries((data ?? []).map((r) => [r.site_custom_field_id, r.value ?? ""])),
+    );
   };
+
   const submit = () => {
     if (!form.name.trim()) {
       toast.error("Informe o nome da empresa");
       return;
     }
+    const missing = siteFields.find((sf) => sf.is_required && !customValues[sf.id]?.trim());
+    if (missing) {
+      toast.error(`Campo obrigatório: ${fieldLabel(missing)}`);
+      return;
+    }
     upsert.mutate(form);
   };
 
+  const setCV = (id: string, v: string) => setCustomValues((c) => ({ ...c, [id]: v }));
   const items = query.data ?? [];
 
   return (
@@ -263,7 +332,7 @@ function EmpresasPage() {
 
       {/* Dialog criar/editar */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
@@ -327,6 +396,46 @@ function EmpresasPage() {
                 rows={3}
               />
             </div>
+
+            {/* Campos personalizados do site */}
+            {siteFields.length > 0 && (
+              <div className="space-y-4 border-t pt-4">
+                <p className="text-sm font-medium text-foreground">Campos personalizados</p>
+                {siteFields.map((sf) => {
+                  const kind = typeOf(sf.definition?.custom_field_type);
+                  const value = customValues[sf.id] ?? "";
+                  const label = fieldLabel(sf);
+                  return (
+                    <div key={sf.id} className="space-y-2">
+                      <Label>
+                        {label}
+                        {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
+                      </Label>
+                      {kind === "list" ? (
+                        <Select value={value} onValueChange={(v) => setCV(sf.id, v)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {optionsOf(sf.value_range).map((opt) => (
+                              <SelectItem key={opt} value={opt}>
+                                {opt}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
+                          value={value}
+                          onChange={(e) => setCV(sf.id, e.target.value)}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
