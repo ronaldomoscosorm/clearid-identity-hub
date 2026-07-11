@@ -1,8 +1,9 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
@@ -84,7 +85,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const branding = useBranding();
   useApplyBranding();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    queryClient.clear();
+    navigate({ to: "/login" });
+  };
 
   // Invalidate page-level queries, but keep shell-owned queries (sites
   // list, env/diagnostics) untouched so the top menu doesn't flicker
@@ -229,6 +237,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </DropdownMenuContent>
               </DropdownMenu>
               <EnvBadge env={env} />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 font-normal"
+                title="Sair"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs">Sair</span>
+              </Button>
             </div>
           </header>
 
