@@ -1,18 +1,23 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 
-// Temporariamente desativado: não exibir a tela de login por enquanto.
-// Religar quando o login voltar a ser exigido (usuários criados no Supabase Auth).
-const REQUIRE_AUTH = false;
-
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
-  beforeLoad: async ({ location }) => {
-    if (!REQUIRE_AUTH) return;
+  // Conexão com o Supabase feita nos bastidores: cria uma sessão anônima
+  // (authenticated) sem exibir tela de login. Necessário para o RLS liberar
+  // as tabelas. Requer 'Anonymous sign-ins' habilitado no projeto Supabase.
+  beforeLoad: async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
-      throw redirect({ to: "/login", search: { redirect: location.href } });
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) {
+        console.error(
+          "[auth] Não foi possível criar sessão anônima no Supabase. " +
+            "Habilite 'Anonymous sign-ins' em Authentication → Providers. Detalhe:",
+          error.message,
+        );
+      }
     }
   },
   component: () => (
