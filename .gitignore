@@ -16,6 +16,14 @@ dist-ssr
 .nitro
 *.local
 
+# Env (contém segredos — nunca versionar). Use .env.example como referência.
+.env
+.env.*
+!.env.example
+
+# Supabase CLI (temporários)
+supabase/.temp/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
