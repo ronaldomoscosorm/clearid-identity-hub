@@ -39,183 +39,326 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          legal_name: string | null
+          name: string
+          site_id: string
+          status: string
+          tax_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          legal_name?: string | null
+          name: string
+          site_id: string
+          status?: string
+          tax_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          legal_name?: string | null
+          name?: string
+          site_id?: string
+          status?: string
+          tax_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      company_custom_fields: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          site_custom_field_id: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          site_custom_field_id: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          site_custom_field_id?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_custom_fields_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_custom_fields_site_custom_field_id_fkey"
+            columns: ["site_custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "site_custom_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_field_definitions: {
         Row: {
           created_at: string
           custom_field_name: string
           custom_field_type: string | null
-          display_index: number | null
-          display_name: string | null
+          display_name: Json
           etag: string | null
           id: string
           is_deleted: boolean
           is_read_only: boolean
-          section_name: string | null
           synchronization_enabled: boolean
           updated_at: string
-          user_id: string
         }
         Insert: {
           created_at?: string
           custom_field_name: string
           custom_field_type?: string | null
-          display_index?: number | null
-          display_name?: string | null
+          display_name?: Json
           etag?: string | null
           id?: string
           is_deleted?: boolean
           is_read_only?: boolean
-          section_name?: string | null
           synchronization_enabled?: boolean
           updated_at?: string
-          user_id?: string
         }
         Update: {
           created_at?: string
           custom_field_name?: string
           custom_field_type?: string | null
-          display_index?: number | null
-          display_name?: string | null
+          display_name?: Json
           etag?: string | null
           id?: string
           is_deleted?: boolean
           is_read_only?: boolean
-          section_name?: string | null
           synchronization_enabled?: boolean
           updated_at?: string
-          user_id?: string
         }
         Relationships: []
       }
       identities: {
         Row: {
           account_id: string | null
-          company_data: Json | null
+          company_approvers: Json | null
+          company_department_name: string | null
+          company_job_title: string | null
+          company_name: string | null
+          company_site_id: string | null
+          company_supervisor_name: string | null
+          company_worker_type_code: string | null
+          company_worker_type_desc: string | null
           country_code: string | null
           created_at: string
+          created_by: string | null
           creation_date_utc: string | null
+          creation_on_behalf: string | null
           culture: string | null
           description: string | null
           display_name: string | null
           email: string | null
           etag: string | null
-          external_id: string | null
           first_name: string
+          has_licensed_vehicles: boolean | null
+          has_vehicles: boolean | null
           id: string
           identity_id: string | null
           identity_type: string | null
+          is_deleted: boolean
           last_modification_date_utc: string | null
+          last_modified_by: string | null
           last_name: string
           middle_name: string | null
-          picture: Json | null
-          private_data: Json | null
-          score: number | null
-          site_id: string | null
+          ordinal: number | null
+          private_birthday: string | null
+          private_city_of_residence: string | null
+          private_employee_number: string | null
+          private_phone_primary: string | null
+          private_phone_secondary: string | null
+          private_picture_blob_name: string | null
+          private_secondary_email: string | null
+          private_state_of_residence: string | null
+          private_zip_code: string | null
           status: string
-          system_data: Json | null
+          system_access_permission_level: number | null
+          system_activation_date_utc: string | null
+          system_antipassback_exemption: boolean | null
+          system_can_escort: boolean | null
+          system_custom_fields: Json | null
+          system_expiration_date_utc: string | null
+          system_external_id: string | null
+          system_external_sync_source_id: string | null
+          system_external_sync_time_utc: string | null
+          system_has_extended_time: boolean | null
+          system_horizon_id: string | null
+          system_provisioning_attributes: Json | null
+          system_resource_filters: Json | null
+          system_trigger_code: number | null
           updated_at: string
-          user_id: string
-          worker_type_code: string | null
         }
         Insert: {
           account_id?: string | null
-          company_data?: Json | null
+          company_approvers?: Json | null
+          company_department_name?: string | null
+          company_job_title?: string | null
+          company_name?: string | null
+          company_site_id?: string | null
+          company_supervisor_name?: string | null
+          company_worker_type_code?: string | null
+          company_worker_type_desc?: string | null
           country_code?: string | null
           created_at?: string
+          created_by?: string | null
           creation_date_utc?: string | null
+          creation_on_behalf?: string | null
           culture?: string | null
           description?: string | null
           display_name?: string | null
           email?: string | null
           etag?: string | null
-          external_id?: string | null
           first_name: string
+          has_licensed_vehicles?: boolean | null
+          has_vehicles?: boolean | null
           id?: string
           identity_id?: string | null
           identity_type?: string | null
+          is_deleted?: boolean
           last_modification_date_utc?: string | null
+          last_modified_by?: string | null
           last_name: string
           middle_name?: string | null
-          picture?: Json | null
-          private_data?: Json | null
-          score?: number | null
-          site_id?: string | null
+          ordinal?: number | null
+          private_birthday?: string | null
+          private_city_of_residence?: string | null
+          private_employee_number?: string | null
+          private_phone_primary?: string | null
+          private_phone_secondary?: string | null
+          private_picture_blob_name?: string | null
+          private_secondary_email?: string | null
+          private_state_of_residence?: string | null
+          private_zip_code?: string | null
           status?: string
-          system_data?: Json | null
+          system_access_permission_level?: number | null
+          system_activation_date_utc?: string | null
+          system_antipassback_exemption?: boolean | null
+          system_can_escort?: boolean | null
+          system_custom_fields?: Json | null
+          system_expiration_date_utc?: string | null
+          system_external_id?: string | null
+          system_external_sync_source_id?: string | null
+          system_external_sync_time_utc?: string | null
+          system_has_extended_time?: boolean | null
+          system_horizon_id?: string | null
+          system_provisioning_attributes?: Json | null
+          system_resource_filters?: Json | null
+          system_trigger_code?: number | null
           updated_at?: string
-          user_id?: string
-          worker_type_code?: string | null
         }
         Update: {
           account_id?: string | null
-          company_data?: Json | null
+          company_approvers?: Json | null
+          company_department_name?: string | null
+          company_job_title?: string | null
+          company_name?: string | null
+          company_site_id?: string | null
+          company_supervisor_name?: string | null
+          company_worker_type_code?: string | null
+          company_worker_type_desc?: string | null
           country_code?: string | null
           created_at?: string
+          created_by?: string | null
           creation_date_utc?: string | null
+          creation_on_behalf?: string | null
           culture?: string | null
           description?: string | null
           display_name?: string | null
           email?: string | null
           etag?: string | null
-          external_id?: string | null
           first_name?: string
+          has_licensed_vehicles?: boolean | null
+          has_vehicles?: boolean | null
           id?: string
           identity_id?: string | null
           identity_type?: string | null
+          is_deleted?: boolean
           last_modification_date_utc?: string | null
+          last_modified_by?: string | null
           last_name?: string
           middle_name?: string | null
-          picture?: Json | null
-          private_data?: Json | null
-          score?: number | null
-          site_id?: string | null
+          ordinal?: number | null
+          private_birthday?: string | null
+          private_city_of_residence?: string | null
+          private_employee_number?: string | null
+          private_phone_primary?: string | null
+          private_phone_secondary?: string | null
+          private_picture_blob_name?: string | null
+          private_secondary_email?: string | null
+          private_state_of_residence?: string | null
+          private_zip_code?: string | null
           status?: string
-          system_data?: Json | null
+          system_access_permission_level?: number | null
+          system_activation_date_utc?: string | null
+          system_antipassback_exemption?: boolean | null
+          system_can_escort?: boolean | null
+          system_custom_fields?: Json | null
+          system_expiration_date_utc?: string | null
+          system_external_id?: string | null
+          system_external_sync_source_id?: string | null
+          system_external_sync_time_utc?: string | null
+          system_has_extended_time?: boolean | null
+          system_horizon_id?: string | null
+          system_provisioning_attributes?: Json | null
+          system_resource_filters?: Json | null
+          system_trigger_code?: number | null
           updated_at?: string
-          user_id?: string
-          worker_type_code?: string | null
         }
         Relationships: []
       }
       identity_custom_fields: {
         Row: {
           created_at: string
-          custom_field_name: string
-          custom_field_value: string | null
-          definition_id: string | null
           id: string
           identity_id: string
+          site_custom_field_id: string
           updated_at: string
-          user_id: string
+          value: string | null
         }
         Insert: {
           created_at?: string
-          custom_field_name: string
-          custom_field_value?: string | null
-          definition_id?: string | null
           id?: string
           identity_id: string
+          site_custom_field_id: string
           updated_at?: string
-          user_id?: string
+          value?: string | null
         }
         Update: {
           created_at?: string
-          custom_field_name?: string
-          custom_field_value?: string | null
-          definition_id?: string | null
           id?: string
           identity_id?: string
+          site_custom_field_id?: string
           updated_at?: string
-          user_id?: string
+          value?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "identity_custom_fields_definition_id_fkey"
-            columns: ["definition_id"]
-            isOneToOne: false
-            referencedRelation: "custom_field_definitions"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "identity_custom_fields_identity_id_fkey"
             columns: ["identity_id"]
@@ -223,7 +366,44 @@ export type Database = {
             referencedRelation: "identities"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "identity_custom_fields_site_custom_field_id_fkey"
+            columns: ["site_custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "site_custom_fields"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      identity_field_labels: {
+        Row: {
+          alias: Json
+          created_at: string
+          display_index: number | null
+          field_key: string
+          id: string
+          is_visible: boolean
+          updated_at: string
+        }
+        Insert: {
+          alias?: Json
+          created_at?: string
+          display_index?: number | null
+          field_key: string
+          id?: string
+          is_visible?: boolean
+          updated_at?: string
+        }
+        Update: {
+          alias?: Json
+          created_at?: string
+          display_index?: number | null
+          field_key?: string
+          id?: string
+          is_visible?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       settings: {
         Row: {
@@ -275,6 +455,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      site_custom_fields: {
+        Row: {
+          created_at: string
+          definition_id: string
+          display_index: number | null
+          display_name_override: Json
+          id: string
+          is_active: boolean
+          is_required: boolean
+          site_id: string
+          updated_at: string
+          value_range: Json | null
+        }
+        Insert: {
+          created_at?: string
+          definition_id: string
+          display_index?: number | null
+          display_name_override?: Json
+          id?: string
+          is_active?: boolean
+          is_required?: boolean
+          site_id: string
+          updated_at?: string
+          value_range?: Json | null
+        }
+        Update: {
+          created_at?: string
+          definition_id?: string
+          display_index?: number | null
+          display_name_override?: Json
+          id?: string
+          is_active?: boolean
+          is_required?: boolean
+          site_id?: string
+          updated_at?: string
+          value_range?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_custom_fields_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "custom_field_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
