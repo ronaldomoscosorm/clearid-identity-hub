@@ -53,7 +53,14 @@ function NewIdentity() {
     },
     onError: (e) => {
       const err = e as ArgusApiError;
-      toast.error(err.message, { description: err.traceId ? `TraceId: ${err.traceId}` : undefined });
+      const hint =
+        err.status === 400
+          ? "Causa comum: já existe uma identidade com este e-mail."
+          : undefined;
+      const description = [hint, err.traceId ? `TraceId: ${err.traceId}` : undefined]
+        .filter(Boolean)
+        .join(" · ");
+      toast.error(err.message, { description: description || undefined });
     },
   });
 
