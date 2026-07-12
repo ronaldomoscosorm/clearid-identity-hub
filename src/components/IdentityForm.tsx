@@ -150,6 +150,7 @@ export function IdentityForm({
           "id, is_required, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type)",
         )
         .eq("site_id", siteId)
+        .eq("entity_type", "identity")
         .eq("worker_type_id", workerTypeId)
         .eq("is_active", true)
         .order("display_index", { ascending: true, nullsFirst: false })

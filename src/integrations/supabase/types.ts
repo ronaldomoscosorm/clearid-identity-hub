@@ -462,39 +462,42 @@ export type Database = {
           definition_id: string
           display_index: number | null
           display_name_override: Json
+          entity_type: string
           id: string
           is_active: boolean
           is_required: boolean
           site_id: string
           updated_at: string
           value_range: Json | null
-          worker_type_id: string
+          worker_type_id: string | null
         }
         Insert: {
           created_at?: string
           definition_id: string
           display_index?: number | null
           display_name_override?: Json
+          entity_type?: string
           id?: string
           is_active?: boolean
           is_required?: boolean
           site_id: string
           updated_at?: string
           value_range?: Json | null
-          worker_type_id: string
+          worker_type_id?: string | null
         }
         Update: {
           created_at?: string
           definition_id?: string
           display_index?: number | null
           display_name_override?: Json
+          entity_type?: string
           id?: string
           is_active?: boolean
           is_required?: boolean
           site_id?: string
           updated_at?: string
           value_range?: Json | null
-          worker_type_id?: string
+          worker_type_id?: string | null
         }
         Relationships: [
           {
