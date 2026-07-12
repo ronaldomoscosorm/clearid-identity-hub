@@ -468,6 +468,7 @@ export type Database = {
           site_id: string
           updated_at: string
           value_range: Json | null
+          worker_type_id: string
         }
         Insert: {
           created_at?: string
@@ -480,6 +481,7 @@ export type Database = {
           site_id: string
           updated_at?: string
           value_range?: Json | null
+          worker_type_id: string
         }
         Update: {
           created_at?: string
@@ -492,6 +494,7 @@ export type Database = {
           site_id?: string
           updated_at?: string
           value_range?: Json | null
+          worker_type_id?: string
         }
         Relationships: [
           {
@@ -501,7 +504,47 @@ export type Database = {
             referencedRelation: "custom_field_definitions"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "site_custom_fields_worker_type_id_fkey"
+            columns: ["worker_type_id"]
+            isOneToOne: false
+            referencedRelation: "worker_types"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      worker_types: {
+        Row: {
+          argus_worker_type_code: string | null
+          code: string
+          created_at: string
+          display_index: number | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          argus_worker_type_code?: string | null
+          code: string
+          created_at?: string
+          display_index?: number | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          argus_worker_type_code?: string | null
+          code?: string
+          created_at?: string
+          display_index?: number | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

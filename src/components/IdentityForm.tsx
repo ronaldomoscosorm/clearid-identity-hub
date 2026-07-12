@@ -6,6 +6,9 @@ import { ptBR } from "date-fns/locale";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIdentityFieldLabels } from "@/lib/identity-labels";
+import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
+import { typeOf as siteFieldKind, pickLang, optionsOf } from "@/lib/custom-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +62,7 @@ export function IdentityForm({
   const [email, setEmail] = useState(initial?.email ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
   const [workerTypeCode, setWorkerTypeCode] = useState<string>(initial?.workerTypeCode ?? "");
+  const [workerTypeId, setWorkerTypeId] = useState<string>("");
   const defaultSiteId = useDefaultSiteId();
   const [siteId, setSiteId] = useState<string>(initial?.siteId ?? defaultSiteId ?? "");
   useEffect(() => {
@@ -105,6 +109,59 @@ export function IdentityForm({
     });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { alias } = useIdentityFieldLabels();
+
+  // Tipos de trabalhador (Supabase) → mapeados para o workerTypeCode do Argus.
+  const workerTypesQuery = useQuery({
+    queryKey: ["worker-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("worker_types")
+        .select("*")
+        .eq("is_active", true)
+        .order("display_index", { ascending: true, nullsFirst: false });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const workerTypes = workerTypesQuery.data ?? [];
+
+  // Na edição, pré-seleciona o tipo cujo código Argus bate com o inicial.
+  useEffect(() => {
+    if (workerTypeId || !initial?.workerTypeCode || !workerTypes.length) return;
+    const match = workerTypes.find((w) => w.argus_worker_type_code === initial.workerTypeCode);
+    if (match) setWorkerTypeId(match.id);
+  }, [workerTypes, initial?.workerTypeCode, workerTypeId]);
+
+  // Campos personalizados do site para o tipo de trabalhador selecionado.
+  type SiteFieldLite = {
+    id: string;
+    is_required: boolean;
+    value_range: Json | null;
+    display_name_override: Json | null;
+    definition: { custom_field_name: string; custom_field_type: string | null } | null;
+  };
+  const siteFieldsQuery = useQuery({
+    queryKey: ["identity-site-fields", siteId, workerTypeId],
+    queryFn: async (): Promise<SiteFieldLite[]> => {
+      const { data, error } = await supabase
+        .from("site_custom_fields")
+        .select(
+          "id, is_required, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type)",
+        )
+        .eq("site_id", siteId)
+        .eq("worker_type_id", workerTypeId)
+        .eq("is_active", true)
+        .order("display_index", { ascending: true, nullsFirst: false })
+        .returns<SiteFieldLite[]>();
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    enabled: Boolean(siteId && workerTypeId),
+  });
+  const siteFields = siteFieldsQuery.data ?? [];
+  const siteFieldLabel = (sf: SiteFieldLite) =>
+    pickLang(sf.display_name_override) || sf.definition?.custom_field_name || "Campo";
 
   const setField = (name: string, value: string) =>
     setCustomFields((prev) => ({ ...prev, [name]: value }));
@@ -178,6 +235,11 @@ export function IdentityForm({
     }
     if (!workerTypeCode) {
       out.workerTypeCode = "Selecione o tipo do trabalhador";
+    }
+    for (const sf of siteFields) {
+      if (sf.is_required && sf.definition && isBlank(customFields[sf.definition.custom_field_name])) {
+        out[`sf-${sf.id}`] = "Campo obrigatório";
+      }
     }
     if (Object.keys(out).length) {
       setErrors(out);
@@ -269,13 +331,23 @@ export function IdentityForm({
           </div>
           <div className="space-y-2">
             <Label>{alias("company_worker_type_code", "Tipo do Trabalhador")}</Label>
-            <Select value={workerTypeCode} onValueChange={setWorkerTypeCode}>
+            <Select
+              value={workerTypeId}
+              onValueChange={(id) => {
+                setWorkerTypeId(id);
+                const wt = workerTypes.find((w) => w.id === id);
+                setWorkerTypeCode(wt?.argus_worker_type_code ?? "");
+              }}
+            >
               <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
                 <SelectValue placeholder="Selecione o tipo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Terceiros">Terceiros</SelectItem>
-                <SelectItem value="Colaborador">Colaborador</SelectItem>
+                {workerTypes.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {w.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             {errors.workerTypeCode && (
@@ -284,6 +356,53 @@ export function IdentityForm({
           </div>
         </CardContent>
       </Card>
+
+      {workerTypeId && siteFields.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Campos personalizados do site</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {siteFields.map((sf) => {
+              const name = sf.definition?.custom_field_name ?? sf.id;
+              const kind = siteFieldKind(sf.definition?.custom_field_type);
+              const value = customFields[name] ?? "";
+              const err = errors[`sf-${sf.id}`];
+              return (
+                <div key={sf.id} className="space-y-1.5">
+                  <Label htmlFor={`sf-${sf.id}`} className="text-xs text-muted-foreground">
+                    {siteFieldLabel(sf)}
+                    {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
+                  </Label>
+                  {kind === "list" ? (
+                    <Select value={value} onValueChange={(v) => setField(name, v)}>
+                      <SelectTrigger id={`sf-${sf.id}`} className={cn(err && "border-destructive")}>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {optionsOf(sf.value_range).map((opt) => (
+                          <SelectItem key={opt} value={opt}>
+                            {opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id={`sf-${sf.id}`}
+                      type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
+                      value={value}
+                      onChange={(e) => setField(name, e.target.value)}
+                      className={cn(err && "border-destructive")}
+                    />
+                  )}
+                  {err && <p className="text-xs text-destructive">{err}</p>}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {showCustomFields && (
       <Card>

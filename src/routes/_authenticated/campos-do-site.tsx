@@ -56,14 +56,17 @@ export const Route = createFileRoute("/_authenticated/campos-do-site")({
 });
 
 type Definition = Database["public"]["Tables"]["custom_field_definitions"]["Row"];
+type WorkerType = Database["public"]["Tables"]["worker_types"]["Row"];
 type SiteFieldRow = Database["public"]["Tables"]["site_custom_fields"]["Row"] & {
   definition: Pick<Definition, "custom_field_name" | "custom_field_type" | "display_name"> | null;
+  worker_type: Pick<WorkerType, "name"> | null;
 };
 
 type MultiLang = { "pt-BR": string; "en-US": string };
 
 type FormState = {
   definition_id: string;
+  worker_type_id: string;
   is_required: boolean;
   is_active: boolean;
   display_index: string;
@@ -76,6 +79,7 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   definition_id: "",
+  worker_type_id: "",
   is_required: false,
   is_active: true,
   display_index: "",
@@ -140,7 +144,7 @@ function CamposDoSitePage() {
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
-          "*, definition:custom_field_definitions(custom_field_name, custom_field_type, display_name)",
+          "*, definition:custom_field_definitions(custom_field_name, custom_field_type, display_name), worker_type:worker_types(name)",
         )
         .eq("site_id", siteId as string)
         .order("display_index", { ascending: true, nullsFirst: false })
@@ -150,6 +154,20 @@ function CamposDoSitePage() {
     },
     enabled: Boolean(siteId),
   });
+
+  const workerTypesQuery = useQuery({
+    queryKey: ["worker-types"],
+    queryFn: async (): Promise<WorkerType[]> => {
+      const { data, error } = await supabase
+        .from("worker_types")
+        .select("*")
+        .eq("is_active", true)
+        .order("display_index", { ascending: true, nullsFirst: false });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+  });
+  const workerTypes = workerTypesQuery.data ?? [];
 
   const defsQuery = useQuery({
     queryKey: ["custom-field-definitions", siteId],
@@ -171,13 +189,23 @@ function CamposDoSitePage() {
     },
   });
 
-  const usedIds = useMemo(
-    () => new Set((fieldsQuery.data ?? []).map((f) => f.definition_id)),
-    [fieldsQuery.data],
+  // Um campo pode ser usado uma vez por tipo de trabalhador. Filtra os já
+  // usados para o tipo selecionado no formulário.
+  const usedIdsForType = useMemo(
+    () =>
+      new Set(
+        (fieldsQuery.data ?? [])
+          .filter((f) => f.worker_type_id === form.worker_type_id)
+          .map((f) => f.definition_id),
+      ),
+    [fieldsQuery.data, form.worker_type_id],
   );
   const availableDefs = useMemo(
-    () => (defsQuery.data ?? []).filter((d) => editing?.definition_id === d.id || !usedIds.has(d.id)),
-    [defsQuery.data, usedIds, editing],
+    () =>
+      (defsQuery.data ?? []).filter(
+        (d) => editing?.definition_id === d.id || !usedIdsForType.has(d.id),
+      ),
+    [defsQuery.data, usedIdsForType, editing],
   );
 
   const selectedDef = useMemo(
@@ -191,6 +219,7 @@ function CamposDoSitePage() {
       const payload = {
         site_id: siteId as string,
         definition_id: f.definition_id,
+        worker_type_id: f.worker_type_id,
         is_required: f.is_required,
         is_active: f.is_active,
         display_index: f.display_index.trim() ? Number(f.display_index) : null,
@@ -238,6 +267,7 @@ function CamposDoSitePage() {
     setEditing(row);
     setForm({
       definition_id: row.definition_id,
+      worker_type_id: row.worker_type_id,
       is_required: row.is_required,
       is_active: row.is_active,
       display_index: row.display_index == null ? "" : String(row.display_index),
@@ -247,6 +277,10 @@ function CamposDoSitePage() {
     setDialogOpen(true);
   };
   const submit = () => {
+    if (!form.worker_type_id) {
+      toast.error("Selecione o tipo do trabalhador");
+      return;
+    }
     if (!form.definition_id) {
       toast.error("Selecione um campo");
       return;
@@ -317,6 +351,7 @@ function CamposDoSitePage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Campo</TableHead>
+                    <TableHead>Trabalhador</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Exibição (pt-BR)</TableHead>
                     <TableHead>Obrigatório</TableHead>
@@ -329,6 +364,9 @@ function CamposDoSitePage() {
                     <TableRow key={row.id}>
                       <TableCell className="font-medium">
                         {row.definition?.custom_field_name ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{row.worker_type?.name ?? "—"}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {row.definition?.custom_field_type ?? "—"}
@@ -385,11 +423,30 @@ function CamposDoSitePage() {
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
+              <Label>Tipo do trabalhador *</Label>
+              <Select
+                value={form.worker_type_id}
+                onValueChange={(v) => setForm((f) => ({ ...f, worker_type_id: v, definition_id: "" }))}
+                disabled={Boolean(editing)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workerTypes.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Campo *</Label>
               <Select
                 value={form.definition_id}
                 onValueChange={(v) => setForm((f) => ({ ...f, definition_id: v }))}
-                disabled={Boolean(editing)}
+                disabled={Boolean(editing) || !form.worker_type_id}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um campo do catálogo" />
