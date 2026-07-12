@@ -339,7 +339,14 @@ export function IdentityForm({
         }
         cf[key] = iso;
       } else {
-        cf[key] = v ?? "";
+        const val = (v ?? "").trim();
+        if (!val) {
+          // Não envia string vazia (ClearID rejeita "" em tipos Date/Numeric/
+          // Boolean). Na edição preserva o clear apenas para campos já Vylor.
+          continue;
+        }
+        // Campo de data do site (input nativo → ISO): normaliza para yyyy-MM-dd.
+        cf[key] = /^\d{4}-\d{2}-\d{2}/.test(val) ? val.slice(0, 10) : val;
       }
     }
     if (Object.keys(cfErrors).length) {
