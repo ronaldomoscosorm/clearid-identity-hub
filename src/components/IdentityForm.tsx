@@ -96,7 +96,6 @@ export function IdentityForm({
   const [email, setEmail] = useState(initial?.email ?? "");
   const [displayName, setDisplayName] = useState(initial?.displayName ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
-  const [workerTypeCode, setWorkerTypeCode] = useState<string>(initial?.workerTypeCode ?? "");
   const [workerTypeId, setWorkerTypeId] = useState<string>("");
   const defaultSiteId = useDefaultSiteId();
   const [siteId, setSiteId] = useState<string>(initial?.siteId ?? defaultSiteId ?? "");
@@ -300,8 +299,15 @@ export function IdentityForm({
     if (!parsed.success) {
       for (const i of parsed.error.issues) out[i.path[0] as string] = i.message;
     }
-    if (!workerTypeCode) {
+    // O dropdown (workerTypeId) é a fonte da verdade; o código Argus é derivado
+    // dele no submit (evita ficar dessincronizado do estado ao carregar).
+    const effectiveWorkerTypeCode =
+      workerTypes.find((w) => w.id === workerTypeId)?.argus_worker_type_code ?? "";
+    if (!workerTypeId) {
       out.workerTypeCode = "Selecione o tipo do trabalhador";
+    } else if (!effectiveWorkerTypeCode) {
+      out.workerTypeCode =
+        "Tipo do trabalhador sem mapeamento para o ClearID (configure em worker_types).";
     }
     if (!siteId) {
       out.siteId = "Selecione um site";
@@ -381,7 +387,7 @@ export function IdentityForm({
       companyData: Object.keys(compExtra).length ? compExtra : undefined,
       customFields: cf,
       siteId: siteId || undefined,
-      workerTypeCode: workerTypeCode || undefined,
+      workerTypeCode: effectiveWorkerTypeCode || undefined,
     };
     onSubmit(payload as unknown as IdentityUpsert, siteFieldValues);
   };
@@ -408,11 +414,7 @@ export function IdentityForm({
           <div className="space-y-2 sm:max-w-sm">
             <Select
               value={workerTypeId}
-              onValueChange={(id) => {
-                setWorkerTypeId(id);
-                const wt = workerTypes.find((w) => w.id === id);
-                setWorkerTypeCode(wt?.argus_worker_type_code ?? "");
-              }}
+              onValueChange={(id) => setWorkerTypeId(id)}
             >
               <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
                 <SelectValue placeholder="Selecione o tipo" />
