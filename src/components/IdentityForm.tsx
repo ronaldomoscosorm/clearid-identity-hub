@@ -303,6 +303,9 @@ export function IdentityForm({
     if (!workerTypeCode) {
       out.workerTypeCode = "Selecione o tipo do trabalhador";
     }
+    if (!siteId) {
+      out.siteId = "Selecione um site";
+    }
     for (const sf of siteFields) {
       if (sf.is_required && sf.definition && isBlank(customFields[sf.definition.custom_field_name])) {
         out[`sf-${sf.id}`] = "Campo obrigatório";
@@ -390,6 +393,7 @@ export function IdentityForm({
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">
             {alias("company_worker_type_code", "Tipo do Trabalhador")}
+            <span className="ml-0.5 text-destructive">*</span>
           </CardTitle>
           {statusBadge}
         </CardHeader>
@@ -428,12 +432,18 @@ export function IdentityForm({
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {/* Obrigatórios — sempre exibidos (apelido apenas renomeia). */}
           <div className="space-y-2">
-            <Label htmlFor="firstName">{alias("first_name", "Nome")}</Label>
+            <Label htmlFor="firstName">
+              {alias("first_name", "Nome")}
+              <span className="ml-0.5 text-destructive">*</span>
+            </Label>
             <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
             {errors.firstName && <p className="text-xs text-destructive">{errors.firstName}</p>}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="lastName">{alias("last_name", "Sobrenome")}</Label>
+            <Label htmlFor="lastName">
+              {alias("last_name", "Sobrenome")}
+              <span className="ml-0.5 text-destructive">*</span>
+            </Label>
             <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
             {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
           </div>
@@ -447,14 +457,20 @@ export function IdentityForm({
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="email">{alias("email", "E-mail")}</Label>
+            <Label htmlFor="email">
+              {alias("email", "E-mail")}
+              <span className="ml-0.5 text-destructive">*</span>
+            </Label>
             <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
           </div>
           <div className="space-y-2">
-            <Label>{alias("company_site_id", "Site")}</Label>
+            <Label>
+              {alias("company_site_id", "Site")}
+              <span className="ml-0.5 text-destructive">*</span>
+            </Label>
             <Select value={siteId} onValueChange={setSiteId}>
-              <SelectTrigger>
+              <SelectTrigger className={cn(errors.siteId && "border-destructive")}>
                 <SelectValue placeholder={sitesQuery.isLoading ? "Carregando..." : "Selecione um site"} />
               </SelectTrigger>
               <SelectContent>
@@ -465,6 +481,7 @@ export function IdentityForm({
                 ))}
               </SelectContent>
             </Select>
+            {errors.siteId && <p className="text-xs text-destructive">{errors.siteId}</p>}
           </div>
           {!hasSiteFields && renderExtraFields("ident")}
         </CardContent>
