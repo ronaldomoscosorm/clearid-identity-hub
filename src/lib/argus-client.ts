@@ -355,6 +355,9 @@ function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
   assertWorkerTypeCode(data.workerTypeCode);
   return {
     ...data,
+    // Campos personalizados NÃO vão no create (o ClearID rejeita o formato dict
+    // aqui). São gravados após a criação via patchIdentityCustomFields.
+    customFields: undefined,
     siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
     workerTypeCode: data.workerTypeCode ?? undefined,
     companyData: {

@@ -20,6 +20,17 @@ function NewIdentity() {
       argusApi.createIdentity(vars.data),
     onSuccess: async (data, vars) => {
       toast.success("Identity criada");
+      // Grava os campos personalizados após a criação (endpoint dedicado).
+      const cf = Object.entries(vars.data.customFields ?? {})
+        .filter(([, v]) => (v ?? "").trim())
+        .map(([customFieldName, customFieldValue]) => ({ customFieldName, customFieldValue }));
+      if (cf.length) {
+        try {
+          await argusApi.patchIdentityCustomFields(data.identityId, cf);
+        } catch (e) {
+          toast.warning(`Identity criada, mas falhou ao gravar campos: ${(e as Error).message}`);
+        }
+      }
       await mirrorIdentities([data]);
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });
