@@ -19,17 +19,25 @@ function NewIdentity() {
     mutationFn: (vars: { data: IdentityUpsert; siteFieldValues: SiteFieldValue[] }) =>
       argusApi.createIdentity(vars.data),
     onSuccess: async (data, vars) => {
-      toast.success("Identity criada");
       // Grava os campos personalizados após a criação (endpoint dedicado).
       const cf = Object.entries(vars.data.customFields ?? {})
         .filter(([, v]) => (v ?? "").trim())
         .map(([customFieldName, customFieldValue]) => ({ customFieldName, customFieldValue }));
+      let customSaved = false;
       if (cf.length) {
         try {
           await argusApi.patchIdentityCustomFields(data.identityId, cf);
+          customSaved = true;
         } catch (e) {
-          toast.warning(`Identity criada, mas falhou ao gravar campos: ${(e as Error).message}`);
+          toast.warning(
+            `Identity criada — dados principais gravados, mas falhou ao gravar os customizáveis: ${(e as Error).message}`,
+          );
         }
+      }
+      if (cf.length === 0) {
+        toast.success("Identity criada — dados principais gravados");
+      } else if (customSaved) {
+        toast.success("Identity criada — dados principais e customizáveis gravados");
       }
       await mirrorIdentities([data]);
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);

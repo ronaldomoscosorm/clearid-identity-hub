@@ -68,7 +68,14 @@ function IdentityDetail() {
       siteFieldValues: SiteFieldValue[];
     }) => argusApi.updateIdentity(id, vars.data),
     onSuccess: async (updated, vars) => {
-      toast.success("Identity atualizada");
+      const hasCustom = Object.values(vars.data.customFields ?? {}).some((v) =>
+        (v ?? "").toString().trim(),
+      );
+      toast.success(
+        hasCustom
+          ? "Identity atualizada — dados principais e customizáveis gravados"
+          : "Identity atualizada — dados principais gravados",
+      );
       await mirrorIdentities([updated]);
       await saveIdentityCustomFields(id, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });
