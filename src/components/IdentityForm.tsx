@@ -50,7 +50,6 @@ type ExtraField = {
 const EXTRA_FIELDS: ExtraField[] = [
   // Identificação (top-level)
   { key: "middle_name", label: "Nome do meio", section: "ident", target: "top", argusKey: "middleName" },
-  { key: "display_name", label: "Nome de exibição", section: "ident", target: "top", argusKey: "displayName" },
   { key: "description", label: "Descrição", section: "ident", target: "top", argusKey: "description" },
   { key: "country_code", label: "País", section: "ident", target: "top", argusKey: "countryCode" },
   { key: "culture", label: "Idioma/Cultura", section: "ident", target: "top", argusKey: "culture" },
@@ -95,6 +94,7 @@ export function IdentityForm({
   const [firstName, setFirstName] = useState(initial?.firstName ?? "");
   const [lastName, setLastName] = useState(initial?.lastName ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
+  const [displayName, setDisplayName] = useState(initial?.displayName ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
   const [workerTypeCode, setWorkerTypeCode] = useState<string>(initial?.workerTypeCode ?? "");
   const [workerTypeId, setWorkerTypeId] = useState<string>("");
@@ -210,6 +210,8 @@ export function IdentityForm({
     enabled: Boolean(siteId && workerTypeId),
   });
   const siteFields = siteFieldsQuery.data ?? [];
+  // Havendo campos do site para o tipo, exibe apenas os obrigatórios + esses.
+  const hasSiteFields = siteFields.length > 0;
   const siteFieldLabel = (sf: SiteFieldLite) =>
     pickLang(sf.display_name_override) || sf.definition?.custom_field_name || "Campo";
 
@@ -364,6 +366,7 @@ export function IdentityForm({
     const payload: Record<string, unknown> = {
       ...parsedData,
       ...topExtra,
+      displayName: displayName.trim() || `${firstName} ${lastName}`.trim() || undefined,
       privateData: Object.keys(privExtra).length ? privExtra : undefined,
       companyData: Object.keys(compExtra).length ? compExtra : undefined,
       customFields: cf,
@@ -381,53 +384,17 @@ export function IdentityForm({
 
   return (
     <form onSubmit={submit} className="space-y-6">
+      {/* Tipo do trabalhador — primeira linha, isolado. Condiciona os campos
+          do site e customizáveis exibidos abaixo. */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="text-base">Identificação</CardTitle>
+          <CardTitle className="text-base">
+            {alias("company_worker_type_code", "Tipo do Trabalhador")}
+          </CardTitle>
           {statusBadge}
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          {isVisible("first_name") && (
-          <div className="space-y-2">
-            <Label htmlFor="firstName">{alias("first_name", "Nome")}</Label>
-            <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-            {errors.firstName && <p className="text-xs text-destructive">{errors.firstName}</p>}
-          </div>
-          )}
-          {isVisible("last_name") && (
-          <div className="space-y-2">
-            <Label htmlFor="lastName">{alias("last_name", "Sobrenome")}</Label>
-            <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-            {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
-          </div>
-          )}
-          {isVisible("email") && (
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="email">{alias("email", "E-mail")}</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
-          </div>
-          )}
-          {isVisible("company_site_id") && (
-          <div className="space-y-2">
-            <Label>{alias("company_site_id", "Site")}</Label>
-            <Select value={siteId} onValueChange={setSiteId}>
-              <SelectTrigger>
-                <SelectValue placeholder={sitesQuery.isLoading ? "Carregando..." : "Selecione um site"} />
-              </SelectTrigger>
-              <SelectContent>
-                {sites.map((s) => (
-                  <SelectItem key={s.siteId} value={s.siteId}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          )}
-          {isVisible("company_worker_type_code") && (
-          <div className="space-y-2">
-            <Label>{alias("company_worker_type_code", "Tipo do Trabalhador")}</Label>
+        <CardContent>
+          <div className="space-y-2 sm:max-w-sm">
             <Select
               value={workerTypeId}
               onValueChange={(id) => {
@@ -451,12 +418,59 @@ export function IdentityForm({
               <p className="text-xs text-destructive">{errors.workerTypeCode}</p>
             )}
           </div>
-          )}
-          {renderExtraFields("ident")}
         </CardContent>
       </Card>
 
-      {hasSection("personal") && (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Identificação</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          {/* Obrigatórios — sempre exibidos (apelido apenas renomeia). */}
+          <div className="space-y-2">
+            <Label htmlFor="firstName">{alias("first_name", "Nome")}</Label>
+            <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+            {errors.firstName && <p className="text-xs text-destructive">{errors.firstName}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="lastName">{alias("last_name", "Sobrenome")}</Label>
+            <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="displayName">{alias("display_name", "Nome de exibição")}</Label>
+            <Input
+              id="displayName"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Padrão: Nome + Sobrenome"
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="email">{alias("email", "E-mail")}</Label>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label>{alias("company_site_id", "Site")}</Label>
+            <Select value={siteId} onValueChange={setSiteId}>
+              <SelectTrigger>
+                <SelectValue placeholder={sitesQuery.isLoading ? "Carregando..." : "Selecione um site"} />
+              </SelectTrigger>
+              <SelectContent>
+                {sites.map((s) => (
+                  <SelectItem key={s.siteId} value={s.siteId}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {!hasSiteFields && renderExtraFields("ident")}
+        </CardContent>
+      </Card>
+
+      {!hasSiteFields && hasSection("personal") && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Dados pessoais</CardTitle>
@@ -467,7 +481,7 @@ export function IdentityForm({
         </Card>
       )}
 
-      {hasSection("company") && (
+      {!hasSiteFields && hasSection("company") && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Vínculo corporativo</CardTitle>

@@ -55,6 +55,8 @@ export const Route = createFileRoute("/_authenticated/campos-do-site")({
   component: CamposDoSitePage,
 });
 
+const ALL_WORKER_TYPES = "__ALL__";
+
 type Definition = Database["public"]["Tables"]["custom_field_definitions"]["Row"];
 type WorkerType = Database["public"]["Tables"]["worker_types"]["Row"];
 type SiteFieldRow = Database["public"]["Tables"]["site_custom_fields"]["Row"] & {
@@ -227,11 +229,10 @@ function CamposDoSitePage() {
 
   const upsert = useMutation({
     mutationFn: async (f: FormState) => {
-      const payload = {
+      const base = {
         site_id: siteId as string,
         entity_type: f.entity_type,
         definition_id: f.definition_id,
-        worker_type_id: f.entity_type === "identity" ? f.worker_type_id : null,
         is_required: f.is_required,
         is_active: f.is_active,
         display_index: f.display_index.trim() ? Number(f.display_index) : null,
@@ -241,11 +242,31 @@ function CamposDoSitePage() {
       if (editing) {
         const { error } = await supabase
           .from("site_custom_fields")
-          .update(payload)
+          .update({
+            ...base,
+            worker_type_id: f.entity_type === "identity" ? f.worker_type_id : null,
+          })
           .eq("id", editing.id);
         if (error) throw new Error(error.message);
+      } else if (f.entity_type === "identity" && f.worker_type_id === ALL_WORKER_TYPES) {
+        // Cria o campo para todos os tipos que ainda não o possuem.
+        const existing = new Set(
+          (fieldsQuery.data ?? [])
+            .filter((r) => r.entity_type === "identity" && r.definition_id === f.definition_id)
+            .map((r) => r.worker_type_id),
+        );
+        const rows = workerTypes
+          .filter((w) => !existing.has(w.id))
+          .map((w) => ({ ...base, worker_type_id: w.id }));
+        if (rows.length) {
+          const { error } = await supabase.from("site_custom_fields").insert(rows);
+          if (error) throw new Error(error.message);
+        }
       } else {
-        const { error } = await supabase.from("site_custom_fields").insert(payload);
+        const { error } = await supabase.from("site_custom_fields").insert({
+          ...base,
+          worker_type_id: f.entity_type === "identity" ? f.worker_type_id : null,
+        });
         if (error) throw new Error(error.message);
       }
     },
@@ -473,6 +494,7 @@ function CamposDoSitePage() {
                     <SelectValue placeholder="Selecione o tipo" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={ALL_WORKER_TYPES}>Todos os tipos</SelectItem>
                     {workerTypes.map((w) => (
                       <SelectItem key={w.id} value={w.id}>
                         {w.name}
