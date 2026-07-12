@@ -46,8 +46,9 @@ function Settings() {
   });
 
   const teamsQuery = useQuery({
-    queryKey: ["argus", "teams"],
-    queryFn: () => argusApi.listTeams({ take: 200, allSites: true }),
+    // O endpoint /api/teams exige siteId — usa o site padrão (sem allSites).
+    queryKey: ["argus", "teams", siteId],
+    queryFn: () => argusApi.listTeams({ take: 200 }),
     staleTime: 60_000,
   });
 
