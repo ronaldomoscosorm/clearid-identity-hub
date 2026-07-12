@@ -29,33 +29,43 @@ function NewIdentity() {
       return argusApi.createIdentity(vars.data);
     },
     onSuccess: async (data, vars) => {
-      // Grava os campos personalizados após a criação (endpoint dedicado).
+      // Sem transação: cada etapa é gravada em separado. Rastreamos o resultado
+      // de cada uma (identity / customizáveis / regra) e notificamos o que
+      // deu certo e o que falhou.
+      const ok: string[] = ["dados principais"]; // etapa 1 (identity) já concluída aqui
+      const fail: string[] = [];
+
+      // Etapa 2 — campos personalizados (endpoint dedicado).
       const cf = Object.entries(vars.data.customFields ?? {})
         .filter(([, v]) => (v ?? "").trim())
         .map(([customFieldName, customFieldValue]) => ({ customFieldName, customFieldValue }));
-      let customSaved = false;
       if (cf.length) {
         try {
           await argusApi.patchIdentityCustomFields(data.identityId, cf);
-          customSaved = true;
+          ok.push("customizáveis");
         } catch (e) {
-          toast.warning(
-            `Identity criada — dados principais gravados, mas falhou ao gravar os customizáveis: ${(e as Error).message}`,
-          );
+          fail.push(`campos customizáveis (${(e as Error).message})`);
         }
       }
-      if (cf.length === 0) {
-        toast.success("Identity criada — dados principais gravados");
-      } else if (customSaved) {
-        toast.success("Identity criada — dados principais e customizáveis gravados");
-      }
-      // Se a identidade não tiver nenhuma regra, atribui a regra padrão.
+
+      // Etapa 3 — regra padrão (se não houver nenhuma).
       try {
         const rule = await argusApi.ensureDefaultRule(data.identityId);
-        if (rule.assigned) toast.info(`Regra padrão atribuída: ${rule.ruleName ?? "regra"}`);
+        if (rule.assigned) ok.push(`regra padrão (${rule.ruleName ?? "regra"})`);
       } catch (e) {
-        console.error("[regra] falha ao atribuir regra padrão:", (e as Error).message);
+        fail.push(`regra padrão (${(e as Error).message})`);
       }
+
+      if (fail.length) {
+        toast.warning(`Identity criada com pendências. Gravado: ${ok.join(", ")}.`, {
+          description: `Falhou: ${fail.join("; ")}`,
+          duration: 12000,
+        });
+      } else {
+        toast.success(`Identity criada — gravado: ${ok.join(", ")}.`);
+      }
+
+      // Espelhamento no Supabase (best-effort, fora das 3 etapas do Argus).
       await mirrorIdentities([data]);
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });

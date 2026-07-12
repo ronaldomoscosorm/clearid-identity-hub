@@ -68,20 +68,29 @@ function IdentityDetail() {
       siteFieldValues: SiteFieldValue[];
     }) => argusApi.updateIdentity(id, vars.data),
     onSuccess: async (updated, vars) => {
+      // Na edição, identity + customizáveis vão no mesmo PUT (etapa única).
+      const ok: string[] = ["dados principais"];
+      const fail: string[] = [];
       const hasCustom = Object.values(vars.data.customFields ?? {}).some((v) =>
         (v ?? "").toString().trim(),
       );
-      toast.success(
-        hasCustom
-          ? "Identity atualizada — dados principais e customizáveis gravados"
-          : "Identity atualizada — dados principais gravados",
-      );
-      // Se a identidade não tiver nenhuma regra, atribui a regra padrão.
+      if (hasCustom) ok.push("customizáveis");
+
+      // Etapa — regra padrão (se não houver nenhuma).
       try {
         const rule = await argusApi.ensureDefaultRule(id);
-        if (rule.assigned) toast.info(`Regra padrão atribuída: ${rule.ruleName ?? "regra"}`);
+        if (rule.assigned) ok.push(`regra padrão (${rule.ruleName ?? "regra"})`);
       } catch (e) {
-        console.error("[regra] falha ao atribuir regra padrão:", (e as Error).message);
+        fail.push(`regra padrão (${(e as Error).message})`);
+      }
+
+      if (fail.length) {
+        toast.warning(`Identity atualizada com pendências. Gravado: ${ok.join(", ")}.`, {
+          description: `Falhou: ${fail.join("; ")}`,
+          duration: 12000,
+        });
+      } else {
+        toast.success(`Identity atualizada — gravado: ${ok.join(", ")}.`);
       }
       await mirrorIdentities([updated]);
       await saveIdentityCustomFields(id, vars.siteFieldValues);
