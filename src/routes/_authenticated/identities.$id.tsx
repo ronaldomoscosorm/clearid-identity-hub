@@ -68,13 +68,25 @@ function IdentityDetail() {
       siteFieldValues: SiteFieldValue[];
     }) => argusApi.updateIdentity(id, vars.data),
     onSuccess: async (updated, vars) => {
-      // Na edição, identity + customizáveis vão no mesmo PUT (etapa única).
       const ok: string[] = ["dados principais"];
       const fail: string[] = [];
-      const hasCustom = Object.values(vars.data.customFields ?? {}).some((v) =>
-        (v ?? "").toString().trim(),
-      );
-      if (hasCustom) ok.push("customizáveis");
+
+      // Etapa — campos personalizados via PATCH (isola erros de valor, ex.: CPF
+      // inválido, que não bloqueiam mais a atualização da identity).
+      const cf = Object.entries(vars.data.customFields ?? {})
+        .filter(([, v]) => (v ?? "").toString().trim())
+        .map(([customFieldName, customFieldValue]) => ({
+          customFieldName,
+          customFieldValue: String(customFieldValue),
+        }));
+      if (cf.length) {
+        try {
+          await argusApi.patchIdentityCustomFields(id, cf);
+          ok.push("customizáveis");
+        } catch (e) {
+          fail.push(`campos customizáveis (${(e as Error).message})`);
+        }
+      }
 
       // Etapa — regra padrão (se não houver nenhuma).
       try {

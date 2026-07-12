@@ -502,10 +502,24 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     });
   }
 
-  const systemData: Record<string, unknown> = { ...(data.systemData ?? {}) };
-  systemData.externalId = getClearIdExternalId(data);
-  const customFields = customFieldsToClearIdArray(data.customFields, data.systemData?.customFields);
-  if (customFields) systemData.customFields = customFields;
+  // systemData: preserva apenas campos editáveis não-nulos. Campos derivados/
+  // read-only (resourceFilters, horizonId, provisioning, sync) NÃO podem ser
+  // enviados no PUT — o ClearID rejeita com 400 (o resourceFilters é recalculado
+  // a partir de companyData.siteId). customFields vão via PATCH, não no PUT.
+  const READONLY_SYSTEM = new Set([
+    "resourceFilters",
+    "horizonId",
+    "provisioningAttributes",
+    "externalSyncSourceId",
+    "externalSyncTimeUtc",
+    "externalId",
+    "customFields",
+  ]);
+  const systemData: Record<string, unknown> = { externalId: getClearIdExternalId(data) };
+  for (const [k, v] of Object.entries((data.systemData ?? {}) as Record<string, unknown>)) {
+    if (READONLY_SYSTEM.has(k)) continue;
+    if (v !== null && v !== undefined) systemData[k] = v;
+  }
 
   const displayName =
     data.displayName ??
