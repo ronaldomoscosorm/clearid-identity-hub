@@ -39,6 +39,13 @@ function NewIdentity() {
       } else if (customSaved) {
         toast.success("Identity criada — dados principais e customizáveis gravados");
       }
+      // Se a identidade não tiver nenhuma regra, atribui a regra padrão.
+      try {
+        const rule = await argusApi.ensureDefaultRule(data.identityId);
+        if (rule.assigned) toast.info(`Regra padrão atribuída: ${rule.ruleName ?? "regra"}`);
+      } catch (e) {
+        console.error("[regra] falha ao atribuir regra padrão:", (e as Error).message);
+      }
       await mirrorIdentities([data]);
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });

@@ -878,6 +878,31 @@ export const argusApi = {
       }),
     }),
 
+  /** Regras (teams) vinculadas a uma identidade. */
+  getIdentityTeams: async (id: string): Promise<ClearIdTeamMember[]> => {
+    const data = await unwrap<{ teams?: ClearIdTeamMember[] } | ClearIdTeamMember[]>(
+      argusFetch(`/api/identities/${encodeURIComponent(id)}/teams`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.teams ?? [];
+  },
+
+  /**
+   * Garante que a identidade tenha ao menos uma regra: se não tiver nenhuma e
+   * houver uma regra padrão configurada, atribui a padrão.
+   */
+  ensureDefaultRule: async (
+    id: string,
+  ): Promise<{ assigned: boolean; ruleName?: string }> => {
+    const cfg = getConfig();
+    const ruleId = cfg.defaultRuleId;
+    if (!ruleId) return { assigned: false };
+    const teams = await argusApi.getIdentityTeams(id);
+    if (teams.length > 0) return { assigned: false };
+    await argusApi.addTeamMembers(ruleId, { identityIds: [id] });
+    return { assigned: true, ruleName: cfg.defaultRuleName };
+  },
+
   listIdentities: async (params?: {
     query?: string;
     firstName?: string;

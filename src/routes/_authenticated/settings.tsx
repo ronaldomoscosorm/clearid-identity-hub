@@ -30,6 +30,7 @@ function Settings() {
   const [lastResult, setLastResult] = useState<DiagnosticsResult | null>(null);
   const [siteId, setSiteId] = useState<string>(() => getDefaultSiteId() ?? "");
   const [systemObjectId, setSystemObjectIdState] = useState<string>(() => getSystemObjectId() ?? "");
+  const [ruleId, setRuleId] = useState<string>(() => getConfig().defaultRuleId ?? "");
   const qc = useQueryClient();
 
   const sitesQuery = useQuery({
@@ -41,6 +42,12 @@ function Settings() {
   const systemsQuery = useQuery({
     queryKey: ["argus", "systems"],
     queryFn: argusApi.listSystems,
+    staleTime: 60_000,
+  });
+
+  const teamsQuery = useQuery({
+    queryKey: ["argus", "teams"],
+    queryFn: () => argusApi.listTeams({ take: 200, allSites: true }),
     staleTime: 60_000,
   });
 
@@ -57,10 +64,18 @@ function Settings() {
   });
 
   const handleSave = () => {
-    saveConfig(cfg);
+    const ruleName = teamsQuery.data?.find((t) => t.teamId === ruleId)?.name;
+    const nextCfg: ArgusEnvConfig = {
+      ...cfg,
+      defaultSiteId: siteId || undefined,
+      defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name,
+      defaultRuleId: ruleId || undefined,
+      defaultRuleName: ruleName,
+    };
+    saveConfig(nextCfg);
     setDefaultSiteId(siteId || null);
     setSystemObjectId(systemObjectId || null);
-    setCfg((c) => ({ ...c, defaultSiteId: siteId || undefined, defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name }));
+    setCfg(nextCfg);
     qc.invalidateQueries();
     pushSettings()
       .then(() => toast.success("Configurações salvas"))
@@ -177,6 +192,51 @@ function Settings() {
               <p className="text-sm text-destructive">
                 {(sitesQuery.error as Error).message}
               </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Regra padrão</CardTitle>
+          <CardDescription>
+            Regra atribuída automaticamente a uma identidade que não possua nenhuma ao salvar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="rule">Regra</Label>
+            <Select
+              value={ruleId}
+              onValueChange={setRuleId}
+              disabled={teamsQuery.isLoading || !!teamsQuery.error}
+            >
+              <SelectTrigger id="rule">
+                <SelectValue
+                  placeholder={
+                    teamsQuery.isLoading
+                      ? "Carregando regras..."
+                      : teamsQuery.error
+                        ? "Falha ao carregar regras"
+                        : "Selecione uma regra"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {(teamsQuery.data ?? [])
+                  .filter((t) => !t.isDeleted)
+                  .slice()
+                  .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR", { sensitivity: "base" }))
+                  .map((t) => (
+                    <SelectItem key={t.teamId} value={t.teamId}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {teamsQuery.error && (
+              <p className="text-sm text-destructive">{(teamsQuery.error as Error).message}</p>
             )}
           </div>
         </CardContent>

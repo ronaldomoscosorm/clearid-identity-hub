@@ -76,6 +76,13 @@ function IdentityDetail() {
           ? "Identity atualizada — dados principais e customizáveis gravados"
           : "Identity atualizada — dados principais gravados",
       );
+      // Se a identidade não tiver nenhuma regra, atribui a regra padrão.
+      try {
+        const rule = await argusApi.ensureDefaultRule(id);
+        if (rule.assigned) toast.info(`Regra padrão atribuída: ${rule.ruleName ?? "regra"}`);
+      } catch (e) {
+        console.error("[regra] falha ao atribuir regra padrão:", (e as Error).message);
+      }
       await mirrorIdentities([updated]);
       await saveIdentityCustomFields(id, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });

@@ -38,6 +38,8 @@ export async function pushSettings(): Promise<void> {
     argus_api_key: cfg.apiKey || null,
     default_site_id: getDefaultSiteId() ?? cfg.defaultSiteId ?? null,
     default_site_name: cfg.defaultSiteName ?? null,
+    default_rule_id: cfg.defaultRuleId ?? null,
+    default_rule_name: cfg.defaultRuleName ?? null,
     system_object_id: getSystemObjectId() ?? null,
     account_id: getAccountId() ?? null,
     client_name: branding.clientName,
@@ -80,6 +82,8 @@ export async function hydrateSettings(): Promise<void> {
     apiKey: data.argus_api_key ?? "",
     defaultSiteId: data.default_site_id ?? undefined,
     defaultSiteName: data.default_site_name ?? undefined,
+    defaultRuleId: data.default_rule_id ?? undefined,
+    defaultRuleName: data.default_rule_name ?? undefined,
   });
   setDefaultSiteId(data.default_site_id ?? null);
   setSystemObjectId(data.system_object_id ?? null);

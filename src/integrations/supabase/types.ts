@@ -414,6 +414,8 @@ export type Database = {
           client_logo: string
           client_name: string
           created_at: string
+          default_rule_id: string | null
+          default_rule_name: string | null
           default_site_id: string | null
           default_site_name: string | null
           preferences: Json
@@ -430,6 +432,8 @@ export type Database = {
           client_logo?: string
           client_name?: string
           created_at?: string
+          default_rule_id?: string | null
+          default_rule_name?: string | null
           default_site_id?: string | null
           default_site_name?: string | null
           preferences?: Json
@@ -446,6 +450,8 @@ export type Database = {
           client_logo?: string
           client_name?: string
           created_at?: string
+          default_rule_id?: string | null
+          default_rule_name?: string | null
           default_site_id?: string | null
           default_site_name?: string | null
           preferences?: Json

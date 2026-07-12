@@ -5,6 +5,8 @@ export interface ArgusEnvConfig {
   apiKey: string;
   defaultSiteId?: string;
   defaultSiteName?: string;
+  defaultRuleId?: string;
+  defaultRuleName?: string;
 }
 
 const CFG_KEY = "argus.config";
