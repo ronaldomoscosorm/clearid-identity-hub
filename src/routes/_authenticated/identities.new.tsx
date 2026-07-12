@@ -16,8 +16,18 @@ function NewIdentity() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const mut = useMutation({
-    mutationFn: (vars: { data: IdentityUpsert; siteFieldValues: SiteFieldValue[] }) =>
-      argusApi.createIdentity(vars.data),
+    mutationFn: async (vars: { data: IdentityUpsert; siteFieldValues: SiteFieldValue[] }) => {
+      // Verifica e-mail duplicado antes de criar (o ClearID rejeita com 400).
+      const dupes = await argusApi.findIdentitiesByEmail(vars.data.email);
+      if (dupes.length) {
+        const d = dupes[0];
+        throw new ArgusApiError({
+          status: 409,
+          message: `Já existe uma identidade com o e-mail ${vars.data.email}: ${d.firstName} ${d.lastName} (${d.status}).`,
+        });
+      }
+      return argusApi.createIdentity(vars.data);
+    },
     onSuccess: async (data, vars) => {
       // Grava os campos personalizados após a criação (endpoint dedicado).
       const cf = Object.entries(vars.data.customFields ?? {})

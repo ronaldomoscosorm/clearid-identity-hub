@@ -878,6 +878,14 @@ export const argusApi = {
       }),
     }),
 
+  /** Identidades com o e-mail informado (busca exata, em todos os sites). */
+  findIdentitiesByEmail: async (email: string): Promise<ClearIdIdentity[]> => {
+    const e = (email ?? "").trim();
+    if (!e) return [];
+    const { items } = await argusApi.listIdentities({ email: e, allSites: true, take: 20 });
+    return items.filter((i) => (i.email ?? "").trim().toLowerCase() === e.toLowerCase());
+  },
+
   /** Regras (teams) vinculadas a uma identidade. */
   getIdentityTeams: async (id: string): Promise<ClearIdTeamMember[]> => {
     const data = await unwrap<{ teams?: ClearIdTeamMember[] } | ClearIdTeamMember[]>(
