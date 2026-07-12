@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
-import { typeOf } from "@/lib/custom-fields";
+import { typeOf, pickLang } from "@/lib/custom-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +62,7 @@ type SiteFieldRow = Database["public"]["Tables"]["site_custom_fields"]["Row"] & 
   worker_type: Pick<WorkerType, "name"> | null;
 };
 
-type MultiLang = { "pt-BR": string; "en-US": string };
+type MultiLang = { "pt-BR": string; "en-US": string; "es-ES": string };
 
 type FormState = {
   entity_type: string; // identity | company
@@ -85,7 +85,7 @@ const EMPTY_FORM: FormState = {
   is_required: false,
   is_active: true,
   display_index: "",
-  override: { "pt-BR": "", "en-US": "" },
+  override: { "pt-BR": "", "en-US": "", "es-ES": "" },
   rangeMin: "",
   rangeMax: "",
   options: "",
@@ -93,13 +93,18 @@ const EMPTY_FORM: FormState = {
 
 function langFromJson(v: Json | null | undefined): MultiLang {
   const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
-  return { "pt-BR": String(o["pt-BR"] ?? ""), "en-US": String(o["en-US"] ?? "") };
+  return {
+    "pt-BR": String(o["pt-BR"] ?? ""),
+    "en-US": String(o["en-US"] ?? ""),
+    "es-ES": String(o["es-ES"] ?? ""),
+  };
 }
 
 function buildOverride(m: MultiLang): Json {
   const o: Record<string, string> = {};
   if (m["pt-BR"].trim()) o["pt-BR"] = m["pt-BR"].trim();
   if (m["en-US"].trim()) o["en-US"] = m["en-US"].trim();
+  if (m["es-ES"].trim()) o["es-ES"] = m["es-ES"].trim();
   return o as Json;
 }
 
@@ -501,7 +506,7 @@ function CamposDoSitePage() {
                   ) : (
                     availableDefs.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
-                        {d.custom_field_name}
+                        {pickLang(d.display_name) || d.custom_field_name}
                         {d.custom_field_type ? ` · ${d.custom_field_type}` : ""}
                       </SelectItem>
                     ))
@@ -510,24 +515,29 @@ function CamposDoSitePage() {
               </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Nome de exibição (pt-BR)</Label>
+            <div className="space-y-2">
+              <Label>Nome de exibição</Label>
+              <div className="grid grid-cols-3 gap-3">
                 <Input
                   value={form.override["pt-BR"]}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, override: { ...f.override, "pt-BR": e.target.value } }))
                   }
-                  placeholder="Padrão do catálogo"
+                  placeholder="pt-BR (padrão)"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Nome de exibição (en-US)</Label>
                 <Input
                   value={form.override["en-US"]}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, override: { ...f.override, "en-US": e.target.value } }))
                   }
+                  placeholder="en-US"
+                />
+                <Input
+                  value={form.override["es-ES"]}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, override: { ...f.override, "es-ES": e.target.value } }))
+                  }
+                  placeholder="es-ES"
                 />
               </div>
             </div>

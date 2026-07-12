@@ -52,6 +52,7 @@ type FormState = {
   field_key: string;
   ptBR: string;
   enUS: string;
+  esES: string;
   display_index: string;
   is_visible: boolean;
 };
@@ -60,6 +61,7 @@ const EMPTY_FORM: FormState = {
   field_key: "",
   ptBR: "",
   enUS: "",
+  esES: "",
   display_index: "",
   is_visible: true,
 };
@@ -89,6 +91,7 @@ function ApelidosPage() {
       const alias: Record<string, string> = {};
       if (f.ptBR.trim()) alias["pt-BR"] = f.ptBR.trim();
       if (f.enUS.trim()) alias["en-US"] = f.enUS.trim();
+      if (f.esES.trim()) alias["es-ES"] = f.esES.trim();
       const payload = {
         field_key: f.field_key.trim(),
         alias: alias as Json,
@@ -140,6 +143,7 @@ function ApelidosPage() {
       field_key: row.field_key,
       ptBR: pickLang(row.alias, "pt-BR"),
       enUS: pickLang(row.alias, "en-US"),
+      esES: pickLang(row.alias, "es-ES"),
       display_index: row.display_index == null ? "" : String(row.display_index),
       is_visible: row.is_visible,
     });
@@ -283,19 +287,23 @@ function ApelidosPage() {
                 ))}
               </datalist>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Apelido (pt-BR)</Label>
+            <div className="space-y-2">
+              <Label>Apelido</Label>
+              <div className="grid grid-cols-3 gap-3">
                 <Input
                   value={form.ptBR}
                   onChange={(e) => setForm((f) => ({ ...f, ptBR: e.target.value }))}
+                  placeholder="pt-BR"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Apelido (en-US)</Label>
                 <Input
                   value={form.enUS}
                   onChange={(e) => setForm((f) => ({ ...f, enUS: e.target.value }))}
+                  placeholder="en-US"
+                />
+                <Input
+                  value={form.esES}
+                  onChange={(e) => setForm((f) => ({ ...f, esES: e.target.value }))}
+                  placeholder="es-ES"
                 />
               </div>
             </div>
