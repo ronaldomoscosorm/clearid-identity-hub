@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Power, PowerOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
-import { mirrorIdentities } from "@/lib/supabase-mirror";
+import { mirrorIdentities, saveIdentityCustomFields, type SiteFieldValue } from "@/lib/supabase-mirror";
 import { clearIdToFormValues } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,9 +63,14 @@ function IdentityDetail() {
     : undefined;
 
   const update = useMutation({
-    mutationFn: (data: Parameters<typeof argusApi.updateIdentity>[1]) => argusApi.updateIdentity(id, data),
-    onSuccess: () => {
+    mutationFn: (vars: {
+      data: Parameters<typeof argusApi.updateIdentity>[1];
+      siteFieldValues: SiteFieldValue[];
+    }) => argusApi.updateIdentity(id, vars.data),
+    onSuccess: async (updated, vars) => {
       toast.success("Identity atualizada");
+      await mirrorIdentities([updated]);
+      await saveIdentityCustomFields(id, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
@@ -145,25 +150,28 @@ function IdentityDetail() {
           mode="edit"
           initial={clearIdToFormValues(query.data)}
           submitting={update.isPending}
-          onSubmit={(data) => {
+          onSubmit={(data, siteFieldValues) => {
             const original = query.data!;
             // ClearID PUT é um replace completo. Preservamos os campos que
             // não estão no formulário para evitar 400 (Falha ao atualizar
             // identidade no ClearID).
             update.mutate({
-              ...data,
-              // ClearID v4 exige eTag e dados aninhados no PUT. Preservamos
-              // tudo que não está no formulário para não perder dados.
-              identityType: (original.identityType ?? "employee").toLowerCase(),
-              eTag: original.eTag,
-              description: original.description ?? undefined,
-              countryCode: original.countryCode ?? undefined,
-              culture: original.culture ?? undefined,
-              middleName: original.middleName ?? undefined,
-              displayName: original.displayName ?? undefined,
-              privateData: original.privateData ?? undefined,
-              companyData: original.companyData ?? undefined,
-              systemData: original.systemData ?? undefined,
+              data: {
+                ...data,
+                // ClearID v4 exige eTag e dados aninhados no PUT. Preservamos
+                // tudo que não está no formulário para não perder dados.
+                identityType: (original.identityType ?? "employee").toLowerCase(),
+                eTag: original.eTag,
+                description: original.description ?? undefined,
+                countryCode: original.countryCode ?? undefined,
+                culture: original.culture ?? undefined,
+                middleName: original.middleName ?? undefined,
+                displayName: original.displayName ?? undefined,
+                privateData: original.privateData ?? undefined,
+                companyData: original.companyData ?? undefined,
+                systemData: original.systemData ?? undefined,
+              },
+              siteFieldValues,
             });
           }}
           onCancel={() => navigate({ to: "/identities" })}

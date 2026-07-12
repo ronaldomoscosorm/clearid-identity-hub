@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import type { IdentityUpsert } from "@/lib/argus-client";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import type { SiteFieldValue } from "@/lib/supabase-mirror";
 
 const baseSchema = z.object({
   externalId: z.string().trim().max(120).optional().default(""),
@@ -39,7 +40,7 @@ export type IdentityFormProps = {
   initial?: Partial<IdentityUpsert>;
   mode: "create" | "edit";
   submitting?: boolean;
-  onSubmit: (data: IdentityUpsert) => void;
+  onSubmit: (data: IdentityUpsert, siteFieldValues: SiteFieldValue[]) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
   statusBadge?: React.ReactNode;
@@ -108,7 +109,7 @@ export function IdentityForm({
       );
     });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const { alias } = useIdentityFieldLabels();
+  const { alias, isVisible } = useIdentityFieldLabels();
 
   // Tipos de trabalhador (Supabase) → mapeados para o workerTypeCode do Argus.
   const workerTypesQuery = useQuery({
@@ -278,12 +279,21 @@ export function IdentityForm({
       return;
     }
     setErrors({});
-    onSubmit({
-      ...parsedData,
-      customFields: cf,
-      siteId: siteId || undefined,
-      workerTypeCode: workerTypeCode || undefined,
-    });
+    const siteFieldValues: SiteFieldValue[] = siteFields
+      .filter((sf) => sf.definition)
+      .map((sf) => ({
+        site_custom_field_id: sf.id,
+        value: cf[sf.definition!.custom_field_name] ? cf[sf.definition!.custom_field_name] : null,
+      }));
+    onSubmit(
+      {
+        ...parsedData,
+        customFields: cf,
+        siteId: siteId || undefined,
+        workerTypeCode: workerTypeCode || undefined,
+      },
+      siteFieldValues,
+    );
   };
 
   const dateDefs = defs.filter((f) => isDate(f.customFieldType));
@@ -300,21 +310,28 @@ export function IdentityForm({
           {statusBadge}
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
+          {isVisible("first_name") && (
           <div className="space-y-2">
             <Label htmlFor="firstName">{alias("first_name", "Nome")}</Label>
             <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
             {errors.firstName && <p className="text-xs text-destructive">{errors.firstName}</p>}
           </div>
+          )}
+          {isVisible("last_name") && (
           <div className="space-y-2">
             <Label htmlFor="lastName">{alias("last_name", "Sobrenome")}</Label>
             <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
             {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
           </div>
+          )}
+          {isVisible("email") && (
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="email">{alias("email", "E-mail")}</Label>
             <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
           </div>
+          )}
+          {isVisible("company_site_id") && (
           <div className="space-y-2">
             <Label>{alias("company_site_id", "Site")}</Label>
             <Select value={siteId} onValueChange={setSiteId}>
@@ -330,6 +347,8 @@ export function IdentityForm({
               </SelectContent>
             </Select>
           </div>
+          )}
+          {isVisible("company_worker_type_code") && (
           <div className="space-y-2">
             <Label>{alias("company_worker_type_code", "Tipo do Trabalhador")}</Label>
             <Select
@@ -355,6 +374,7 @@ export function IdentityForm({
               <p className="text-xs text-destructive">{errors.workerTypeCode}</p>
             )}
           </div>
+          )}
         </CardContent>
       </Card>
 

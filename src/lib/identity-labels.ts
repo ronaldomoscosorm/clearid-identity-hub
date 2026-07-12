@@ -52,5 +52,14 @@ export function useIdentityFieldLabels(lang = "pt-BR") {
     return pickLang(row.alias, lang) || fallback;
   };
 
-  return { alias, labels: query.data ?? [] };
+  /**
+   * Visibilidade do campo. Sem apelido cadastrado → visível (mostra tudo).
+   * Só oculta quando existe um apelido com is_visible = false.
+   */
+  const isVisible = (fieldKey: string): boolean => {
+    const row = map.get(fieldKey);
+    return row ? row.is_visible : true;
+  };
+
+  return { alias, isVisible, labels: query.data ?? [] };
 }

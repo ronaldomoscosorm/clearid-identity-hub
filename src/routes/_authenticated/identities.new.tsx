@@ -2,8 +2,8 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError } from "@/lib/argus-client";
-import { mirrorIdentities } from "@/lib/supabase-mirror";
+import { argusApi, ArgusApiError, type IdentityUpsert } from "@/lib/argus-client";
+import { mirrorIdentities, saveIdentityCustomFields, type SiteFieldValue } from "@/lib/supabase-mirror";
 import { Button } from "@/components/ui/button";
 import { IdentityForm } from "@/components/IdentityForm";
 
@@ -16,10 +16,12 @@ function NewIdentity() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const mut = useMutation({
-    mutationFn: argusApi.createIdentity,
-    onSuccess: (data) => {
+    mutationFn: (vars: { data: IdentityUpsert; siteFieldValues: SiteFieldValue[] }) =>
+      argusApi.createIdentity(vars.data),
+    onSuccess: async (data, vars) => {
       toast.success("Identity criada");
-      void mirrorIdentities([data]);
+      await mirrorIdentities([data]);
+      await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });
       navigate({ to: "/identities/$id", params: { id: data.identityId } });
     },
@@ -45,7 +47,7 @@ function NewIdentity() {
       <IdentityForm
         mode="create"
         submitting={mut.isPending}
-        onSubmit={(data) => mut.mutate(data)}
+        onSubmit={(data, siteFieldValues) => mut.mutate({ data, siteFieldValues })}
         onCancel={() => navigate({ to: "/identities" })}
       />
     </div>

@@ -105,6 +105,40 @@ export async function mirrorIdentities(items: ClearIdIdentity[]): Promise<void> 
   if (error) console.error("[mirror] falha ao espelhar identidades:", error.message);
 }
 
+export type SiteFieldValue = { site_custom_field_id: string; value: string | null };
+
+/**
+ * Grava os valores dos campos personalizados de uma identidade na tabela
+ * identity_custom_fields (vinculados aos campos do site). A identidade precisa
+ * já estar espelhada em `identities` (chame mirrorIdentities antes).
+ */
+export async function saveIdentityCustomFields(
+  clearIdIdentityId: string,
+  values: SiteFieldValue[],
+): Promise<void> {
+  if (!clearIdIdentityId || !values?.length) return;
+
+  const { data: idRow, error: e1 } = await supabase
+    .from("identities")
+    .select("id")
+    .eq("identity_id", clearIdIdentityId)
+    .maybeSingle();
+  if (e1 || !idRow) {
+    if (e1) console.error("[mirror] identidade não encontrada p/ campos:", e1.message);
+    return;
+  }
+
+  const rows = values.map((v) => ({
+    identity_id: idRow.id,
+    site_custom_field_id: v.site_custom_field_id,
+    value: v.value,
+  }));
+  const { error } = await supabase
+    .from("identity_custom_fields")
+    .upsert(rows, { onConflict: "identity_id,site_custom_field_id" });
+  if (error) console.error("[mirror] falha ao gravar campos da identidade:", error.message);
+}
+
 /** Faz upsert das definições globais de campos personalizados (por nome). */
 export async function mirrorCustomFieldDefs(defs: ClearIdCustomFieldDef[]): Promise<void> {
   if (!defs?.length) return;
