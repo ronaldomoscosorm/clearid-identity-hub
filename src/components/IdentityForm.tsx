@@ -36,6 +36,40 @@ const baseSchema = z.object({
   status: z.enum(["Active", "Inactive"]),
 });
 
+// Campos adicionais do modelo ClearID, além dos fixos (nome/sobrenome/email/
+// site/tipo). Cada um é controlável por apelido (visibilidade + rótulo).
+type ExtraField = {
+  key: string; // field_key (apelido) e chave do estado
+  label: string; // rótulo padrão
+  section: "ident" | "personal" | "company";
+  target: "top" | "private" | "company"; // onde entra no payload
+  argusKey: string; // chave enviada ao Argus
+  type?: "text" | "email" | "date";
+};
+
+const EXTRA_FIELDS: ExtraField[] = [
+  // Identificação (top-level)
+  { key: "middle_name", label: "Nome do meio", section: "ident", target: "top", argusKey: "middleName" },
+  { key: "display_name", label: "Nome de exibição", section: "ident", target: "top", argusKey: "displayName" },
+  { key: "description", label: "Descrição", section: "ident", target: "top", argusKey: "description" },
+  { key: "country_code", label: "País", section: "ident", target: "top", argusKey: "countryCode" },
+  { key: "culture", label: "Idioma/Cultura", section: "ident", target: "top", argusKey: "culture" },
+  // Dados pessoais (privateData)
+  { key: "private_birthday", label: "Data de nascimento", section: "personal", target: "private", argusKey: "birthday", type: "date" },
+  { key: "private_employee_number", label: "Matrícula", section: "personal", target: "private", argusKey: "employeeNumber" },
+  { key: "private_secondary_email", label: "E-mail secundário", section: "personal", target: "private", argusKey: "secondaryEmail", type: "email" },
+  { key: "private_city_of_residence", label: "Cidade", section: "personal", target: "private", argusKey: "cityOfResidence" },
+  { key: "private_state_of_residence", label: "Estado", section: "personal", target: "private", argusKey: "stateOfResidence" },
+  { key: "private_zip_code", label: "CEP", section: "personal", target: "private", argusKey: "zipCode" },
+  { key: "private_phone_primary", label: "Telefone principal", section: "personal", target: "private", argusKey: "phoneNumberPrimary" },
+  { key: "private_phone_secondary", label: "Telefone secundário", section: "personal", target: "private", argusKey: "phoneNumberSecondary" },
+  // Vínculo corporativo (companyData)
+  { key: "company_name", label: "Empresa", section: "company", target: "company", argusKey: "companyName" },
+  { key: "company_job_title", label: "Cargo", section: "company", target: "company", argusKey: "jobTitle" },
+  { key: "company_department_name", label: "Departamento", section: "company", target: "company", argusKey: "departmentName" },
+  { key: "company_supervisor_name", label: "Supervisor", section: "company", target: "company", argusKey: "supervisorName" },
+];
+
 export type IdentityFormProps = {
   initial?: Partial<IdentityUpsert>;
   mode: "create" | "edit";
@@ -81,6 +115,20 @@ export function IdentityForm({
   const [customFields, setCustomFields] = useState<Record<string, string>>(
     { ...(initial?.customFields ?? {}) },
   );
+  const [extra, setExtra] = useState<Record<string, string>>(() => {
+    const priv = (initial?.privateData ?? {}) as Record<string, unknown>;
+    const comp = (initial?.companyData ?? {}) as Record<string, unknown>;
+    const top = (initial ?? {}) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    for (const f of EXTRA_FIELDS) {
+      const src = f.target === "private" ? priv : f.target === "company" ? comp : top;
+      const v = src[f.argusKey];
+      out[f.key] = v == null ? "" : String(v);
+    }
+    return out;
+  });
+  const setExtraField = (key: string, value: string) =>
+    setExtra((prev) => ({ ...prev, [key]: value }));
   const fieldsQuery = useQuery({
     queryKey: ["custom-fields"],
     queryFn: () => argusApi.listCustomFields(),
@@ -164,6 +212,21 @@ export function IdentityForm({
   const siteFields = siteFieldsQuery.data ?? [];
   const siteFieldLabel = (sf: SiteFieldLite) =>
     pickLang(sf.display_name_override) || sf.definition?.custom_field_name || "Campo";
+
+  const renderExtraFields = (section: ExtraField["section"]) =>
+    EXTRA_FIELDS.filter((f) => f.section === section && isVisible(f.key)).map((f) => (
+      <div key={f.key} className="space-y-2">
+        <Label htmlFor={`x-${f.key}`}>{alias(f.key, f.label)}</Label>
+        <Input
+          id={`x-${f.key}`}
+          type={f.type === "date" ? "date" : f.type === "email" ? "email" : "text"}
+          value={extra[f.key] ?? ""}
+          onChange={(e) => setExtraField(f.key, e.target.value)}
+        />
+      </div>
+    ));
+  const hasSection = (section: ExtraField["section"]) =>
+    EXTRA_FIELDS.some((f) => f.section === section && isVisible(f.key));
 
   const setField = (name: string, value: string) =>
     setCustomFields((prev) => ({ ...prev, [name]: value }));
@@ -285,15 +348,29 @@ export function IdentityForm({
         site_custom_field_id: sf.id,
         value: cf[sf.definition!.custom_field_name] ? cf[sf.definition!.custom_field_name] : null,
       }));
-    onSubmit(
-      {
-        ...parsedData,
-        customFields: cf,
-        siteId: siteId || undefined,
-        workerTypeCode: workerTypeCode || undefined,
-      },
-      siteFieldValues,
-    );
+
+    // Monta os campos adicionais (top-level, privateData, companyData),
+    // preservando o que veio do initial (edit) e sobrescrevendo com o form.
+    const topExtra: Record<string, unknown> = {};
+    const privExtra: Record<string, unknown> = { ...((initial?.privateData ?? {}) as object) };
+    const compExtra: Record<string, unknown> = { ...((initial?.companyData ?? {}) as object) };
+    for (const f of EXTRA_FIELDS) {
+      const val = (extra[f.key] ?? "").trim();
+      const bag = f.target === "private" ? privExtra : f.target === "company" ? compExtra : topExtra;
+      if (val) bag[f.argusKey] = val;
+      else if (f.argusKey in bag) bag[f.argusKey] = null; // limpa valor existente (edição)
+    }
+
+    const payload: Record<string, unknown> = {
+      ...parsedData,
+      ...topExtra,
+      privateData: Object.keys(privExtra).length ? privExtra : undefined,
+      companyData: Object.keys(compExtra).length ? compExtra : undefined,
+      customFields: cf,
+      siteId: siteId || undefined,
+      workerTypeCode: workerTypeCode || undefined,
+    };
+    onSubmit(payload as unknown as IdentityUpsert, siteFieldValues);
   };
 
   const dateDefs = defs.filter((f) => isDate(f.customFieldType));
@@ -375,8 +452,31 @@ export function IdentityForm({
             )}
           </div>
           )}
+          {renderExtraFields("ident")}
         </CardContent>
       </Card>
+
+      {hasSection("personal") && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Dados pessoais</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {renderExtraFields("personal")}
+          </CardContent>
+        </Card>
+      )}
+
+      {hasSection("company") && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Vínculo corporativo</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {renderExtraFields("company")}
+          </CardContent>
+        </Card>
+      )}
 
       {workerTypeId && siteFields.length > 0 && (
         <Card>

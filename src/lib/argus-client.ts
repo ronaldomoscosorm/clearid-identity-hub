@@ -518,6 +518,7 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
   return {
     systemData,
     companyData,
+    privateData: data.privateData ?? undefined,
     description: data.description ?? null,
     status:
       typeof data.status === "string"
@@ -1148,5 +1149,13 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
       siteIdFromCompany ??
       ((i as unknown as { siteId?: string }).siteId ?? undefined),
     workerTypeCode: workerTypeFromCompany ?? i.workerTypeCode ?? undefined,
+    // Dados aninhados/adicionais preservados para o formulário completo.
+    middleName: i.middleName ?? undefined,
+    displayName: i.displayName ?? undefined,
+    description: i.description ?? undefined,
+    countryCode: i.countryCode ?? undefined,
+    culture: i.culture ?? undefined,
+    privateData: i.privateData ?? undefined,
+    companyData: i.companyData ?? undefined,
   };
 }

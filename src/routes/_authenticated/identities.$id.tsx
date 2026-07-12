@@ -158,17 +158,11 @@ function IdentityDetail() {
             update.mutate({
               data: {
                 ...data,
-                // ClearID v4 exige eTag e dados aninhados no PUT. Preservamos
-                // tudo que não está no formulário para não perder dados.
+                // ClearID v4 exige eTag e identityType no PUT. systemData é
+                // preservado (contém customFields). Os demais campos (incl.
+                // privateData/companyData) vêm do formulário.
                 identityType: (original.identityType ?? "employee").toLowerCase(),
                 eTag: original.eTag,
-                description: original.description ?? undefined,
-                countryCode: original.countryCode ?? undefined,
-                culture: original.culture ?? undefined,
-                middleName: original.middleName ?? undefined,
-                displayName: original.displayName ?? undefined,
-                privateData: original.privateData ?? undefined,
-                companyData: original.companyData ?? undefined,
                 systemData: original.systemData ?? undefined,
               },
               siteFieldValues,
