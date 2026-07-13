@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
@@ -42,6 +42,7 @@ const NAV_ITEMS = [
   { to: "/campos-personalizados", icon: ListChecks, label: "Campos personalizados" },
   { to: "/campos-do-site", icon: SlidersHorizontal, label: "Campos do site" },
   { to: "/apelidos", icon: Tag, label: "Apelidos" },
+  { to: "/campanhas-foto", icon: Camera, label: "Campanhas de Foto" },
   { to: "/diagnostics", icon: Activity, label: "Diagnóstico" },
   { to: "/settings", icon: SettingsIcon, label: "Configurações" },
   { to: "/branding", icon: Palette, label: "Identidade" },

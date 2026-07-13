@@ -590,6 +590,37 @@ export interface ClearIdTeamMember {
   identityDepartmentName?: string | null;
 }
 
+// ---- Campanha de atualização de foto ----
+export interface PhotoCampaignTarget {
+  identityId: string;
+  displayName: string | null;
+  email: string | null;
+  status: "Pending" | "Sent" | "Used" | "Failed" | "SkippedNoEmail" | string;
+  expiresUtc: string | null;
+  sentUtc: string | null;
+  usedUtc: string | null;
+  error: string | null;
+  dryRunLink: string | null;
+}
+export interface PhotoCampaignResult {
+  campaignId: string;
+  name: string | null;
+  environment: string;
+  totalTargets: number;
+  sent: number;
+  skippedNoEmail: number;
+  failed: number;
+  dryRun: boolean;
+  createdUtc: string;
+  targets?: PhotoCampaignTarget[] | null;
+}
+export interface CreatePhotoCampaign {
+  name?: string;
+  identityIds?: string[];
+  siteId?: string | null;
+  accountId?: string | null;
+}
+
 export interface ClearIdLocation {
   locationId: string;
   siteId: string;
@@ -943,6 +974,27 @@ export const argusApi = {
     await argusApi.addTeamMembers(ruleId, { identityIds: [id] });
     return { assigned: true, ruleName: cfg.defaultRuleName };
   },
+
+  // ---- Campanhas de atualização de foto (admin) ----
+  listPhotoCampaigns: async (): Promise<PhotoCampaignResult[]> => {
+    const data = await unwrap<PhotoCampaignResult[] | { campaigns?: PhotoCampaignResult[] }>(
+      argusFetch(`/api/photo-campaigns`, undefined, { allSites: true }),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.campaigns ?? [];
+  },
+  getPhotoCampaign: (id: string) =>
+    unwrap<PhotoCampaignResult>(
+      argusFetch(`/api/photo-campaigns/${encodeURIComponent(id)}`, undefined, { allSites: true }),
+    ),
+  createPhotoCampaign: (payload: CreatePhotoCampaign) =>
+    unwrap<PhotoCampaignResult>(
+      argusFetch(
+        `/api/photo-campaigns`,
+        { method: "POST", body: JSON.stringify(payload) },
+        { allSites: true },
+      ),
+    ),
 
   listIdentities: async (params?: {
     query?: string;

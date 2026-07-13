@@ -18,6 +18,7 @@ import { Route as AuthenticatedEmpresasRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedCamposPersonalizadosRouteImport } from './routes/_authenticated/campos-personalizados'
 import { Route as AuthenticatedCamposDoSiteRouteImport } from './routes/_authenticated/campos-do-site'
+import { Route as AuthenticatedCampanhasFotoRouteImport } from './routes/_authenticated/campanhas-foto'
 import { Route as AuthenticatedBrandingRouteImport } from './routes/_authenticated/branding'
 import { Route as AuthenticatedApelidosRouteImport } from './routes/_authenticated/apelidos'
 import { Route as AuthenticatedTerceirizadosIndexRouteImport } from './routes/_authenticated/terceirizados.index'
@@ -73,6 +74,12 @@ const AuthenticatedCamposDoSiteRoute =
     path: '/campos-do-site',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedCampanhasFotoRoute =
+  AuthenticatedCampanhasFotoRouteImport.update({
+    id: '/campanhas-foto',
+    path: '/campanhas-foto',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedBrandingRoute = AuthenticatedBrandingRouteImport.update({
   id: '/branding',
   path: '/branding',
@@ -118,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/apelidos': typeof AuthenticatedApelidosRoute
   '/branding': typeof AuthenticatedBrandingRoute
+  '/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
@@ -135,6 +143,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/apelidos': typeof AuthenticatedApelidosRoute
   '/branding': typeof AuthenticatedBrandingRoute
+  '/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
@@ -153,6 +162,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/apelidos': typeof AuthenticatedApelidosRoute
   '/_authenticated/branding': typeof AuthenticatedBrandingRoute
+  '/_authenticated/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/_authenticated/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/_authenticated/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/'
     | '/apelidos'
     | '/branding'
+    | '/campanhas-foto'
     | '/campos-do-site'
     | '/campos-personalizados'
     | '/diagnostics'
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
     | '/'
     | '/apelidos'
     | '/branding'
+    | '/campanhas-foto'
     | '/campos-do-site'
     | '/campos-personalizados'
     | '/diagnostics'
@@ -206,6 +218,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/_authenticated/apelidos'
     | '/_authenticated/branding'
+    | '/_authenticated/campanhas-foto'
     | '/_authenticated/campos-do-site'
     | '/_authenticated/campos-personalizados'
     | '/_authenticated/diagnostics'
@@ -290,6 +303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCamposDoSiteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/campanhas-foto': {
+      id: '/_authenticated/campanhas-foto'
+      path: '/campanhas-foto'
+      fullPath: '/campanhas-foto'
+      preLoaderRoute: typeof AuthenticatedCampanhasFotoRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/branding': {
       id: '/_authenticated/branding'
       path: '/branding'
@@ -363,6 +383,7 @@ const AuthenticatedIdentitiesRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedApelidosRoute: typeof AuthenticatedApelidosRoute
   AuthenticatedBrandingRoute: typeof AuthenticatedBrandingRoute
+  AuthenticatedCampanhasFotoRoute: typeof AuthenticatedCampanhasFotoRoute
   AuthenticatedCamposDoSiteRoute: typeof AuthenticatedCamposDoSiteRoute
   AuthenticatedCamposPersonalizadosRoute: typeof AuthenticatedCamposPersonalizadosRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
@@ -377,6 +398,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApelidosRoute: AuthenticatedApelidosRoute,
   AuthenticatedBrandingRoute: AuthenticatedBrandingRoute,
+  AuthenticatedCampanhasFotoRoute: AuthenticatedCampanhasFotoRoute,
   AuthenticatedCamposDoSiteRoute: AuthenticatedCamposDoSiteRoute,
   AuthenticatedCamposPersonalizadosRoute:
     AuthenticatedCamposPersonalizadosRoute,
