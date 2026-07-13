@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Camera, CheckCircle2, Loader2, Upload, XCircle } from "lucide-react";
+import { Camera, CheckCircle2, ImageIcon, Loader2, Upload, XCircle } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { getPhotoInfo, submitPhoto, type PhotoUpdateInfo } from "@/lib/photo-public";
 import { Button } from "@/components/ui/button";
 import { PoweredBy } from "@/components/PoweredBy";
+import { useApplyBranding, useBranding } from "@/lib/branding";
 
 export const Route = createFileRoute("/foto/$token")({
   ssr: false,
@@ -22,11 +25,17 @@ type State =
 
 function PhotoUpdatePage() {
   const { token } = Route.useParams();
+  useApplyBranding();
+  const branding = useBranding();
+
   const [state, setState] = useState<State>({ kind: "loading" });
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cameraOn, setCameraOn] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +56,21 @@ function PhotoUpdatePage() {
     };
   }, [previewUrl]);
 
+  // Garante que a câmera seja liberada ao desmontar.
+  useEffect(() => stopCamera, []);
+
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setCameraOn(false);
+  }
+
+  const setImage = (f: File) => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setFile(f);
+    setPreviewUrl(URL.createObjectURL(f));
+  };
+
   const pickFile = (f: File | null) => {
     setError(null);
     if (!f) return;
@@ -58,10 +82,53 @@ function PhotoUpdatePage() {
       setError(`A imagem deve ter no máximo ${MAX_MB} MB.`);
       return;
     }
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setFile(f);
-    setPreviewUrl(URL.createObjectURL(f));
+    setImage(f);
   };
+
+  async function startCamera() {
+    setError(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Câmera não disponível neste dispositivo/navegador.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 1280 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraOn(true);
+      // Aguarda o <video> montar antes de atribuir o stream.
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      });
+    } catch {
+      setError("Não foi possível acessar a câmera. Verifique a permissão do navegador.");
+    }
+  }
+
+  function capturePhoto() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        setImage(new File([blob], "foto.jpg", { type: "image/jpeg" }));
+        stopCamera();
+      },
+      "image/jpeg",
+      0.92,
+    );
+  }
 
   const send = async () => {
     if (!file || state.kind !== "form") return;
@@ -78,13 +145,30 @@ function PhotoUpdatePage() {
     }
   };
 
+  const expires =
+    (state.kind === "form" || state.kind === "sending") && state.info.expiresUtc
+      ? safeFormat(state.info.expiresUtc)
+      : null;
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-sm space-y-6">
+        {/* Cabeçalho com a identidade do site */}
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Camera className="h-6 w-6" />
-          </div>
+          {branding.clientLogo ? (
+            <img
+              src={branding.clientLogo}
+              alt={branding.clientName || "Logo"}
+              className="max-h-16 w-auto object-contain"
+            />
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Camera className="h-6 w-6" />
+            </div>
+          )}
+          {branding.clientName && (
+            <p className="text-sm font-medium text-foreground">{branding.clientName}</p>
+          )}
           <h1 className="text-lg font-semibold text-foreground">Atualização de foto</h1>
         </div>
 
@@ -100,8 +184,13 @@ function PhotoUpdatePage() {
             <div>
               <p className="text-base font-medium text-foreground">Olá, {state.info.displayName}!</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Envie ou tire uma nova foto para atualizar seu cadastro.
+                {state.info.hasPhoto
+                  ? "Envie ou tire uma nova foto para substituir a atual."
+                  : "Envie ou tire uma foto para o seu cadastro."}
               </p>
+              {expires && (
+                <p className="mt-1 text-xs text-muted-foreground">Este link expira em {expires}.</p>
+              )}
             </div>
 
             <input
@@ -113,34 +202,73 @@ function PhotoUpdatePage() {
               onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
             />
 
-            {previewUrl ? (
+            {cameraOn ? (
+              <div className="space-y-3">
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  className="mx-auto max-h-64 w-full rounded-md bg-black object-contain"
+                />
+                <div className="flex gap-2">
+                  <Button type="button" className="flex-1" onClick={capturePhoto}>
+                    <Camera className="mr-1 h-4 w-4" /> Capturar
+                  </Button>
+                  <Button type="button" variant="outline" onClick={stopCamera}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            ) : previewUrl ? (
               <img
                 src={previewUrl}
                 alt="Prévia"
                 className="mx-auto max-h-64 w-full rounded-md object-contain"
               />
             ) : (
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed py-10 text-muted-foreground hover:bg-muted"
-                disabled={state.kind === "sending"}
-              >
-                <Upload className="h-6 w-6" />
-                <span className="text-sm">Toque para escolher / tirar a foto</span>
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-muted-foreground hover:bg-muted"
+                  disabled={state.kind === "sending"}
+                >
+                  <Camera className="h-6 w-6" />
+                  <span className="text-sm">Tirar foto</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-muted-foreground hover:bg-muted"
+                  disabled={state.kind === "sending"}
+                >
+                  <Upload className="h-6 w-6" />
+                  <span className="text-sm">Enviar arquivo</span>
+                </button>
+              </div>
             )}
 
-            {previewUrl && (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => inputRef.current?.click()}
-                disabled={state.kind === "sending"}
-              >
-                Trocar foto
-              </Button>
+            {previewUrl && !cameraOn && (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={startCamera}
+                  disabled={state.kind === "sending"}
+                >
+                  <Camera className="mr-1 h-4 w-4" /> Tirar de novo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => inputRef.current?.click()}
+                  disabled={state.kind === "sending"}
+                >
+                  <ImageIcon className="mr-1 h-4 w-4" /> Trocar arquivo
+                </Button>
+              </div>
             )}
 
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -149,7 +277,7 @@ function PhotoUpdatePage() {
               type="button"
               className="w-full"
               onClick={send}
-              disabled={!file || state.kind === "sending"}
+              disabled={!file || cameraOn || state.kind === "sending"}
             >
               {state.kind === "sending" ? (
                 <>
@@ -189,4 +317,10 @@ function PhotoUpdatePage() {
       </div>
     </div>
   );
+}
+
+function safeFormat(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return format(d, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
 }
