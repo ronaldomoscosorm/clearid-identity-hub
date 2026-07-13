@@ -161,6 +161,7 @@ export type Database = {
           account_id: string | null
           company_approvers: Json | null
           company_department_name: string | null
+          company_id: string | null
           company_job_title: string | null
           company_name: string | null
           company_site_id: string | null
@@ -219,6 +220,7 @@ export type Database = {
           account_id?: string | null
           company_approvers?: Json | null
           company_department_name?: string | null
+          company_id?: string | null
           company_job_title?: string | null
           company_name?: string | null
           company_site_id?: string | null
@@ -277,6 +279,7 @@ export type Database = {
           account_id?: string | null
           company_approvers?: Json | null
           company_department_name?: string | null
+          company_id?: string | null
           company_job_title?: string | null
           company_name?: string | null
           company_site_id?: string | null
@@ -331,7 +334,15 @@ export type Database = {
           system_trigger_code?: number | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "identities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       identity_custom_fields: {
         Row: {

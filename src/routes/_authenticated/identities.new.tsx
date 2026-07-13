@@ -3,7 +3,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, type IdentityUpsert } from "@/lib/argus-client";
-import { mirrorIdentities, saveIdentityCustomFields, type SiteFieldValue } from "@/lib/supabase-mirror";
+import {
+  mirrorIdentities,
+  saveIdentityCustomFields,
+  saveIdentityCompany,
+  type SiteFieldValue,
+} from "@/lib/supabase-mirror";
 import { Button } from "@/components/ui/button";
 import { IdentityForm } from "@/components/IdentityForm";
 
@@ -16,7 +21,11 @@ function NewIdentity() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const mut = useMutation({
-    mutationFn: async (vars: { data: IdentityUpsert; siteFieldValues: SiteFieldValue[] }) => {
+    mutationFn: async (vars: {
+      data: IdentityUpsert;
+      siteFieldValues: SiteFieldValue[];
+      companyId: string | null;
+    }) => {
       // Verifica e-mail duplicado antes de criar (o ClearID rejeita com 400).
       const dupes = await argusApi.findIdentitiesByEmail(vars.data.email);
       if (dupes.length) {
@@ -67,6 +76,7 @@ function NewIdentity() {
 
       // Espelhamento no Supabase (best-effort, fora das 3 etapas do Argus).
       await mirrorIdentities([data]);
+      await saveIdentityCompany(data.identityId, vars.companyId);
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });
       navigate({ to: "/identities/$id", params: { id: data.identityId } });
@@ -100,7 +110,9 @@ function NewIdentity() {
       <IdentityForm
         mode="create"
         submitting={mut.isPending}
-        onSubmit={(data, siteFieldValues) => mut.mutate({ data, siteFieldValues })}
+        onSubmit={(data, siteFieldValues, companyId) =>
+          mut.mutate({ data, siteFieldValues, companyId })
+        }
         onCancel={() => navigate({ to: "/identities" })}
       />
     </div>

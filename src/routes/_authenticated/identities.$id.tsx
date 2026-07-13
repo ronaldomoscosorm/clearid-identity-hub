@@ -4,7 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Power, PowerOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
-import { mirrorIdentities, saveIdentityCustomFields, type SiteFieldValue } from "@/lib/supabase-mirror";
+import {
+  mirrorIdentities,
+  saveIdentityCustomFields,
+  saveIdentityCompany,
+  type SiteFieldValue,
+} from "@/lib/supabase-mirror";
 import { clearIdToFormValues } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,6 +71,7 @@ function IdentityDetail() {
     mutationFn: (vars: {
       data: Parameters<typeof argusApi.updateIdentity>[1];
       siteFieldValues: SiteFieldValue[];
+      companyId: string | null;
     }) => argusApi.updateIdentity(id, vars.data),
     onSuccess: async (updated, vars) => {
       const ok: string[] = ["dados principais"];
@@ -105,6 +111,7 @@ function IdentityDetail() {
         toast.success(`Identity atualizada — gravado: ${ok.join(", ")}.`);
       }
       await mirrorIdentities([updated]);
+      await saveIdentityCompany(id, vars.companyId);
       await saveIdentityCustomFields(id, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
@@ -185,7 +192,7 @@ function IdentityDetail() {
           mode="edit"
           initial={clearIdToFormValues(query.data)}
           submitting={update.isPending}
-          onSubmit={(data, siteFieldValues) => {
+          onSubmit={(data, siteFieldValues, companyId) => {
             const original = query.data!;
             // ClearID PUT é um replace completo. Preservamos os campos que
             // não estão no formulário para evitar 400 (Falha ao atualizar
@@ -201,6 +208,7 @@ function IdentityDetail() {
                 systemData: original.systemData ?? undefined,
               },
               siteFieldValues,
+              companyId,
             });
           }}
           onCancel={() => navigate({ to: "/identities" })}

@@ -73,7 +73,11 @@ export type IdentityFormProps = {
   initial?: Partial<IdentityUpsert>;
   mode: "create" | "edit";
   submitting?: boolean;
-  onSubmit: (data: IdentityUpsert, siteFieldValues: SiteFieldValue[]) => void;
+  onSubmit: (
+    data: IdentityUpsert,
+    siteFieldValues: SiteFieldValue[],
+    companyId: string | null,
+  ) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
   statusBadge?: React.ReactNode;
@@ -97,6 +101,7 @@ export function IdentityForm({
   const [displayName, setDisplayName] = useState(initial?.displayName ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
   const [workerTypeId, setWorkerTypeId] = useState<string>("");
+  const [companyId, setCompanyId] = useState<string>("");
   const defaultSiteId = useDefaultSiteId();
   const [siteId, setSiteId] = useState<string>(initial?.siteId ?? defaultSiteId ?? "");
   useEffect(() => {
@@ -214,6 +219,80 @@ export function IdentityForm({
   const hasSiteFields = siteFields.length > 0;
   const siteFieldLabel = (sf: SiteFieldLite) =>
     pickLang(sf.display_name_override) || sf.definition?.custom_field_name || "Campo";
+
+  // Empresas do site (para vincular a identidade e herdar valores).
+  const companiesQuery = useQuery({
+    queryKey: ["companies", siteId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id, name")
+        .eq("site_id", siteId)
+        .order("name", { ascending: true });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    enabled: Boolean(siteId),
+  });
+  const companies = companiesQuery.data ?? [];
+
+  // Na edição, carrega a empresa já vinculada (Supabase).
+  const initialIdentityId = (initial as { identityId?: string } | undefined)?.identityId;
+  useEffect(() => {
+    if (!initialIdentityId) return;
+    let cancelled = false;
+    void supabase
+      .from("identities")
+      .select("company_id")
+      .eq("identity_id", initialIdentityId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data?.company_id) setCompanyId(data.company_id);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialIdentityId]);
+
+  // Valores dos campos relacionados, vindos da empresa selecionada.
+  const companyRelatedQuery = useQuery({
+    queryKey: ["company-related-values", companyId],
+    queryFn: async (): Promise<{ rel: string; value: string }[]> => {
+      const { data, error } = await supabase
+        .from("company_custom_fields")
+        .select("value, site_custom_field:site_custom_fields(related_identity_field_id)")
+        .eq("company_id", companyId)
+        .returns<
+          { value: string | null; site_custom_field: { related_identity_field_id: string | null } | null }[]
+        >();
+      if (error) throw new Error(error.message);
+      const out: { rel: string; value: string }[] = [];
+      for (const r of data ?? []) {
+        const rel = r.site_custom_field?.related_identity_field_id;
+        if (rel) out.push({ rel, value: r.value ?? "" });
+      }
+      return out;
+    },
+    enabled: Boolean(companyId),
+  });
+
+  // Preenche os campos de identidade relacionados com o valor da empresa.
+  useEffect(() => {
+    const rows = companyRelatedQuery.data;
+    if (!rows?.length || !siteFields.length) return;
+    const nameById = new Map(
+      siteFields.filter((sf) => sf.definition).map((sf) => [sf.id, sf.definition!.custom_field_name]),
+    );
+    setCustomFields((prev) => {
+      const next = { ...prev };
+      for (const { rel, value } of rows) {
+        const name = nameById.get(rel);
+        if (name) next[name] = value;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyRelatedQuery.data, siteFieldsQuery.data]);
 
   // Seções dos campos personalizados (ClearID) → agrupa os campos do site.
   const sectionsQuery = useQuery({
@@ -477,7 +556,7 @@ export function IdentityForm({
       siteId: siteId || undefined,
       workerTypeCode: effectiveWorkerTypeCode || undefined,
     };
-    onSubmit(payload as unknown as IdentityUpsert, siteFieldValues);
+    onSubmit(payload as unknown as IdentityUpsert, siteFieldValues, companyId || null);
   };
 
   const dateDefs = defs.filter((f) => isDate(f.customFieldType));
@@ -579,6 +658,25 @@ export function IdentityForm({
               </SelectContent>
             </Select>
             {errors.siteId && <p className="text-xs text-destructive">{errors.siteId}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label>Empresa</Label>
+            <Select
+              value={companyId || "__NONE__"}
+              onValueChange={(v) => setCompanyId(v === "__NONE__" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Nenhuma" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__NONE__">Nenhuma</SelectItem>
+                {companies.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {!hasSiteFields && renderExtraFields("ident")}
         </CardContent>

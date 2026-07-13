@@ -107,6 +107,19 @@ export async function mirrorIdentities(items: ClearIdIdentity[]): Promise<void> 
 
 export type SiteFieldValue = { site_custom_field_id: string; value: string | null };
 
+/** Grava o vínculo da identidade com uma empresa (company_id) no Supabase. */
+export async function saveIdentityCompany(
+  clearIdIdentityId: string,
+  companyId: string | null,
+): Promise<void> {
+  if (!clearIdIdentityId) return;
+  const { error } = await supabase
+    .from("identities")
+    .update({ company_id: companyId })
+    .eq("identity_id", clearIdIdentityId);
+  if (error) console.error("[mirror] falha ao gravar empresa da identidade:", error.message);
+}
+
 /**
  * Grava os valores dos campos personalizados de uma identidade na tabela
  * identity_custom_fields (vinculados aos campos do site). A identidade precisa
