@@ -68,6 +68,19 @@ function PhotoUpdatePage() {
   // Garante que a câmera seja liberada ao desmontar.
   useEffect(() => stopCamera, []);
 
+  // Atribui o stream ao <video> depois que ele monta (cameraOn = true).
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!cameraOn || !video || !streamRef.current) return;
+    video.srcObject = streamRef.current;
+    const tryPlay = () => video.play().catch(() => {});
+    if (video.readyState >= 1) tryPlay();
+    else video.onloadedmetadata = tryPlay;
+    return () => {
+      video.onloadedmetadata = null;
+    };
+  }, [cameraOn]);
+
   function stopCamera() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -106,14 +119,7 @@ function PhotoUpdatePage() {
         audio: false,
       });
       streamRef.current = stream;
-      setCameraOn(true);
-      // Aguarda o <video> montar antes de atribuir o stream.
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
-      });
+      setCameraOn(true); // o useEffect abaixo atribui o stream ao <video>
     } catch {
       setError("Não foi possível acessar a câmera. Verifique a permissão do navegador.");
     }
@@ -215,9 +221,10 @@ function PhotoUpdatePage() {
               <div className="space-y-3">
                 <video
                   ref={videoRef}
+                  autoPlay
                   playsInline
                   muted
-                  className="mx-auto max-h-64 w-full rounded-md bg-black object-contain"
+                  className="mx-auto h-64 w-full rounded-md bg-black object-contain"
                 />
                 <div className="flex gap-2">
                   <Button type="button" className="flex-1" onClick={capturePhoto}>
