@@ -469,9 +469,11 @@ export type Database = {
           display_index: number | null
           display_name_override: Json
           entity_type: string
+          fillable: boolean
           id: string
           is_active: boolean
           is_required: boolean
+          related_identity_field_id: string | null
           site_id: string
           updated_at: string
           value_range: Json | null
@@ -483,9 +485,11 @@ export type Database = {
           display_index?: number | null
           display_name_override?: Json
           entity_type?: string
+          fillable?: boolean
           id?: string
           is_active?: boolean
           is_required?: boolean
+          related_identity_field_id?: string | null
           site_id: string
           updated_at?: string
           value_range?: Json | null
@@ -497,9 +501,11 @@ export type Database = {
           display_index?: number | null
           display_name_override?: Json
           entity_type?: string
+          fillable?: boolean
           id?: string
           is_active?: boolean
           is_required?: boolean
+          related_identity_field_id?: string | null
           site_id?: string
           updated_at?: string
           value_range?: Json | null
@@ -511,6 +517,13 @@ export type Database = {
             columns: ["definition_id"]
             isOneToOne: false
             referencedRelation: "custom_field_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_custom_fields_related_identity_field_id_fkey"
+            columns: ["related_identity_field_id"]
+            isOneToOne: false
+            referencedRelation: "site_custom_fields"
             referencedColumns: ["id"]
           },
           {

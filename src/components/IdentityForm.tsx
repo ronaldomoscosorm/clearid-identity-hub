@@ -185,6 +185,7 @@ export function IdentityForm({
   type SiteFieldLite = {
     id: string;
     is_required: boolean;
+    fillable: boolean;
     value_range: Json | null;
     display_name_override: Json | null;
     definition: { custom_field_name: string; custom_field_type: string | null } | null;
@@ -195,7 +196,7 @@ export function IdentityForm({
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
-          "id, is_required, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type)",
+          "id, is_required, fillable, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type)",
         )
         .eq("site_id", siteId)
         .eq("entity_type", "identity")
@@ -251,11 +252,13 @@ export function IdentityForm({
     const kind = siteFieldKind(sf.definition?.custom_field_type);
     const value = customFields[name] ?? "";
     const err = errors[`sf-${sf.id}`];
+    const disabled = !sf.fillable; // não preenchível → somente leitura
     return (
       <div key={sf.id} className="space-y-1.5">
         <Label htmlFor={`sf-${sf.id}`} className="text-xs text-muted-foreground">
           {siteFieldLabel(sf)}
           {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
+          {disabled && <span className="ml-1 text-muted-foreground">(somente leitura)</span>}
         </Label>
         {kind === "boolean" ? (
           <div className="flex h-9 items-center">
@@ -263,10 +266,11 @@ export function IdentityForm({
               id={`sf-${sf.id}`}
               checked={cfTruthy(value)}
               onCheckedChange={(c) => setField(name, c ? "true" : "false")}
+              disabled={disabled}
             />
           </div>
         ) : kind === "list" ? (
-          <Select value={value} onValueChange={(v) => setField(name, v)}>
+          <Select value={value} onValueChange={(v) => setField(name, v)} disabled={disabled}>
             <SelectTrigger id={`sf-${sf.id}`} className={cn(err && "border-destructive")}>
               <SelectValue placeholder="Selecione" />
             </SelectTrigger>
@@ -285,6 +289,7 @@ export function IdentityForm({
             value={value}
             onChange={(e) => setField(name, e.target.value)}
             className={cn(err && "border-destructive")}
+            disabled={disabled}
           />
         )}
         {err && <p className="text-xs text-destructive">{err}</p>}
@@ -391,7 +396,12 @@ export function IdentityForm({
       out.siteId = "Selecione um site";
     }
     for (const sf of siteFields) {
-      if (sf.is_required && sf.definition && isBlank(customFields[sf.definition.custom_field_name])) {
+      if (
+        sf.is_required &&
+        sf.fillable &&
+        sf.definition &&
+        isBlank(customFields[sf.definition.custom_field_name])
+      ) {
         out[`sf-${sf.id}`] = "Campo obrigatório";
       }
     }

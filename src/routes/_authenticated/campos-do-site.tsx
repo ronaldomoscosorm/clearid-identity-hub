@@ -67,6 +67,8 @@ type SiteFieldRow = Database["public"]["Tables"]["site_custom_fields"]["Row"] & 
 
 type MultiLang = { "pt-BR": string; "en-US": string; "es-ES": string };
 
+const NO_RELATION = "__NONE__";
+
 type FormState = {
   entity_type: string; // identity | company
   section: string; // sectionName do ClearID ou ALL_SECTIONS
@@ -74,6 +76,8 @@ type FormState = {
   worker_type_id: string;
   is_required: boolean;
   is_active: boolean;
+  fillable: boolean; // identidade: pode ser preenchido no cadastro
+  related_identity_field_id: string; // empresa: campo de identidade relacionado
   display_index: string;
   override: MultiLang;
   // value_range por tipo
@@ -89,6 +93,8 @@ const EMPTY_FORM: FormState = {
   worker_type_id: "",
   is_required: false,
   is_active: true,
+  fillable: true,
+  related_identity_field_id: NO_RELATION,
   display_index: "",
   override: { "pt-BR": "", "en-US": "", "es-ES": "" },
   rangeMin: "",
@@ -281,6 +287,11 @@ function CamposDoSitePage() {
         definition_id: f.definition_id,
         is_required: f.is_required,
         is_active: f.is_active,
+        fillable: f.entity_type === "identity" ? f.fillable : true,
+        related_identity_field_id:
+          f.entity_type === "company" && f.related_identity_field_id !== NO_RELATION
+            ? f.related_identity_field_id
+            : null,
         display_index: f.display_index.trim() ? Number(f.display_index) : null,
         display_name_override: buildOverride(f.override),
         value_range: buildRange(kind, f),
@@ -350,6 +361,8 @@ function CamposDoSitePage() {
       definition_id: row.definition_id,
       worker_type_id: row.worker_type_id ?? "",
       is_required: row.is_required,
+      fillable: row.fillable,
+      related_identity_field_id: row.related_identity_field_id ?? NO_RELATION,
       is_active: row.is_active,
       display_index: row.display_index == null ? "" : String(row.display_index),
       override: langFromJson(row.display_name_override),
@@ -750,6 +763,47 @@ function CamposDoSitePage() {
                 <Label className="cursor-pointer">Ativo</Label>
               </div>
             </div>
+
+            {form.entity_type === "identity" && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={form.fillable}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, fillable: v }))}
+                />
+                <Label className="cursor-pointer">Pode ser preenchido no cadastro</Label>
+              </div>
+            )}
+
+            {form.entity_type === "company" && (
+              <div className="space-y-2">
+                <Label>Relacionar com campo de identidade</Label>
+                <Select
+                  value={form.related_identity_field_id}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, related_identity_field_id: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nenhum" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_RELATION}>Nenhum</SelectItem>
+                    {(fieldsQuery.data ?? [])
+                      .filter((r) => r.entity_type === "identity")
+                      .map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.definition?.custom_field_name ?? "—"}
+                          {r.worker_type?.name ? ` · ${r.worker_type.name}` : ""}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  O valor do custom da empresa não existe no ClearID — vem do campo de identidade
+                  relacionado.
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
