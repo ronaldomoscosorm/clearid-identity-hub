@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Camera, Plus, RefreshCw, Eye, Search, Loader2 } from "lucide-react";
+import { Camera, Plus, RefreshCw, Eye, Search, Loader2, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   argusApi,
@@ -33,6 +33,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/campanhas-foto")({
   head: () => ({ meta: [{ title: "Campanhas de Foto — Argus ClearID" }] }),
@@ -68,6 +78,18 @@ function CampanhasFotoPage() {
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<PhotoCampaignResult | null>(null);
+  const [deleting, setDeleting] = useState<PhotoCampaignResult | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => argusApi.deletePhotoCampaign(id),
+    onSuccess: () => {
+      toast.success("Campanha excluída.");
+      setDeleting(null);
+      qc.invalidateQueries({ queryKey: ["photo-campaigns"] });
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message),
+  });
 
   const listQuery = useQuery({
     queryKey: ["photo-campaigns"],
@@ -135,7 +157,7 @@ function CampanhasFotoPage() {
                   <TableHead>Sem e-mail</TableHead>
                   <TableHead>Falhas</TableHead>
                   <TableHead>Criada</TableHead>
-                  <TableHead className="w-[80px] text-right">Detalhe</TableHead>
+                  <TableHead className="w-[130px] text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -156,9 +178,33 @@ function CampanhasFotoPage() {
                       {formatDate(c.createdUtc)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => setDetailId(c.campaignId)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Detalhe"
+                          onClick={() => setDetailId(c.campaignId)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Renomear"
+                          onClick={() => setEditing(c)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Excluir"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleting(c)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -177,7 +223,100 @@ function CampanhasFotoPage() {
         }}
       />
       <CampaignDetailDialog id={detailId} onClose={() => setDetailId(null)} />
+
+      <RenameCampaignDialog
+        campaign={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          qc.invalidateQueries({ queryKey: ["photo-campaigns"] });
+        }}
+      />
+
+      <AlertDialog open={Boolean(deleting)} onOpenChange={(v) => !v && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir campanha?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A campanha <strong>{deleting?.name || "sem nome"}</strong> será excluída
+              permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleting) deleteMutation.mutate(deleting.campaignId);
+              }}
+            >
+              {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+function RenameCampaignDialog({
+  campaign,
+  onClose,
+  onSaved,
+}: {
+  campaign: PhotoCampaignResult | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    setName(campaign?.name ?? "");
+  }, [campaign]);
+
+  const rename = useMutation({
+    mutationFn: () =>
+      argusApi.updatePhotoCampaign(campaign!.campaignId, { name: name.trim() || null }),
+    onSuccess: () => {
+      toast.success("Campanha atualizada.");
+      onSaved();
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message),
+  });
+
+  return (
+    <Dialog open={Boolean(campaign)} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-4 w-4" /> Renomear campanha
+          </DialogTitle>
+          <DialogDescription>
+            Os alvos (identidades) são definidos na criação e não podem ser alterados aqui.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 py-2">
+          <Label htmlFor="rename">Nome</Label>
+          <Input
+            id="rename"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !rename.isPending && rename.mutate()}
+            placeholder="Nome da campanha"
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={() => rename.mutate()} disabled={rename.isPending}>
+            {rename.isPending ? "Salvando..." : "Salvar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

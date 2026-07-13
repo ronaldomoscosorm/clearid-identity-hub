@@ -995,6 +995,22 @@ export const argusApi = {
         { allSites: true },
       ),
     ),
+  updatePhotoCampaign: (id: string, payload: { name?: string | null }) =>
+    unwrap<PhotoCampaignResult>(
+      argusFetch(
+        `/api/photo-campaigns/${encodeURIComponent(id)}`,
+        { method: "PUT", body: JSON.stringify(payload) },
+        { allSites: true },
+      ),
+    ),
+  deletePhotoCampaign: (id: string) =>
+    unwrap<unknown>(
+      argusFetch(
+        `/api/photo-campaigns/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+        { allSites: true },
+      ),
+    ),
 
   listIdentities: async (params?: {
     query?: string;
