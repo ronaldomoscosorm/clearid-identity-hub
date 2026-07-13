@@ -128,6 +128,11 @@ function buildRange(kind: ReturnType<typeof typeOf>, f: FormState): Json | null 
     if (!opts.length) return null;
     return { options: opts } as Json;
   }
+  if (kind === "text") {
+    // Valor padrão opcional para campo de texto (pode ficar em branco).
+    const t = f.rangeMin.trim();
+    return t ? ({ text: t } as Json) : null;
+  }
   return null;
 }
 
@@ -135,7 +140,8 @@ function rangeToForm(v: Json | null): Pick<FormState, "rangeMin" | "rangeMax" | 
   const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
   const opts = Array.isArray(o.options) ? (o.options as unknown[]).map(String) : [];
   return {
-    rangeMin: o.min == null ? "" : String(o.min),
+    // rangeMin guarda o min (número/data) ou o texto padrão (texto).
+    rangeMin: o.min != null ? String(o.min) : o.text != null ? String(o.text) : "",
     rangeMax: o.max == null ? "" : String(o.max),
     options: opts.join("\n"),
   };
@@ -675,6 +681,15 @@ function CamposDoSitePage() {
                   onChange={(e) => setForm((f) => ({ ...f, options: e.target.value }))}
                   rows={4}
                   placeholder={"Opção A\nOpção B"}
+                />
+              </div>
+            ) : kind === "text" ? (
+              <div className="space-y-2">
+                <Label>Valor padrão (opcional)</Label>
+                <Input
+                  value={form.rangeMin}
+                  onChange={(e) => setForm((f) => ({ ...f, rangeMin: e.target.value }))}
+                  placeholder="Pode ficar em branco"
                 />
               </div>
             ) : (
