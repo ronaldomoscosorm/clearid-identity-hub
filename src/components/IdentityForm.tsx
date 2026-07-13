@@ -214,6 +214,76 @@ export function IdentityForm({
   const siteFieldLabel = (sf: SiteFieldLite) =>
     pickLang(sf.display_name_override) || sf.definition?.custom_field_name || "Campo";
 
+  // Seções dos campos personalizados (ClearID) → agrupa os campos do site.
+  const sectionsQuery = useQuery({
+    queryKey: ["custom-field-sections"],
+    queryFn: () => argusApi.listCustomFieldSections(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const sectionByField = new Map<string, { display: string; sIdx: number; fIdx: number }>();
+  for (const sec of sectionsQuery.data ?? []) {
+    for (const f of sec.fields) {
+      sectionByField.set(f.name, {
+        display: sec.displayName || sec.sectionName,
+        sIdx: sec.index,
+        fIdx: f.index,
+      });
+    }
+  }
+  const OUTROS = "Outros";
+  const groupedSiteFields = (() => {
+    const groups = new Map<string, { display: string; sIdx: number; items: { sf: SiteFieldLite; fIdx: number }[] }>();
+    for (const sf of siteFields) {
+      const name = sf.definition?.custom_field_name ?? "";
+      const info = sectionByField.get(name);
+      const key = info?.display ?? OUTROS;
+      const sIdx = info?.sIdx ?? 999;
+      if (!groups.has(key)) groups.set(key, { display: key, sIdx, items: [] });
+      groups.get(key)!.items.push({ sf, fIdx: info?.fIdx ?? 0 });
+    }
+    const arr = [...groups.values()].sort((a, b) => a.sIdx - b.sIdx);
+    for (const g of arr) g.items.sort((a, b) => a.fIdx - b.fIdx);
+    return arr;
+  })();
+
+  const renderSiteField = (sf: SiteFieldLite) => {
+    const name = sf.definition?.custom_field_name ?? sf.id;
+    const kind = siteFieldKind(sf.definition?.custom_field_type);
+    const value = customFields[name] ?? "";
+    const err = errors[`sf-${sf.id}`];
+    return (
+      <div key={sf.id} className="space-y-1.5">
+        <Label htmlFor={`sf-${sf.id}`} className="text-xs text-muted-foreground">
+          {siteFieldLabel(sf)}
+          {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
+        </Label>
+        {kind === "list" ? (
+          <Select value={value} onValueChange={(v) => setField(name, v)}>
+            <SelectTrigger id={`sf-${sf.id}`} className={cn(err && "border-destructive")}>
+              <SelectValue placeholder="Selecione" />
+            </SelectTrigger>
+            <SelectContent>
+              {optionsOf(sf.value_range).map((opt) => (
+                <SelectItem key={opt} value={opt}>
+                  {opt}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            id={`sf-${sf.id}`}
+            type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
+            value={value}
+            onChange={(e) => setField(name, e.target.value)}
+            className={cn(err && "border-destructive")}
+          />
+        )}
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </div>
+    );
+  };
+
   const renderExtraFields = (section: ExtraField["section"]) =>
     EXTRA_FIELDS.filter((f) => f.section === section && isVisible(f.key)).map((f) => (
       <div key={f.key} className="space-y-2">
@@ -523,44 +593,15 @@ export function IdentityForm({
           <CardHeader>
             <CardTitle className="text-base">Campos personalizados do site</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            {siteFields.map((sf) => {
-              const name = sf.definition?.custom_field_name ?? sf.id;
-              const kind = siteFieldKind(sf.definition?.custom_field_type);
-              const value = customFields[name] ?? "";
-              const err = errors[`sf-${sf.id}`];
-              return (
-                <div key={sf.id} className="space-y-1.5">
-                  <Label htmlFor={`sf-${sf.id}`} className="text-xs text-muted-foreground">
-                    {siteFieldLabel(sf)}
-                    {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
-                  </Label>
-                  {kind === "list" ? (
-                    <Select value={value} onValueChange={(v) => setField(name, v)}>
-                      <SelectTrigger id={`sf-${sf.id}`} className={cn(err && "border-destructive")}>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {optionsOf(sf.value_range).map((opt) => (
-                          <SelectItem key={opt} value={opt}>
-                            {opt}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input
-                      id={`sf-${sf.id}`}
-                      type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
-                      value={value}
-                      onChange={(e) => setField(name, e.target.value)}
-                      className={cn(err && "border-destructive")}
-                    />
-                  )}
-                  {err && <p className="text-xs text-destructive">{err}</p>}
+          <CardContent className="space-y-6">
+            {groupedSiteFields.map((g) => (
+              <div key={g.display} className="space-y-3">
+                <p className="border-b pb-1 text-sm font-medium text-foreground">{g.display}</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {g.items.map(({ sf }) => renderSiteField(sf))}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

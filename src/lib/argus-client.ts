@@ -837,6 +837,25 @@ export const argusApi = {
     return data?.customFields ?? [];
   },
 
+  /** Lista todas as seções de campos personalizados (nome, exibição, campos). */
+  listCustomFieldSections: async (): Promise<
+    { sectionName: string; displayName: string; index: number; fields: { name: string; index: number }[] }[]
+  > => {
+    const data = await unwrap<unknown>(argusFetch(`/api/custom-fields/sections`));
+    const arr = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+    return arr.map((s) => ({
+      sectionName: String(s.identityCustomFieldsSectionName ?? s.sectionName ?? ""),
+      displayName: String(s.displayName ?? s.identityCustomFieldsSectionName ?? s.sectionName ?? ""),
+      index: typeof s.index === "number" ? s.index : 0,
+      fields: Array.isArray(s.identityCustomFields)
+        ? (s.identityCustomFields as Record<string, unknown>[]).map((f) => ({
+            name: String(f.name ?? ""),
+            index: typeof f.index === "number" ? f.index : 0,
+          }))
+        : [],
+    }));
+  },
+
   getCustomFieldSection: async (
     sectionName: string,
   ): Promise<ClearIdCustomFieldSection | null> => {
