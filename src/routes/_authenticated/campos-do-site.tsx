@@ -96,6 +96,19 @@ const EMPTY_FORM: FormState = {
   options: "",
 };
 
+// Máscara dd/MM/yyyy a partir dos dígitos digitados.
+function maskDate(raw: string): string {
+  const d = raw.replace(/\D/g, "").slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+}
+// Converte ISO (yyyy-MM-dd) para dd/MM/yyyy; deixa o resto intacto.
+function isoToBr(s: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+}
+
 function langFromJson(v: Json | null | undefined): MultiLang {
   const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
   return {
@@ -140,9 +153,9 @@ function rangeToForm(v: Json | null): Pick<FormState, "rangeMin" | "rangeMax" | 
   const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
   const opts = Array.isArray(o.options) ? (o.options as unknown[]).map(String) : [];
   return {
-    // rangeMin guarda o min (número/data) ou o texto padrão (texto).
-    rangeMin: o.min != null ? String(o.min) : o.text != null ? String(o.text) : "",
-    rangeMax: o.max == null ? "" : String(o.max),
+    // rangeMin guarda o min (número/data em dd/MM/yyyy) ou o texto padrão.
+    rangeMin: isoToBr(o.min != null ? String(o.min) : o.text != null ? String(o.text) : ""),
+    rangeMax: isoToBr(o.max == null ? "" : String(o.max)),
     options: opts.join("\n"),
   };
 }
@@ -659,17 +672,31 @@ function CamposDoSitePage() {
                 <div className="space-y-2">
                   <Label>Valor mínimo</Label>
                   <Input
-                    type={kind === "date" ? "date" : "number"}
+                    type={kind === "date" ? "text" : "number"}
+                    inputMode={kind === "date" ? "numeric" : undefined}
+                    placeholder={kind === "date" ? "dd/MM/yyyy" : undefined}
                     value={form.rangeMin}
-                    onChange={(e) => setForm((f) => ({ ...f, rangeMin: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        rangeMin: kind === "date" ? maskDate(e.target.value) : e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Valor máximo</Label>
                   <Input
-                    type={kind === "date" ? "date" : "number"}
+                    type={kind === "date" ? "text" : "number"}
+                    inputMode={kind === "date" ? "numeric" : undefined}
+                    placeholder={kind === "date" ? "dd/MM/yyyy" : undefined}
                     value={form.rangeMax}
-                    onChange={(e) => setForm((f) => ({ ...f, rangeMax: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        rangeMax: kind === "date" ? maskDate(e.target.value) : e.target.value,
+                      }))
+                    }
                   />
                 </div>
               </div>
