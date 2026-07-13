@@ -1,12 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, Languages, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
+import { useT, LANGS } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { PoweredBy } from "@/components/PoweredBy";
 import {
@@ -35,17 +36,17 @@ import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
 const NAV_ITEMS = [
-  { to: "/identities", icon: Users, label: "Identities" },
-  { to: "/empresas", icon: Building2, label: "Empresas" },
-  { to: "/regras", icon: ShieldCheck, label: "Regras" },
-  { to: "/terceirizados", icon: HardHat, label: "Terceirizados" },
-  { to: "/campos-personalizados", icon: ListChecks, label: "Campos personalizados" },
-  { to: "/campos-do-site", icon: SlidersHorizontal, label: "Campos do site" },
-  { to: "/apelidos", icon: Tag, label: "Apelidos" },
-  { to: "/campanhas-foto", icon: Camera, label: "Campanhas de Foto" },
-  { to: "/diagnostics", icon: Activity, label: "Diagnóstico" },
-  { to: "/settings", icon: SettingsIcon, label: "Configurações" },
-  { to: "/branding", icon: Palette, label: "Identidade" },
+  { to: "/identities", icon: Users, key: "nav.identities" },
+  { to: "/empresas", icon: Building2, key: "nav.empresas" },
+  { to: "/regras", icon: ShieldCheck, key: "nav.regras" },
+  { to: "/terceirizados", icon: HardHat, key: "nav.terceirizados" },
+  { to: "/campos-personalizados", icon: ListChecks, key: "nav.campos-personalizados" },
+  { to: "/campos-do-site", icon: SlidersHorizontal, key: "nav.campos-do-site" },
+  { to: "/apelidos", icon: Tag, key: "nav.apelidos" },
+  { to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" },
+  { to: "/diagnostics", icon: Activity, key: "nav.diagnostics" },
+  { to: "/settings", icon: SettingsIcon, key: "nav.settings" },
+  { to: "/branding", icon: Palette, key: "nav.branding" },
 ] as const;
 
 function EnvBadge({ env }: { env: string }) {
@@ -85,6 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const currentSite = sitesQuery.data?.find((s) => s.siteId === siteId);
   const branding = useBranding();
   useApplyBranding();
+  const { t, lang, setLang } = useT();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -150,7 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="leading-tight group-data-[collapsible=icon]:hidden">
                 <div className="text-sm font-semibold text-foreground">Argus ClearID</div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {branding.clientName || "R&M Console"}
+                  {branding.clientName || t("shell.console")}
                 </div>
               </div>
             </Link>
@@ -161,12 +163,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <SidebarMenu>
                   {NAV_ITEMS.map((item) => {
                     const active = pathname.startsWith(item.to);
+                    const label = t(item.key);
                     return (
                       <SidebarMenuItem key={item.to}>
-                        <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
+                        <SidebarMenuButton asChild isActive={active} tooltip={label}>
                           <Link to={item.to}>
                             <item.icon className="h-4 w-4" />
-                            <span>{item.label}</span>
+                            <span>{label}</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -191,33 +194,64 @@ export function AppShell({ children }: { children: ReactNode }) {
                 variant="outline"
                 size="sm"
                 className="h-8 gap-1.5 font-normal"
-                title="Recarregar dados do ArgusClearId.Api"
+                title={t("shell.refreshTitle")}
                 onClick={async () => {
                   await queryClient.invalidateQueries();
-                  toast.success("Dados do ArgusClearId.Api recarregados");
+                  toast.success(t("shell.refreshed"));
                 }}
               >
                 <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs">Atualizar</span>
+                <span className="text-xs">{t("shell.refresh")}</span>
               </Button>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
                     className="h-8 gap-1.5 font-normal"
-                    title="Site padrão"
+                    title={t("shell.language")}
+                  >
+                    <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs">
+                      {LANGS.find((l) => l.code === lang)?.short ?? lang}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuLabel>{t("shell.language")}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {LANGS.map((l) => (
+                    <DropdownMenuItem
+                      key={l.code}
+                      onClick={() => setLang(l.code)}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span>{l.label}</span>
+                      {l.code === lang && <Check className="h-4 w-4 text-primary" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 font-normal"
+                    title={t("shell.defaultSite")}
                     disabled={!sitesQuery.data?.length}
                   >
                     <Globe className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="max-w-[180px] truncate text-xs">
-                      {currentSite?.name ?? siteId ?? "Selecionar site"}
+                      {currentSite?.name ?? siteId ?? t("shell.selectSite")}
                     </span>
                     <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
-                  <DropdownMenuLabel>Site padrão</DropdownMenuLabel>
+                  <DropdownMenuLabel>{t("shell.defaultSite")}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {sitesQuery.data?.length ? (
                     [...sitesQuery.data]
@@ -238,7 +272,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                         );
                       })
                   ) : (
-                    <DropdownMenuItem disabled>Nenhum site disponível</DropdownMenuItem>
+                    <DropdownMenuItem disabled>{t("shell.noSites")}</DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
