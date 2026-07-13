@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useDefaultSiteId } from "@/lib/argus-client";
-import { typeOf, pickLang, optionsOf } from "@/lib/custom-fields";
+import { typeOf, pickLang, optionsOf, isTruthy } from "@/lib/custom-fields";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -412,7 +413,14 @@ function EmpresasPage() {
                         {label}
                         {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
                       </Label>
-                      {kind === "list" ? (
+                      {kind === "boolean" ? (
+                        <div className="flex h-9 items-center">
+                          <Checkbox
+                            checked={isTruthy(value)}
+                            onCheckedChange={(c) => setCV(sf.id, c ? "true" : "false")}
+                          />
+                        </div>
+                      ) : kind === "list" ? (
                         <Select value={value} onValueChange={(v) => setCV(sf.id, v)}>
                           <SelectTrigger>
                             <SelectValue placeholder="Selecione" />

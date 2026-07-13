@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import { useIdentityFieldLabels } from "@/lib/identity-labels";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { typeOf as siteFieldKind, pickLang, optionsOf } from "@/lib/custom-fields";
+import { typeOf as siteFieldKind, pickLang, optionsOf, isTruthy as cfTruthy } from "@/lib/custom-fields";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -257,7 +258,15 @@ export function IdentityForm({
           {siteFieldLabel(sf)}
           {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
         </Label>
-        {kind === "list" ? (
+        {kind === "boolean" ? (
+          <div className="flex h-9 items-center">
+            <Checkbox
+              id={`sf-${sf.id}`}
+              checked={cfTruthy(value)}
+              onCheckedChange={(c) => setField(name, c ? "true" : "false")}
+            />
+          </div>
+        ) : kind === "list" ? (
           <Select value={value} onValueChange={(v) => setField(name, v)}>
             <SelectTrigger id={`sf-${sf.id}`} className={cn(err && "border-destructive")}>
               <SelectValue placeholder="Selecione" />
