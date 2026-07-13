@@ -7,6 +7,8 @@ import { getPhotoInfo, submitPhoto, type PhotoUpdateInfo } from "@/lib/photo-pub
 import { Button } from "@/components/ui/button";
 import { PoweredBy } from "@/components/PoweredBy";
 import { useApplyBranding, useBranding } from "@/lib/branding";
+import { ensureTechnicalSession } from "@/lib/tech-auth";
+import { hydrateSettings } from "@/lib/supabase-settings";
 
 export const Route = createFileRoute("/foto/$token")({
   ssr: false,
@@ -48,6 +50,13 @@ function PhotoUpdatePage() {
       cancelled = true;
     };
   }, [token]);
+
+  // Carrega o branding do site (logo/nome/cores) via usuário técnico do Supabase.
+  useEffect(() => {
+    ensureTechnicalSession()
+      .then((ok) => (ok ? hydrateSettings() : undefined))
+      .catch(() => {});
+  }, []);
 
   // Libera a URL de prévia quando troca/desmonta.
   useEffect(() => {
