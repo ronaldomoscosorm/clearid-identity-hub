@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,7 +73,8 @@ const NO_RELATION = "__NONE__";
 type FormState = {
   entity_type: string; // identity | company
   section: string; // sectionName do ClearID ou ALL_SECTIONS
-  definition_id: string;
+  definition_id: string; // usado na EDIÇÃO (campo único)
+  selectedIds: string[]; // usado ao ADICIONAR (múltiplos)
   worker_type_id: string;
   is_required: boolean;
   is_active: boolean;
@@ -90,6 +92,7 @@ const EMPTY_FORM: FormState = {
   entity_type: "identity",
   section: ALL_SECTIONS,
   definition_id: "",
+  selectedIds: [],
   worker_type_id: "",
   is_required: false,
   is_active: true,
@@ -273,6 +276,24 @@ function CamposDoSitePage() {
     [defsQuery.data, usedIdsForScope, editing, sectionFieldNames],
   );
 
+  const defsById = useMemo(
+    () => new Map((defsQuery.data ?? []).map((d) => [d.id, d])),
+    [defsQuery.data],
+  );
+
+  // Campos disponíveis agrupados por seção (para a seleção múltipla).
+  const availableBySection = useMemo(() => {
+    const groups = new Map<string, Definition[]>();
+    for (const d of availableDefs) {
+      const key = sectionByField.get(d.custom_field_name) ?? "Outros";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(d);
+    }
+    return [...groups.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0], "pt-BR", { sensitivity: "base" }),
+    );
+  }, [availableDefs, sectionByField]);
+
   const selectedDef = useMemo(
     () => (defsQuery.data ?? []).find((d) => d.id === form.definition_id) ?? null,
     [defsQuery.data, form.definition_id],
@@ -281,10 +302,9 @@ function CamposDoSitePage() {
 
   const upsert = useMutation({
     mutationFn: async (f: FormState) => {
-      const base = {
+      const common = {
         site_id: siteId as string,
         entity_type: f.entity_type,
-        definition_id: f.definition_id,
         is_required: f.is_required,
         is_active: f.is_active,
         fillable: f.entity_type === "identity" ? f.fillable : true,
@@ -293,42 +313,60 @@ function CamposDoSitePage() {
             ? f.related_identity_field_id
             : null,
         display_index: f.display_index.trim() ? Number(f.display_index) : null,
-        display_name_override: buildOverride(f.override),
-        value_range: buildRange(kind, f),
       };
+
       if (editing) {
+        // Edição de um único campo (com override/faixa próprios).
         const { error } = await supabase
           .from("site_custom_fields")
           .update({
-            ...base,
+            ...common,
+            definition_id: f.definition_id,
             worker_type_id: f.entity_type === "identity" ? f.worker_type_id : null,
+            display_name_override: buildOverride(f.override),
+            value_range: buildRange(kind, f),
           })
           .eq("id", editing.id);
         if (error) throw new Error(error.message);
-      } else if (f.entity_type === "identity" && f.worker_type_id === ALL_WORKER_TYPES) {
-        // Cria o campo para todos os tipos que ainda não o possuem.
-        const existing = new Set(
-          (fieldsQuery.data ?? [])
-            .filter((r) => r.entity_type === "identity" && r.definition_id === f.definition_id)
-            .map((r) => r.worker_type_id),
-        );
-        const rows = workerTypes
-          .filter((w) => !existing.has(w.id))
-          .map((w) => ({ ...base, worker_type_id: w.id }));
-        if (rows.length) {
-          const { error } = await supabase.from("site_custom_fields").insert(rows);
-          if (error) throw new Error(error.message);
-        }
-      } else {
-        const { error } = await supabase.from("site_custom_fields").insert({
-          ...base,
-          worker_type_id: f.entity_type === "identity" ? f.worker_type_id : null,
-        });
-        if (error) throw new Error(error.message);
+        return;
       }
+
+      // Adição em lote: múltiplos campos × tipos de trabalhador.
+      const workerTypeIds =
+        f.entity_type === "company"
+          ? [null]
+          : f.worker_type_id === ALL_WORKER_TYPES
+            ? workerTypes.map((w) => w.id)
+            : [f.worker_type_id];
+
+      // (entity, definition, worker_type) já existentes — para não duplicar.
+      const existing = new Set(
+        (fieldsQuery.data ?? [])
+          .filter((r) => r.entity_type === f.entity_type)
+          .map((r) => `${r.definition_id}|${r.worker_type_id ?? ""}`),
+      );
+
+      const rows: Database["public"]["Tables"]["site_custom_fields"]["Insert"][] = [];
+      for (const defId of f.selectedIds) {
+        const def = defsById.get(defId);
+        for (const wt of workerTypeIds) {
+          if (existing.has(`${defId}|${wt ?? ""}`)) continue;
+          rows.push({
+            ...common,
+            definition_id: defId,
+            worker_type_id: wt,
+            // Nome de exibição = descrição do campo (display_name do catálogo).
+            display_name_override: (def?.display_name ?? {}) as Json,
+            value_range: null,
+          });
+        }
+      }
+      if (!rows.length) return;
+      const { error } = await supabase.from("site_custom_fields").insert(rows);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      toast.success(editing ? "Campo atualizado" : "Campo adicionado ao site");
+      toast.success(editing ? "Campo atualizado" : "Campos adicionados ao site");
       qc.invalidateQueries({ queryKey: ["site-custom-fields", siteId] });
       setDialogOpen(false);
     },
@@ -359,6 +397,7 @@ function CamposDoSitePage() {
       entity_type: row.entity_type,
       section: ALL_SECTIONS,
       definition_id: row.definition_id,
+      selectedIds: [],
       worker_type_id: row.worker_type_id ?? "",
       is_required: row.is_required,
       fillable: row.fillable,
@@ -375,12 +414,27 @@ function CamposDoSitePage() {
       toast.error("Selecione o tipo do trabalhador");
       return;
     }
-    if (!form.definition_id) {
-      toast.error("Selecione um campo");
+    if (editing ? !form.definition_id : form.selectedIds.length === 0) {
+      toast.error("Selecione ao menos um campo");
       return;
     }
     upsert.mutate(form);
   };
+
+  const toggleSelected = (id: string) =>
+    setForm((f) => ({
+      ...f,
+      selectedIds: f.selectedIds.includes(id)
+        ? f.selectedIds.filter((x) => x !== id)
+        : [...f.selectedIds, id],
+    }));
+  const toggleGroup = (ids: string[], all: boolean) =>
+    setForm((f) => ({
+      ...f,
+      selectedIds: all
+        ? f.selectedIds.filter((x) => !ids.includes(x))
+        : [...new Set([...f.selectedIds, ...ids])],
+    }));
 
   const items = fieldsQuery.data ?? [];
   // Agrupa os campos existentes por seção (ClearID), em ordem alfabética.
@@ -619,39 +673,79 @@ function CamposDoSitePage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Campo *</Label>
-              <Select
-                value={form.definition_id}
-                onValueChange={(v) => setForm((f) => ({ ...f, definition_id: v }))}
-                disabled={
-                  Boolean(editing) || (form.entity_type === "identity" && !form.worker_type_id)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um campo do catálogo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {defsQuery.isLoading ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Carregando campos do Argus...
-                    </div>
-                  ) : availableDefs.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Nenhum campo disponível para adicionar.
-                    </div>
-                  ) : (
-                    availableDefs.map((d) => (
+            {editing ? (
+              <div className="space-y-2">
+                <Label>Campo</Label>
+                <Select value={form.definition_id} onValueChange={() => {}} disabled>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um campo do catálogo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableDefs.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
                         {pickLang(d.display_name) || d.custom_field_name}
                         {d.custom_field_type ? ` · ${d.custom_field_type}` : ""}
                       </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>
+                  Campos * <span className="text-muted-foreground">({form.selectedIds.length})</span>
+                </Label>
+                {form.entity_type === "identity" && !form.worker_type_id ? (
+                  <p className="text-xs text-muted-foreground">
+                    Selecione o tipo do trabalhador primeiro.
+                  </p>
+                ) : defsQuery.isLoading ? (
+                  <p className="text-xs text-muted-foreground">Carregando campos do Argus...</p>
+                ) : availableBySection.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhum campo disponível.</p>
+                ) : (
+                  <div className="max-h-64 space-y-3 overflow-y-auto rounded-md border p-3">
+                    {availableBySection.map(([section, defs]) => {
+                      const ids = defs.map((d) => d.id);
+                      const allSelected = ids.every((id) => form.selectedIds.includes(id));
+                      return (
+                        <div key={section} className="space-y-1.5">
+                          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                            <Checkbox
+                              checked={allSelected}
+                              onCheckedChange={() => toggleGroup(ids, allSelected)}
+                            />
+                            {section}
+                          </label>
+                          <div className="ml-6 space-y-1">
+                            {defs.map((d) => (
+                              <label
+                                key={d.id}
+                                className="flex cursor-pointer items-center gap-2 text-sm"
+                              >
+                                <Checkbox
+                                  checked={form.selectedIds.includes(d.id)}
+                                  onCheckedChange={() => toggleSelected(d.id)}
+                                />
+                                <span>{pickLang(d.display_name) || d.custom_field_name}</span>
+                                {d.custom_field_type && (
+                                  <span className="text-xs text-muted-foreground">
+                                    · {d.custom_field_type}
+                                  </span>
+                                )}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
+            {editing && (
+            <>
             <div className="space-y-2">
               <Label>Nome de exibição</Label>
               <div className="grid grid-cols-3 gap-3">
@@ -736,6 +830,8 @@ function CamposDoSitePage() {
               <p className="text-xs text-muted-foreground">
                 Faixa de valores não se aplica a este tipo de campo.
               </p>
+            )}
+            </>
             )}
 
             <div className="grid grid-cols-3 items-end gap-3">
