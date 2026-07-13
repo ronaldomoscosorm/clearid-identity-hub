@@ -56,6 +56,7 @@ export const Route = createFileRoute("/_authenticated/campos-do-site")({
 });
 
 const ALL_WORKER_TYPES = "__ALL__";
+const ALL_SECTIONS = "__ALL_SECTIONS__";
 
 type Definition = Database["public"]["Tables"]["custom_field_definitions"]["Row"];
 type WorkerType = Database["public"]["Tables"]["worker_types"]["Row"];
@@ -68,6 +69,7 @@ type MultiLang = { "pt-BR": string; "en-US": string; "es-ES": string };
 
 type FormState = {
   entity_type: string; // identity | company
+  section: string; // sectionName do ClearID ou ALL_SECTIONS
   definition_id: string;
   worker_type_id: string;
   is_required: boolean;
@@ -82,6 +84,7 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   entity_type: "identity",
+  section: ALL_SECTIONS,
   definition_id: "",
   worker_type_id: "",
   is_required: false,
@@ -178,6 +181,27 @@ function CamposDoSitePage() {
   });
   const workerTypes = workerTypesQuery.data ?? [];
 
+  const sectionsQuery = useQuery({
+    queryKey: ["custom-field-sections"],
+    queryFn: () => argusApi.listCustomFieldSections(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const sections = sectionsQuery.data ?? [];
+  // custom_field_name -> nome de exibição da seção
+  const sectionByField = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const sec of sections) {
+      for (const f of sec.fields) m.set(f.name, sec.displayName || sec.sectionName);
+    }
+    return m;
+  }, [sections]);
+  // Campos da seção selecionada no formulário (null = todas).
+  const sectionFieldNames = useMemo(() => {
+    if (!form.section || form.section === ALL_SECTIONS) return null;
+    const sec = sections.find((s) => s.sectionName === form.section);
+    return new Set((sec?.fields ?? []).map((f) => f.name));
+  }, [sections, form.section]);
+
   const defsQuery = useQuery({
     queryKey: ["custom-field-definitions", siteId],
     queryFn: async (): Promise<Definition[]> => {
@@ -216,9 +240,12 @@ function CamposDoSitePage() {
   const availableDefs = useMemo(
     () =>
       (defsQuery.data ?? []).filter(
-        (d) => editing?.definition_id === d.id || !usedIdsForScope.has(d.id),
+        (d) =>
+          editing?.definition_id === d.id ||
+          (!usedIdsForScope.has(d.id) &&
+            (!sectionFieldNames || sectionFieldNames.has(d.custom_field_name))),
       ),
-    [defsQuery.data, usedIdsForScope, editing],
+    [defsQuery.data, usedIdsForScope, editing, sectionFieldNames],
   );
 
   const selectedDef = useMemo(
@@ -300,6 +327,7 @@ function CamposDoSitePage() {
     setEditing(row);
     setForm({
       entity_type: row.entity_type,
+      section: ALL_SECTIONS,
       definition_id: row.definition_id,
       worker_type_id: row.worker_type_id ?? "",
       is_required: row.is_required,
@@ -323,6 +351,73 @@ function CamposDoSitePage() {
   };
 
   const items = fieldsQuery.data ?? [];
+  // Agrupa os campos existentes por seção (ClearID), em ordem alfabética.
+  const groupedItems = useMemo(() => {
+    const groups = new Map<string, SiteFieldRow[]>();
+    for (const row of items) {
+      const key = sectionByField.get(row.definition?.custom_field_name ?? "") ?? "Outros";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(row);
+    }
+    const arr = [...groups.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0], "pt-BR", { sensitivity: "base" }),
+    );
+    for (const [, rows] of arr) {
+      rows.sort((a, b) =>
+        (a.definition?.custom_field_name ?? "").localeCompare(
+          b.definition?.custom_field_name ?? "",
+          "pt-BR",
+          { sensitivity: "base" },
+        ),
+      );
+    }
+    return arr;
+  }, [items, sectionByField]);
+
+  const renderRow = (row: SiteFieldRow) => (
+    <TableRow key={row.id}>
+      <TableCell className="font-medium">{row.definition?.custom_field_name ?? "—"}</TableCell>
+      <TableCell>
+        <Badge variant={row.entity_type === "company" ? "default" : "secondary"}>
+          {row.entity_type === "company" ? "Empresa" : "Identidade"}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <Badge variant="outline">{row.worker_type?.name ?? "—"}</Badge>
+      </TableCell>
+      <TableCell className="text-muted-foreground">
+        {row.definition?.custom_field_type ?? "—"}
+      </TableCell>
+      <TableCell className="text-muted-foreground">
+        {langFromJson(row.display_name_override)["pt-BR"] || "—"}
+      </TableCell>
+      <TableCell>
+        {row.is_required ? <Badge>Sim</Badge> : <Badge variant="secondary">Não</Badge>}
+      </TableCell>
+      <TableCell>
+        {row.is_active ? (
+          <Badge variant="secondary">Sim</Badge>
+        ) : (
+          <Badge variant="outline">Não</Badge>
+        )}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex justify-end gap-1">
+          <Button variant="ghost" size="icon" onClick={() => openEdit(row)}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setToDelete(row)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 
   return (
     <div className="space-y-6">
@@ -381,68 +476,28 @@ function CamposDoSitePage() {
                 Nenhum campo associado a este site.
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Campo</TableHead>
-                    <TableHead>Entidade</TableHead>
-                    <TableHead>Trabalhador</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Exibição (pt-BR)</TableHead>
-                    <TableHead>Obrigatório</TableHead>
-                    <TableHead>Ativo</TableHead>
-                    <TableHead className="w-[100px] text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-medium">
-                        {row.definition?.custom_field_name ?? "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={row.entity_type === "company" ? "default" : "secondary"}>
-                          {row.entity_type === "company" ? "Empresa" : "Identidade"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{row.worker_type?.name ?? "—"}</Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {row.definition?.custom_field_type ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {langFromJson(row.display_name_override)["pt-BR"] || "—"}
-                      </TableCell>
-                      <TableCell>
-                        {row.is_required ? <Badge>Sim</Badge> : <Badge variant="secondary">Não</Badge>}
-                      </TableCell>
-                      <TableCell>
-                        {row.is_active ? (
-                          <Badge variant="secondary">Sim</Badge>
-                        ) : (
-                          <Badge variant="outline">Não</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(row)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setToDelete(row)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="space-y-6">
+                {groupedItems.map(([section, rows]) => (
+                  <div key={section} className="space-y-2">
+                    <p className="text-sm font-medium text-foreground">{section}</p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Campo</TableHead>
+                          <TableHead>Entidade</TableHead>
+                          <TableHead>Trabalhador</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Exibição (pt-BR)</TableHead>
+                          <TableHead>Obrigatório</TableHead>
+                          <TableHead>Ativo</TableHead>
+                          <TableHead className="w-[100px] text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>{rows.map(renderRow)}</TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -504,6 +559,34 @@ function CamposDoSitePage() {
                 </Select>
               </div>
             )}
+            <div className="space-y-2">
+              <Label>Seção</Label>
+              <Select
+                value={form.section}
+                onValueChange={(v) => setForm((f) => ({ ...f, section: v, definition_id: "" }))}
+                disabled={Boolean(editing)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as seções" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_SECTIONS}>Todas as seções</SelectItem>
+                  {[...sections]
+                    .sort((a, b) =>
+                      (a.displayName || a.sectionName).localeCompare(
+                        b.displayName || b.sectionName,
+                        "pt-BR",
+                        { sensitivity: "base" },
+                      ),
+                    )
+                    .map((s) => (
+                      <SelectItem key={s.sectionName} value={s.sectionName}>
+                        {s.displayName || s.sectionName}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Campo *</Label>
               <Select
