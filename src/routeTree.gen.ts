@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as FotoTokenRouteImport } from './routes/foto.$token'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedRegrasRouteImport } from './routes/_authenticated/regras'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
@@ -34,6 +35,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FotoTokenRoute = FotoTokenRouteImport.update({
+  id: '/foto/$token',
+  path: '/foto/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
@@ -133,6 +139,7 @@ export interface FileRoutesByFullPath {
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/foto/$token': typeof FotoTokenRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/empresas': typeof AuthenticatedEmpresasRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/foto/$token': typeof FotoTokenRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/foto/$token': typeof FotoTokenRoute
   '/_authenticated/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/_authenticated/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/_authenticated/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
@@ -190,6 +199,7 @@ export interface FileRouteTypes {
     | '/identities'
     | '/regras'
     | '/settings'
+    | '/foto/$token'
     | '/identities/$id'
     | '/identities/new'
     | '/terceirizados/$id'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/empresas'
     | '/regras'
     | '/settings'
+    | '/foto/$token'
     | '/identities/$id'
     | '/identities/new'
     | '/terceirizados/$id'
@@ -226,6 +237,7 @@ export interface FileRouteTypes {
     | '/_authenticated/identities'
     | '/_authenticated/regras'
     | '/_authenticated/settings'
+    | '/foto/$token'
     | '/_authenticated/identities/$id'
     | '/_authenticated/identities/new'
     | '/_authenticated/terceirizados/$id'
@@ -236,6 +248,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  FotoTokenRoute: typeof FotoTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/foto/$token': {
+      id: '/foto/$token'
+      path: '/foto/$token'
+      fullPath: '/foto/$token'
+      preLoaderRoute: typeof FotoTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/settings': {
@@ -417,6 +437,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  FotoTokenRoute: FotoTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
