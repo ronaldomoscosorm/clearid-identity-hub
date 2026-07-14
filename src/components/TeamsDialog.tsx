@@ -15,6 +15,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Row = { teamId: string; name: string };
 
@@ -66,8 +76,12 @@ export function TeamsDialog({
 
   const [leftSel, setLeftSel] = useState<Set<string>>(new Set());
   const [rightSel, setRightSel] = useState<Set<string>>(new Set());
+  const [confirmRemove, setConfirmRemove] = useState<string[] | null>(null);
 
+  // Recarrega as duas listas. Pequeno atraso para o índice do ClearID refletir
+  // a inclusão/remoção antes do refetch.
   const refresh = async () => {
+    await new Promise((r) => setTimeout(r, 900));
     await Promise.all([allQuery.refetch(), assignedQuery.refetch()]);
   };
 
@@ -161,7 +175,7 @@ export function TeamsDialog({
                 size="sm"
                 variant="outline"
                 disabled={rightSel.size === 0 || busy}
-                onClick={() => remove.mutate([...rightSel])}
+                onClick={() => setConfirmRemove([...rightSel])}
                 title={t("teams.remove")}
               >
                 {remove.isPending ? (
@@ -187,6 +201,37 @@ export function TeamsDialog({
           </div>
         )}
       </DialogContent>
+
+      <AlertDialog
+        open={confirmRemove !== null}
+        onOpenChange={(v) => !v && setConfirmRemove(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("teams.confirmRemoveTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("teams.confirmRemoveDesc", { n: confirmRemove?.length ?? 0 })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={remove.isPending}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={remove.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const ids = confirmRemove ?? [];
+                setConfirmRemove(null);
+                if (ids.length) remove.mutate(ids);
+              }}
+            >
+              {t("teams.remove")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

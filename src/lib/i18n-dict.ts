@@ -66,6 +66,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "teams.search": "Buscar regra",
     "teams.included": "{n} regra(s) incluída(s)",
     "teams.removed": "{n} regra(s) removida(s)",
+    "teams.confirmRemoveTitle": "Remover regra(s)?",
+    "teams.confirmRemoveDesc": "Tem certeza que deseja remover {n} regra(s) desta pessoa?",
   },
   "en-US": {
     "nav.identities": "People",
@@ -126,6 +128,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "teams.search": "Search rule",
     "teams.included": "{n} rule(s) added",
     "teams.removed": "{n} rule(s) removed",
+    "teams.confirmRemoveTitle": "Remove rule(s)?",
+    "teams.confirmRemoveDesc": "Are you sure you want to remove {n} rule(s) from this person?",
   },
   "es-ES": {
     "nav.identities": "Personas",
@@ -186,5 +190,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "teams.search": "Buscar regla",
     "teams.included": "{n} regla(s) incluida(s)",
     "teams.removed": "{n} regla(s) quitada(s)",
+    "teams.confirmRemoveTitle": "¿Quitar regla(s)?",
+    "teams.confirmRemoveDesc": "¿Está seguro de que desea quitar {n} regla(s) de esta persona?",
   },
 };
