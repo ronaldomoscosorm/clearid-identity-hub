@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera, Cog, Database } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
@@ -45,7 +45,6 @@ const NAV_ITEMS = [
   { to: "/identities", icon: Users, key: "nav.identities" },
   { to: "/regras", icon: ShieldCheck, key: "nav.regras" },
   { to: "/terceirizados", icon: HardHat, key: "nav.terceirizados" },
-  { to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" },
 ] as const;
 
 type NavItem = { to: string; icon: typeof Users; key: string };
@@ -53,6 +52,11 @@ type NavGroupDef = { key: string; icon: typeof Users; items: NavItem[] };
 
 // Grupos colapsáveis.
 const NAV_GROUPS: NavGroupDef[] = [
+  {
+    key: "nav.utilities",
+    icon: Wrench,
+    items: [{ to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" }],
+  },
   {
     key: "nav.tables",
     icon: Database,
