@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera, Cog } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
@@ -30,9 +30,13 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -45,6 +49,10 @@ const NAV_ITEMS = [
   { to: "/campos-do-site", icon: SlidersHorizontal, key: "nav.campos-do-site" },
   { to: "/apelidos", icon: Tag, key: "nav.apelidos" },
   { to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" },
+] as const;
+
+// Agrupados sob o menu "Propriedades".
+const PROPERTIES_ITEMS = [
   { to: "/diagnostics", icon: Activity, key: "nav.diagnostics" },
   { to: "/settings", icon: SettingsIcon, key: "nav.settings" },
   { to: "/branding", icon: Palette, key: "nav.branding" },
@@ -90,6 +98,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useT();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const propsActive = PROPERTIES_ITEMS.some((i) => pathname.startsWith(i.to));
+  const [propsOpen, setPropsOpen] = useState(propsActive);
+  useEffect(() => {
+    if (propsActive) setPropsOpen(true);
+  }, [propsActive]);
 
   // Carrega o catálogo de campos personalizados (Argus) e espelha no Supabase
   // ao abrir qualquer página, para que fique disponível em todo o app.
@@ -176,6 +189,36 @@ export function AppShell({ children }: { children: ReactNode }) {
                       </SidebarMenuItem>
                     );
                   })}
+
+                  <Collapsible
+                    open={propsOpen}
+                    onOpenChange={setPropsOpen}
+                    className="group/props"
+                  >
+                    <SidebarMenuItem>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton isActive={propsActive} tooltip={t("nav.properties")}>
+                          <Cog className="h-4 w-4" />
+                          <span>{t("nav.properties")}</span>
+                          <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/props:rotate-180" />
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {PROPERTIES_ITEMS.map((item) => (
+                            <SidebarMenuSubItem key={item.to}>
+                              <SidebarMenuSubButton asChild isActive={pathname.startsWith(item.to)}>
+                                <Link to={item.to}>
+                                  <item.icon className="h-4 w-4" />
+                                  <span>{t(item.key)}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </SidebarMenuItem>
+                  </Collapsible>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
