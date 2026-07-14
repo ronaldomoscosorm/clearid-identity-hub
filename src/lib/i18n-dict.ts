@@ -5,7 +5,8 @@ import type { Lang } from "./i18n";
 export const dictionaries: Record<Lang, Record<string, string>> = {
   "pt-BR": {
     // Navegação
-    "nav.identities": "Identidades",
+    "nav.identities": "Pessoas",
+    "nav.cadastro": "Cadastro",
     "nav.empresas": "Empresas",
     "nav.regras": "Regras",
     "nav.terceirizados": "Terceirizados",
@@ -54,7 +55,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "common.none": "—",
   },
   "en-US": {
-    "nav.identities": "Identities",
+    "nav.identities": "People",
+    "nav.cadastro": "Registration",
     "nav.empresas": "Companies",
     "nav.regras": "Rules",
     "nav.terceirizados": "Contractors",
@@ -101,7 +103,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "common.none": "—",
   },
   "es-ES": {
-    "nav.identities": "Identidades",
+    "nav.identities": "Personas",
+    "nav.cadastro": "Registro",
     "nav.empresas": "Empresas",
     "nav.regras": "Reglas",
     "nav.terceirizados": "Contratistas",

@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
@@ -40,29 +40,36 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
-// Itens de nível superior.
-const NAV_ITEMS = [
-  { to: "/identities", icon: Users, key: "nav.identities" },
-  { to: "/regras", icon: ShieldCheck, key: "nav.regras" },
-  { to: "/terceirizados", icon: HardHat, key: "nav.terceirizados" },
-] as const;
-
 type NavItem = { to: string; icon: typeof Users; key: string };
 type NavGroupDef = { key: string; icon: typeof Users; items: NavItem[] };
+type NavEntry = ({ kind: "item" } & NavItem) | ({ kind: "group" } & NavGroupDef);
 
-// Grupos colapsáveis.
-const NAV_GROUPS: NavGroupDef[] = [
+// Menu (ordem exata; item = link simples, group = colapsável).
+const NAV: NavEntry[] = [
   {
+    kind: "group",
+    key: "nav.cadastro",
+    icon: ClipboardList,
+    items: [
+      { to: "/identities", icon: Users, key: "nav.identities" },
+      { to: "/regras", icon: ShieldCheck, key: "nav.regras" },
+    ],
+  },
+  { kind: "item", to: "/terceirizados", icon: HardHat, key: "nav.terceirizados" },
+  {
+    kind: "group",
     key: "nav.utilities",
     icon: Wrench,
     items: [{ to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" }],
   },
   {
+    kind: "group",
     key: "nav.tables",
     icon: Database,
     items: [{ to: "/empresas", icon: Building2, key: "nav.empresas" }],
   },
   {
+    kind: "group",
     key: "nav.configGroup",
     icon: Settings2,
     items: [
@@ -72,6 +79,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     ],
   },
   {
+    kind: "group",
     key: "nav.properties",
     icon: Cog,
     items: [
@@ -238,24 +246,24 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {NAV_ITEMS.map((item) => {
-                    const active = pathname.startsWith(item.to);
-                    const label = t(item.key);
-                    return (
-                      <SidebarMenuItem key={item.to}>
-                        <SidebarMenuButton asChild isActive={active} tooltip={label}>
-                          <Link to={item.to}>
-                            <item.icon className="h-4 w-4" />
-                            <span>{label}</span>
+                  {NAV.map((entry) =>
+                    entry.kind === "item" ? (
+                      <SidebarMenuItem key={entry.to}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={pathname.startsWith(entry.to)}
+                          tooltip={t(entry.key)}
+                        >
+                          <Link to={entry.to}>
+                            <entry.icon className="h-4 w-4" />
+                            <span>{t(entry.key)}</span>
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
-                    );
-                  })}
-
-                  {NAV_GROUPS.map((group) => (
-                    <NavGroup key={group.key} group={group} pathname={pathname} t={t} />
-                  ))}
+                    ) : (
+                      <NavGroup key={entry.key} group={entry} pathname={pathname} t={t} />
+                    ),
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
