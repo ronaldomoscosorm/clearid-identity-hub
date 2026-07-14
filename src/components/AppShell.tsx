@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera, Cog } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera, Cog, Database } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
@@ -40,23 +40,87 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 
+// Itens de nível superior.
 const NAV_ITEMS = [
   { to: "/identities", icon: Users, key: "nav.identities" },
-  { to: "/empresas", icon: Building2, key: "nav.empresas" },
   { to: "/regras", icon: ShieldCheck, key: "nav.regras" },
   { to: "/terceirizados", icon: HardHat, key: "nav.terceirizados" },
-  { to: "/campos-personalizados", icon: ListChecks, key: "nav.campos-personalizados" },
-  { to: "/campos-do-site", icon: SlidersHorizontal, key: "nav.campos-do-site" },
-  { to: "/apelidos", icon: Tag, key: "nav.apelidos" },
   { to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" },
 ] as const;
 
-// Agrupados sob o menu "Propriedades".
-const PROPERTIES_ITEMS = [
-  { to: "/diagnostics", icon: Activity, key: "nav.diagnostics" },
-  { to: "/settings", icon: SettingsIcon, key: "nav.settings" },
-  { to: "/branding", icon: Palette, key: "nav.branding" },
-] as const;
+type NavItem = { to: string; icon: typeof Users; key: string };
+type NavGroupDef = { key: string; icon: typeof Users; items: NavItem[] };
+
+// Grupos colapsáveis.
+const NAV_GROUPS: NavGroupDef[] = [
+  {
+    key: "nav.tables",
+    icon: Database,
+    items: [{ to: "/empresas", icon: Building2, key: "nav.empresas" }],
+  },
+  {
+    key: "nav.configGroup",
+    icon: Settings2,
+    items: [
+      { to: "/campos-personalizados", icon: ListChecks, key: "nav.campos-personalizados" },
+      { to: "/campos-do-site", icon: SlidersHorizontal, key: "nav.campos-do-site" },
+      { to: "/apelidos", icon: Tag, key: "nav.apelidos" },
+    ],
+  },
+  {
+    key: "nav.properties",
+    icon: Cog,
+    items: [
+      { to: "/diagnostics", icon: Activity, key: "nav.diagnostics" },
+      { to: "/settings", icon: SettingsIcon, key: "nav.settings" },
+      { to: "/branding", icon: Palette, key: "nav.branding" },
+    ],
+  },
+];
+
+function NavGroup({
+  group,
+  pathname,
+  t,
+}: {
+  group: NavGroupDef;
+  pathname: string;
+  t: (key: string) => string;
+}) {
+  const active = group.items.some((i) => pathname.startsWith(i.to));
+  const [open, setOpen] = useState(active);
+  useEffect(() => {
+    if (active) setOpen(true);
+  }, [active]);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="group/nav">
+      <SidebarMenuItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuButton isActive={active} tooltip={t(group.key)}>
+            <group.icon className="h-4 w-4" />
+            <span>{t(group.key)}</span>
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/nav:rotate-180" />
+          </SidebarMenuButton>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {group.items.map((item) => (
+              <SidebarMenuSubItem key={item.to}>
+                <SidebarMenuSubButton asChild isActive={pathname.startsWith(item.to)}>
+                  <Link to={item.to}>
+                    <item.icon className="h-4 w-4" />
+                    <span>{t(item.key)}</span>
+                  </Link>
+                </SidebarMenuSubButton>
+              </SidebarMenuSubItem>
+            ))}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuItem>
+    </Collapsible>
+  );
+}
 
 function EnvBadge({ env }: { env: string }) {
   const isProd = env.toLowerCase() === "prod" || env.toLowerCase() === "production";
@@ -98,11 +162,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useT();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const propsActive = PROPERTIES_ITEMS.some((i) => pathname.startsWith(i.to));
-  const [propsOpen, setPropsOpen] = useState(propsActive);
-  useEffect(() => {
-    if (propsActive) setPropsOpen(true);
-  }, [propsActive]);
 
   // Carrega o catálogo de campos personalizados (Argus) e espelha no Supabase
   // ao abrir qualquer página, para que fique disponível em todo o app.
@@ -190,35 +249,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                     );
                   })}
 
-                  <Collapsible
-                    open={propsOpen}
-                    onOpenChange={setPropsOpen}
-                    className="group/props"
-                  >
-                    <SidebarMenuItem>
-                      <CollapsibleTrigger asChild>
-                        <SidebarMenuButton isActive={propsActive} tooltip={t("nav.properties")}>
-                          <Cog className="h-4 w-4" />
-                          <span>{t("nav.properties")}</span>
-                          <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/props:rotate-180" />
-                        </SidebarMenuButton>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <SidebarMenuSub>
-                          {PROPERTIES_ITEMS.map((item) => (
-                            <SidebarMenuSubItem key={item.to}>
-                              <SidebarMenuSubButton asChild isActive={pathname.startsWith(item.to)}>
-                                <Link to={item.to}>
-                                  <item.icon className="h-4 w-4" />
-                                  <span>{t(item.key)}</span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
-                    </SidebarMenuItem>
-                  </Collapsible>
+                  {NAV_GROUPS.map((group) => (
+                    <NavGroup key={group.key} group={group} pathname={pathname} t={t} />
+                  ))}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

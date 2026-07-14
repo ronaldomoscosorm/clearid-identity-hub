@@ -17,6 +17,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.settings": "Configurações",
     "nav.branding": "Identidade",
     "nav.properties": "Propriedades",
+    "nav.tables": "Tabelas",
+    "nav.configGroup": "Configurações",
 
     // Shell / cabeçalho
     "shell.console": "R&M Console",
@@ -63,6 +65,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.settings": "Settings",
     "nav.branding": "Branding",
     "nav.properties": "Properties",
+    "nav.tables": "Tables",
+    "nav.configGroup": "Settings",
 
     "shell.console": "R&M Console",
     "shell.refresh": "Refresh",
@@ -107,6 +111,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.settings": "Configuración",
     "nav.branding": "Identidad",
     "nav.properties": "Propiedades",
+    "nav.tables": "Tablas",
+    "nav.configGroup": "Configuración",
 
     "shell.console": "R&M Console",
     "shell.refresh": "Actualizar",
