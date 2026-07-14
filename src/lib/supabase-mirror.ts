@@ -121,6 +121,23 @@ export async function saveIdentityCompany(
 }
 
 /**
+ * Grava o tipo do trabalhador EXATO (worker_type_id) da identidade no Supabase.
+ * Necessário porque o workerTypeCode do Argus não distingue Visitante de Terceiro
+ * (ambos "Terceiros"); este valor garante o round-trip correto na edição.
+ */
+export async function saveIdentityWorkerType(
+  clearIdIdentityId: string,
+  workerTypeId: string | null,
+): Promise<void> {
+  if (!clearIdIdentityId) return;
+  const { error } = await supabase
+    .from("identities")
+    .update({ worker_type_id: workerTypeId })
+    .eq("identity_id", clearIdIdentityId);
+  if (error) console.error("[mirror] falha ao gravar tipo do trabalhador:", error.message);
+}
+
+/**
  * Grava os valores dos campos personalizados de uma identidade na tabela
  * identity_custom_fields (vinculados aos campos do site). A identidade precisa
  * já estar espelhada em `identities` (chame mirrorIdentities antes).

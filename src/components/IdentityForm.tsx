@@ -81,6 +81,7 @@ export type IdentityFormProps = {
     data: IdentityUpsert,
     siteFieldValues: SiteFieldValue[],
     companyId: string | null,
+    workerTypeId: string | null,
   ) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
@@ -248,11 +249,16 @@ export function IdentityForm({
     let cancelled = false;
     void supabase
       .from("identities")
-      .select("company_id")
+      .select("company_id, worker_type_id")
       .eq("identity_id", initialIdentityId)
       .maybeSingle()
       .then(({ data }) => {
-        if (!cancelled && data?.company_id) setCompanyId(data.company_id);
+        if (cancelled || !data) return;
+        if (data.company_id) setCompanyId(data.company_id);
+        // Tipo do trabalhador exato vindo do Supabase tem prioridade sobre o
+        // reverse-lookup ambíguo do workerTypeCode do Argus.
+        const wt = (data as { worker_type_id?: string | null }).worker_type_id;
+        if (wt) setWorkerTypeId(wt);
       });
     return () => {
       cancelled = true;
@@ -560,7 +566,7 @@ export function IdentityForm({
       siteId: siteId || undefined,
       workerTypeCode: effectiveWorkerTypeCode || undefined,
     };
-    onSubmit(payload as unknown as IdentityUpsert, siteFieldValues, companyId || null);
+    onSubmit(payload as unknown as IdentityUpsert, siteFieldValues, companyId || null, workerTypeId || null);
   };
 
   const dateDefs = defs.filter((f) => isDate(f.customFieldType));

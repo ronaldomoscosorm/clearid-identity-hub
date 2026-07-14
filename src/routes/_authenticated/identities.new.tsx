@@ -7,6 +7,7 @@ import {
   mirrorIdentities,
   saveIdentityCustomFields,
   saveIdentityCompany,
+  saveIdentityWorkerType,
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ function NewIdentity() {
       data: IdentityUpsert;
       siteFieldValues: SiteFieldValue[];
       companyId: string | null;
+      workerTypeId: string | null;
     }) => {
       // Verifica e-mail duplicado antes de criar (o ClearID rejeita com 400).
       const dupes = await argusApi.findIdentitiesByEmail(vars.data.email);
@@ -88,6 +90,7 @@ function NewIdentity() {
       // Espelhamento no Supabase (best-effort, fora das 3 etapas do Argus).
       await mirrorIdentities([data]);
       await saveIdentityCompany(data.identityId, vars.companyId);
+      await saveIdentityWorkerType(data.identityId, vars.workerTypeId);
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });
       navigate({ to: "/identities/$id", params: { id: data.identityId } });
@@ -121,8 +124,8 @@ function NewIdentity() {
       <IdentityForm
         mode="create"
         submitting={mut.isPending}
-        onSubmit={(data, siteFieldValues, companyId) =>
-          mut.mutate({ data, siteFieldValues, companyId })
+        onSubmit={(data, siteFieldValues, companyId, workerTypeId) =>
+          mut.mutate({ data, siteFieldValues, companyId, workerTypeId })
         }
         onCancel={() => navigate({ to: "/identities" })}
       />

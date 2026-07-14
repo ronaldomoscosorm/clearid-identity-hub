@@ -8,6 +8,7 @@ import {
   mirrorIdentities,
   saveIdentityCustomFields,
   saveIdentityCompany,
+  saveIdentityWorkerType,
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
 import { clearIdToFormValues } from "@/lib/argus-client";
@@ -75,6 +76,7 @@ function IdentityDetail() {
       data: Parameters<typeof argusApi.updateIdentity>[1];
       siteFieldValues: SiteFieldValue[];
       companyId: string | null;
+      workerTypeId: string | null;
     }) => argusApi.updateIdentity(id, vars.data),
     onSuccess: async (updated, vars) => {
       const ok: string[] = [t("identityDetail.mainData")];
@@ -120,6 +122,7 @@ function IdentityDetail() {
       }
       await mirrorIdentities([updated]);
       await saveIdentityCompany(id, vars.companyId);
+      await saveIdentityWorkerType(id, vars.workerTypeId);
       await saveIdentityCustomFields(id, vars.siteFieldValues);
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
@@ -200,7 +203,7 @@ function IdentityDetail() {
           mode="edit"
           initial={clearIdToFormValues(query.data)}
           submitting={update.isPending}
-          onSubmit={(data, siteFieldValues, companyId) => {
+          onSubmit={(data, siteFieldValues, companyId, workerTypeId) => {
             const original = query.data!;
             // ClearID PUT é um replace completo. Preservamos os campos que
             // não estão no formulário para evitar 400 (Falha ao atualizar
@@ -217,6 +220,7 @@ function IdentityDetail() {
               },
               siteFieldValues,
               companyId,
+              workerTypeId,
             });
           }}
           onCancel={() => navigate({ to: "/identities" })}

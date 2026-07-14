@@ -215,6 +215,7 @@ export type Database = {
           system_resource_filters: Json | null
           system_trigger_code: number | null
           updated_at: string
+          worker_type_id: string | null
         }
         Insert: {
           account_id?: string | null
@@ -274,6 +275,7 @@ export type Database = {
           system_resource_filters?: Json | null
           system_trigger_code?: number | null
           updated_at?: string
+          worker_type_id?: string | null
         }
         Update: {
           account_id?: string | null
@@ -333,6 +335,7 @@ export type Database = {
           system_resource_filters?: Json | null
           system_trigger_code?: number | null
           updated_at?: string
+          worker_type_id?: string | null
         }
         Relationships: [
           {
