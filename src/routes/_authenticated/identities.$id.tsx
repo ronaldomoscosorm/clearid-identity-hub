@@ -240,7 +240,7 @@ function IdentityDetail() {
           }
           extraActions={
             <>
-              <TeamsDialog identityId={id} />
+              <TeamsDialog identityId={id} siteId={identitySiteId} />
               <CredentialsDialog identityId={id} />
               <AlertDialog>
               <AlertDialogTrigger asChild>

@@ -165,7 +165,7 @@ export class ArgusApiError extends Error {
 export async function argusFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
-  opts: { allSites?: boolean } = {},
+  opts: { allSites?: boolean; siteId?: string | null } = {},
 ): Promise<T> {
   const cfg = getConfig();
 
@@ -177,7 +177,9 @@ export async function argusFetch<T = unknown>(
   }
 
   let url = cfg.baseUrl.replace(/\/+$/, "") + path;
-  const siteIdForQuery = getDefaultSiteId();
+  // Permite escopar a chamada a um site específico (ex.: o site da pessoa),
+  // em vez do site padrão do cabeçalho.
+  const siteIdForQuery = opts.siteId ?? getDefaultSiteId();
   if (!opts.allSites && siteIdForQuery && !/[?&]siteId=/.test(url)) {
     url += (url.includes("?") ? "&" : "?") + "siteId=" + encodeURIComponent(siteIdForQuery);
   }
@@ -823,13 +825,21 @@ export const argusApi = {
     })).filter((s) => s.systemObjectId);
   },
 
-  listTeams: async (params?: { name?: string; take?: number; allSites?: boolean }): Promise<ClearIdTeam[]> => {
+  listTeams: async (params?: {
+    name?: string;
+    take?: number;
+    allSites?: boolean;
+    siteId?: string | null;
+  }): Promise<ClearIdTeam[]> => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
     q.set("take", String(params?.take ?? 200));
     if (params?.name) q.set("name", params.name);
     const data = await unwrap<{ teams?: ClearIdTeam[] } | ClearIdTeam[]>(
-      argusFetch(`/api/teams?${q.toString()}`, undefined, { allSites: params?.allSites }),
+      argusFetch(`/api/teams?${q.toString()}`, undefined, {
+        allSites: params?.allSites,
+        siteId: params?.siteId,
+      }),
     );
     if (Array.isArray(data)) return data;
     return data?.teams ?? [];
@@ -929,27 +939,39 @@ export const argusApi = {
       startDateTimeUtc?: string | null;
       endDateTimeUtc?: string | null;
       reason?: string;
+      siteId?: string | null;
     },
   ) =>
-    argusFetch<unknown>(`/api/teams/${encodeURIComponent(teamId)}/members`, {
-      method: "POST",
-      body: JSON.stringify({
-        identityIds: payload.identityIds,
-        sourceId: payload.sourceId ?? null,
-        startDateTimeUtc: payload.startDateTimeUtc ?? null,
-        endDateTimeUtc: payload.endDateTimeUtc ?? null,
-        reason: payload.reason ?? "Portal Argus",
-      }),
-    }),
+    argusFetch<unknown>(
+      `/api/teams/${encodeURIComponent(teamId)}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          identityIds: payload.identityIds,
+          sourceId: payload.sourceId ?? null,
+          startDateTimeUtc: payload.startDateTimeUtc ?? null,
+          endDateTimeUtc: payload.endDateTimeUtc ?? null,
+          reason: payload.reason ?? "Portal Argus",
+        }),
+      },
+      { siteId: payload.siteId },
+    ),
 
-  removeTeamMembers: (teamId: string, payload: { identityIds: string[]; reason?: string }) =>
-    argusFetch<unknown>(`/api/teams/${encodeURIComponent(teamId)}/members`, {
-      method: "DELETE",
-      body: JSON.stringify({
-        identityIds: payload.identityIds,
-        reason: payload.reason ?? "Portal Argus",
-      }),
-    }),
+  removeTeamMembers: (
+    teamId: string,
+    payload: { identityIds: string[]; reason?: string; siteId?: string | null },
+  ) =>
+    argusFetch<unknown>(
+      `/api/teams/${encodeURIComponent(teamId)}/members`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({
+          identityIds: payload.identityIds,
+          reason: payload.reason ?? "Portal Argus",
+        }),
+      },
+      { siteId: payload.siteId },
+    ),
 
   /** Identidades com o e-mail informado (busca exata, em todos os sites). */
   findIdentitiesByEmail: async (email: string): Promise<ClearIdIdentity[]> => {
@@ -960,9 +982,14 @@ export const argusApi = {
   },
 
   /** Regras (teams) vinculadas a uma identidade. */
-  getIdentityTeams: async (id: string): Promise<ClearIdTeamMember[]> => {
+  getIdentityTeams: async (
+    id: string,
+    opts?: { siteId?: string | null },
+  ): Promise<ClearIdTeamMember[]> => {
     const data = await unwrap<{ teams?: ClearIdTeamMember[] } | ClearIdTeamMember[]>(
-      argusFetch(`/api/identities/${encodeURIComponent(id)}/teams`),
+      argusFetch(`/api/identities/${encodeURIComponent(id)}/teams`, undefined, {
+        siteId: opts?.siteId,
+      }),
     );
     if (Array.isArray(data)) return data;
     return data?.teams ?? [];

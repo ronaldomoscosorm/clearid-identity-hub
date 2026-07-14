@@ -18,19 +18,25 @@ import {
 
 type Row = { teamId: string; name: string };
 
-export function TeamsDialog({ identityId }: { identityId: string }) {
+export function TeamsDialog({
+  identityId,
+  siteId,
+}: {
+  identityId: string;
+  siteId?: string | null;
+}) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
 
   const allQuery = useQuery({
-    queryKey: ["teams-all"],
-    queryFn: () => argusApi.listTeams({ take: 500 }),
+    queryKey: ["teams-all", siteId ?? "default"],
+    queryFn: () => argusApi.listTeams({ take: 1000, siteId }),
     enabled: open,
     staleTime: 5 * 60 * 1000,
   });
   const assignedQuery = useQuery({
-    queryKey: ["identity-teams", identityId],
-    queryFn: () => argusApi.getIdentityTeams(identityId),
+    queryKey: ["identity-teams", identityId, siteId ?? "default"],
+    queryFn: () => argusApi.getIdentityTeams(identityId, { siteId }),
     enabled: open,
   });
 
@@ -67,7 +73,9 @@ export function TeamsDialog({ identityId }: { identityId: string }) {
 
   const include = useMutation({
     mutationFn: (ids: string[]) =>
-      Promise.all(ids.map((tid) => argusApi.addTeamMembers(tid, { identityIds: [identityId] }))),
+      Promise.all(
+        ids.map((tid) => argusApi.addTeamMembers(tid, { identityIds: [identityId], siteId })),
+      ),
     onSuccess: async (_r, ids) => {
       toast.success(t("teams.included", { n: ids.length }));
       setLeftSel(new Set());
@@ -78,7 +86,9 @@ export function TeamsDialog({ identityId }: { identityId: string }) {
 
   const remove = useMutation({
     mutationFn: (ids: string[]) =>
-      Promise.all(ids.map((tid) => argusApi.removeTeamMembers(tid, { identityIds: [identityId] }))),
+      Promise.all(
+        ids.map((tid) => argusApi.removeTeamMembers(tid, { identityIds: [identityId], siteId })),
+      ),
     onSuccess: async (_r, ids) => {
       toast.success(t("teams.removed", { n: ids.length }));
       setRightSel(new Set());
