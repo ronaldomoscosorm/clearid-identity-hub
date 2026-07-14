@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ShieldCheck, ChevronRight, ChevronLeft, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -50,50 +50,56 @@ export function TeamsDialog({
     enabled: open,
   });
 
-  const loading = allQuery.isLoading || assignedQuery.isLoading;
+  // Fonte de verdade local das regras atribuídas: inicializada da API ao abrir
+  // e atualizada NA HORA ao incluir/remover (após o 200). Não dependemos do
+  // refetch, que pode vir defasado pelo índice do ClearID.
+  const [assignedIds, setAssignedIds] = useState<Set<string>>(new Set());
+  const [inited, setInited] = useState(false);
+  useEffect(() => {
+    if (!open) {
+      setInited(false);
+      return;
+    }
+    if (!inited && !allQuery.isLoading && !assignedQuery.isLoading) {
+      setAssignedIds(new Set((assignedQuery.data ?? []).map((m) => m.teamId)));
+      setInited(true);
+    }
+  }, [open, inited, allQuery.isLoading, assignedQuery.isLoading, assignedQuery.data]);
 
-  const assignedSet = useMemo(
-    () => new Set((assignedQuery.data ?? []).map((m) => m.teamId)),
-    [assignedQuery.data],
-  );
+  const loading = allQuery.isLoading || assignedQuery.isLoading || !inited;
 
-  const assigned: Row[] = useMemo(
-    () =>
-      (assignedQuery.data ?? [])
-        .map((m) => ({ teamId: m.teamId, name: m.teamName ?? m.teamId }))
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
-    [assignedQuery.data],
-  );
+  const nameById = useMemo(() => {
+    const m = new Map<string, string>();
+    (allQuery.data ?? []).forEach((tm) => m.set(tm.teamId, tm.name));
+    (assignedQuery.data ?? []).forEach((x) => {
+      if (!m.has(x.teamId)) m.set(x.teamId, x.teamName ?? x.teamId);
+    });
+    return m;
+  }, [allQuery.data, assignedQuery.data]);
 
-  const available: Row[] = useMemo(
-    () =>
-      (allQuery.data ?? [])
-        .filter((tm) => !assignedSet.has(tm.teamId))
-        .map((tm) => ({ teamId: tm.teamId, name: tm.name }))
-        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
-    [allQuery.data, assignedSet],
-  );
+  const catalogIds = useMemo(() => (allQuery.data ?? []).map((tm) => tm.teamId), [allQuery.data]);
+
+  const sortRows = (ids: string[]): Row[] =>
+    ids
+      .map((id) => ({ teamId: id, name: nameById.get(id) ?? id }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+  const available = sortRows(catalogIds.filter((id) => !assignedIds.has(id)));
+  const assigned = sortRows([...assignedIds]);
 
   const [leftSel, setLeftSel] = useState<Set<string>>(new Set());
   const [rightSel, setRightSel] = useState<Set<string>>(new Set());
   const [confirmRemove, setConfirmRemove] = useState<string[] | null>(null);
-
-  // Recarrega as duas listas. Pequeno atraso para o índice do ClearID refletir
-  // a inclusão/remoção antes do refetch.
-  const refresh = async () => {
-    await new Promise((r) => setTimeout(r, 900));
-    await Promise.all([allQuery.refetch(), assignedQuery.refetch()]);
-  };
 
   const include = useMutation({
     mutationFn: (ids: string[]) =>
       Promise.all(
         ids.map((tid) => argusApi.addTeamMembers(tid, { identityIds: [identityId], siteId })),
       ),
-    onSuccess: async (_r, ids) => {
+    onSuccess: (_r, ids) => {
       toast.success(t("teams.included", { n: ids.length }));
+      setAssignedIds((prev) => new Set([...prev, ...ids]));
       setLeftSel(new Set());
-      await refresh();
     },
     onError: (e) => toast.error((e as ArgusApiError).message),
   });
@@ -103,10 +109,14 @@ export function TeamsDialog({
       Promise.all(
         ids.map((tid) => argusApi.removeTeamMembers(tid, { identityIds: [identityId], siteId })),
       ),
-    onSuccess: async (_r, ids) => {
+    onSuccess: (_r, ids) => {
       toast.success(t("teams.removed", { n: ids.length }));
+      setAssignedIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
       setRightSel(new Set());
-      await refresh();
     },
     onError: (e) => toast.error((e as ArgusApiError).message),
   });
