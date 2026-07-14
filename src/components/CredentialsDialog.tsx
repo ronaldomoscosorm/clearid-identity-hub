@@ -4,6 +4,7 @@ import { KeyRound, Plus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, getAccountId, useSystemObjectId } from "@/lib/argus-client";
 import type { CredentialUpsert } from "@/lib/argus-client";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +64,7 @@ export interface CredentialsDialogProps {
 }
 
 export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const systemObjectId = useSystemObjectId();
   const accountId = getAccountId();
@@ -90,7 +92,7 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
   const create = useMutation({
     mutationFn: (data: CredentialUpsert) => argusApi.createCredential(data),
     onSuccess: () => {
-      toast.success("Credencial cadastrada");
+      toast.success(t("credentials.toast.created"));
       qc.invalidateQueries({ queryKey: ["credentials", identityId] });
       setFormatId("");
       setFacilityCode("");
@@ -109,7 +111,7 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
   const remove = useMutation({
     mutationFn: (credentialId: string) => argusApi.deleteCredential(credentialId),
     onSuccess: () => {
-      toast.success("Credencial excluída");
+      toast.success(t("credentials.toast.deleted"));
       qc.invalidateQueries({ queryKey: ["credentials", identityId] });
     },
     onError: (e) => {
@@ -142,20 +144,20 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline">
-          <KeyRound className="mr-1 h-4 w-4" /> Credenciais
+          <KeyRound className="mr-1 h-4 w-4" /> {t("credentials.title")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Credenciais</DialogTitle>
+          <DialogTitle>{t("credentials.title")}</DialogTitle>
           <DialogDescription>
-            Cadastre e visualize as credenciais desta identidade.
+            {t("credentials.description")}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <Label htmlFor="cred-format">Tipo de credencial</Label>
+            <Label htmlFor="cred-format">{t("credentials.field.format")}</Label>
             <Select
               value={formatId}
               onValueChange={setFormatId}
@@ -165,14 +167,14 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
                 <SelectValue
                   placeholder={
                     !canQuery
-                      ? "Configure systemObjectId em Configurações"
+                      ? t("credentials.format.placeholderNoConfig")
                       : formatsQuery.isLoading
-                      ? "Carregando..."
+                      ? t("common.loading")
                       : formatsQuery.error
-                      ? "Falha ao carregar formatos"
+                      ? t("credentials.format.placeholderError")
                       : (formatsQuery.data ?? []).length === 0
-                      ? "Nenhum formato disponível"
-                      : "Selecione o tipo"
+                      ? t("credentials.format.placeholderEmpty")
+                      : t("credentials.format.placeholder")
                   }
                 />
               </SelectTrigger>
@@ -191,18 +193,19 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
             )}
             {!canQuery && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Defina o systemObjectId em Configurações e faça o diagnóstico para
-                carregar o accountId.
+                {t("credentials.format.configHint")}
               </p>
             )}
             {canQuery && !formatsQuery.isLoading && !formatsQuery.error && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {(formatsQuery.data ?? []).length} formato(s) disponível(is).
+                {t("credentials.format.availableCount", {
+                  count: (formatsQuery.data ?? []).length,
+                })}
               </p>
             )}
           </div>
           <div>
-            <Label htmlFor="cred-facility">Facility code</Label>
+            <Label htmlFor="cred-facility">{t("credentials.field.facilityCode")}</Label>
             <Input
               id="cred-facility"
               value={facilityCode}
@@ -211,7 +214,7 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
             />
           </div>
           <div>
-            <Label htmlFor="cred-card">Card number</Label>
+            <Label htmlFor="cred-card">{t("credentials.field.cardNumber")}</Label>
             <Input
               id="cred-card"
               value={cardNumber}
@@ -221,7 +224,7 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
             />
           </div>
           <div>
-            <Label htmlFor="cred-activation">Ativação</Label>
+            <Label htmlFor="cred-activation">{t("credentials.field.activation")}</Label>
             <Input
               id="cred-activation"
               type="date"
@@ -230,7 +233,7 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
             />
           </div>
           <div>
-            <Label htmlFor="cred-expiration">Expiração</Label>
+            <Label htmlFor="cred-expiration">{t("credentials.field.expiration")}</Label>
             <Input
               id="cred-expiration"
               type="date"
@@ -245,13 +248,13 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
               ) : (
                 <Plus className="mr-1 h-4 w-4" />
               )}
-              Salvar
+              {t("common.save")}
             </Button>
           </div>
         </form>
 
         <div className="mt-2">
-          <h3 className="mb-2 text-sm font-semibold">Credenciais cadastradas</h3>
+          <h3 className="mb-2 text-sm font-semibold">{t("credentials.listTitle")}</h3>
           {credsQuery.isLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-8 w-full" />
@@ -262,19 +265,19 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
               {(credsQuery.error as Error).message}
             </p>
           ) : (credsQuery.data ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma credencial cadastrada.</p>
+            <p className="text-sm text-muted-foreground">{t("credentials.emptyState")}</p>
           ) : (
             <div className="max-h-64 overflow-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Facility</TableHead>
-                    <TableHead>Card</TableHead>
-                    <TableHead>Ativação</TableHead>
-                    <TableHead>Expiração</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("common.name")}</TableHead>
+                    <TableHead>{t("credentials.col.type")}</TableHead>
+                    <TableHead>{t("credentials.col.facility")}</TableHead>
+                    <TableHead>{t("credentials.col.card")}</TableHead>
+                    <TableHead>{t("credentials.field.activation")}</TableHead>
+                    <TableHead>{t("credentials.field.expiration")}</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -298,25 +301,26 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
                                 size="icon"
                                 className="h-8 w-8 text-destructive hover:text-destructive"
                                 disabled={remove.isPending}
-                                aria-label="Excluir credencial"
+                                aria-label={t("credentials.deleteAria")}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Excluir credencial?</AlertDialogTitle>
+                                <AlertDialogTitle>{t("credentials.deleteConfirmTitle")}</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Esta ação não pode ser desfeita. A credencial{" "}
-                                  {c.name ?? c.cardNumber ?? ""} será removida.
+                                  {t("credentials.deleteConfirmDescription", {
+                                    name: c.name ?? c.cardNumber ?? "",
+                                  })}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                                 <AlertDialogAction
                                   onClick={() => remove.mutate(c.credentialId!)}
                                 >
-                                  Excluir
+                                  {t("common.delete")}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -333,7 +337,7 @@ export function CredentialsDialog({ identityId }: CredentialsDialogProps) {
 
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-            Fechar
+            {t("common.close")}
           </Button>
         </DialogFooter>
       </DialogContent>

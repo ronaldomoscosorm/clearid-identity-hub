@@ -11,6 +11,7 @@ import {
 } from "@/lib/supabase-mirror";
 import { Button } from "@/components/ui/button";
 import { IdentityForm } from "@/components/IdentityForm";
+import { useT } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/identities/new")({
   head: () => ({ meta: [{ title: "Nova identity — Argus ClearID" }] }),
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/_authenticated/identities/new")({
 });
 
 function NewIdentity() {
+  const { t } = useT();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const mut = useMutation({
@@ -32,7 +34,11 @@ function NewIdentity() {
         const d = dupes[0];
         throw new ArgusApiError({
           status: 409,
-          message: `Já existe uma identidade com o e-mail ${vars.data.email}: ${d.firstName} ${d.lastName} (${d.status}).`,
+          message: t("identityNew.duplicateEmail", {
+            email: vars.data.email,
+            name: `${d.firstName} ${d.lastName}`,
+            status: d.status,
+          }),
         });
       }
       return argusApi.createIdentity(vars.data);
@@ -41,7 +47,7 @@ function NewIdentity() {
       // Sem transação: cada etapa é gravada em separado. Rastreamos o resultado
       // de cada uma (identity / customizáveis / regra) e notificamos o que
       // deu certo e o que falhou.
-      const ok: string[] = ["dados principais"]; // etapa 1 (identity) já concluída aqui
+      const ok: string[] = [t("identityNew.step.main")]; // etapa 1 (identity) já concluída aqui
       const fail: string[] = [];
 
       // Etapa 2 — campos personalizados (endpoint dedicado).
@@ -51,27 +57,32 @@ function NewIdentity() {
       if (cf.length) {
         try {
           await argusApi.patchIdentityCustomFields(data.identityId, cf);
-          ok.push("customizáveis");
+          ok.push(t("identityNew.step.customFields"));
         } catch (e) {
-          fail.push(`campos customizáveis (${(e as Error).message})`);
+          fail.push(t("identityNew.fail.customFields", { error: (e as Error).message }));
         }
       }
 
       // Etapa 3 — regra padrão (se não houver nenhuma).
       try {
         const rule = await argusApi.ensureDefaultRule(data.identityId);
-        if (rule.assigned) ok.push(`regra padrão (${rule.ruleName ?? "regra"})`);
+        if (rule.assigned)
+          ok.push(
+            t("identityNew.step.defaultRule", {
+              rule: rule.ruleName ?? t("identityNew.defaultRuleFallback"),
+            }),
+          );
       } catch (e) {
-        fail.push(`regra padrão (${(e as Error).message})`);
+        fail.push(t("identityNew.fail.defaultRule", { error: (e as Error).message }));
       }
 
       if (fail.length) {
-        toast.warning(`Identity criada com pendências. Gravado: ${ok.join(", ")}.`, {
-          description: `Falhou: ${fail.join("; ")}`,
+        toast.warning(t("identityNew.createdWithIssues", { ok: ok.join(", ") }), {
+          description: t("identityNew.failedList", { fail: fail.join("; ") }),
           duration: 12000,
         });
       } else {
-        toast.success(`Identity criada — gravado: ${ok.join(", ")}.`);
+        toast.success(t("identityNew.createdSuccess", { ok: ok.join(", ") }));
       }
 
       // Espelhamento no Supabase (best-effort, fora das 3 etapas do Argus).
@@ -85,7 +96,7 @@ function NewIdentity() {
       const err = e as ArgusApiError;
       const hint =
         err.status === 400
-          ? "Causa comum: já existe uma identidade com este e-mail."
+          ? t("identityNew.error.duplicateHint")
           : undefined;
       const description = [hint, err.traceId ? `TraceId: ${err.traceId}` : undefined]
         .filter(Boolean)
@@ -99,13 +110,13 @@ function NewIdentity() {
       <div>
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link to="/identities">
-            <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
+            <ArrowLeft className="mr-1 h-4 w-4" /> {t("identityNew.back")}
           </Link>
         </Button>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Nova identity</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Cria um novo registro no Identity Service v4.
-        </p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+          {t("identityNew.title")}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t("identityNew.subtitle")}</p>
       </div>
       <IdentityForm
         mode="create"

@@ -22,6 +22,7 @@ import {
 } from "@/lib/branding";
 import { PoweredBy } from "@/components/PoweredBy";
 import { pushSettings } from "@/lib/supabase-settings";
+import { useT } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/branding")({
   head: () => ({ meta: [{ title: "Identidade Visual — Argus ClearID" }] }),
@@ -29,6 +30,7 @@ export const Route = createFileRoute("/_authenticated/branding")({
 });
 
 function BrandingPage() {
+  const { t } = useT();
   const [cfg, setCfg] = useState<BrandingConfig>(() => getBranding());
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -36,12 +38,12 @@ function BrandingPage() {
 
   const onPickLogo = (file: File) => {
     if (file.size > 1024 * 1024) {
-      toast.error("Logo deve ter no máximo 1 MB.");
+      toast.error(t("branding.toast.logoTooLarge"));
       return;
     }
     const reader = new FileReader();
     reader.onload = () => update({ clientLogo: String(reader.result ?? "") });
-    reader.onerror = () => toast.error("Falha ao ler o arquivo.");
+    reader.onerror = () => toast.error(t("branding.toast.readError"));
     reader.readAsDataURL(file);
   };
 
@@ -49,8 +51,8 @@ function BrandingPage() {
     saveBranding(cfg);
     applyBranding(cfg);
     pushSettings()
-      .then(() => toast.success("Identidade visual aplicada"))
-      .catch(() => toast.warning("Aplicada localmente, mas falhou ao sincronizar com o Supabase"));
+      .then(() => toast.success(t("branding.toast.applied")))
+      .catch(() => toast.warning(t("branding.toast.syncFail")));
   };
 
   const handleReset = () => {
@@ -58,51 +60,51 @@ function BrandingPage() {
     setCfg(DEFAULT_BRANDING);
     applyBranding(DEFAULT_BRANDING);
     void pushSettings();
-    toast.success("Identidade restaurada para o padrão");
+    toast.success(t("branding.toast.restored"));
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Identidade Visual
+          {t("branding.title")}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Personalize o nome, logotipo e cores do cliente. As alterações são aplicadas no console.
+          {t("branding.subtitle")}
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Cliente</CardTitle>
+            <CardTitle className="text-base">{t("branding.client.title")}</CardTitle>
             <CardDescription>
-              Nome exibido no cabeçalho e logotipo usado no topo do console.
+              {t("branding.client.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="clientName">Nome do cliente</Label>
+              <Label htmlFor="clientName">{t("branding.client.nameLabel")}</Label>
               <Input
                 id="clientName"
                 value={cfg.clientName}
                 onChange={(e) => update({ clientName: e.target.value })}
-                placeholder="Ex.: Minha Empresa"
+                placeholder={t("branding.client.namePlaceholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Logotipo</Label>
+              <Label>{t("branding.logo.label")}</Label>
               <div className="flex items-center gap-4">
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-md border bg-card">
                   {cfg.clientLogo ? (
                     <img
                       src={cfg.clientLogo}
-                      alt="Logo do cliente"
+                      alt={t("branding.logo.alt")}
                       className="h-full w-full object-contain"
                     />
                   ) : (
-                    <span className="text-[10px] text-muted-foreground">sem logo</span>
+                    <span className="text-[10px] text-muted-foreground">{t("branding.logo.none")}</span>
                   )}
                 </div>
                 <div className="flex flex-col gap-2">
@@ -124,7 +126,7 @@ function BrandingPage() {
                     onClick={() => fileRef.current?.click()}
                   >
                     <Upload className="mr-2 h-4 w-4" />
-                    Carregar imagem
+                    {t("branding.logo.upload")}
                   </Button>
                   {cfg.clientLogo ? (
                     <Button
@@ -134,13 +136,13 @@ function BrandingPage() {
                       onClick={() => update({ clientLogo: "" })}
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
-                      Remover
+                      {t("common.remove")}
                     </Button>
                   ) : null}
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                PNG, JPG, SVG ou WebP. Máx. 1 MB.
+                {t("branding.logo.hint")}
               </p>
             </div>
           </CardContent>
@@ -148,14 +150,14 @@ function BrandingPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Cores</CardTitle>
+            <CardTitle className="text-base">{t("branding.colors.title")}</CardTitle>
             <CardDescription>
-              Cores aplicadas em botões, links e elementos de destaque.
+              {t("branding.colors.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="primary">Cor primária</Label>
+              <Label htmlFor="primary">{t("branding.colors.primaryLabel")}</Label>
               <div className="flex items-center gap-3">
                 <input
                   id="primary"
@@ -172,7 +174,7 @@ function BrandingPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="accent">Cor de destaque</Label>
+              <Label htmlFor="accent">{t("branding.colors.accentLabel")}</Label>
               <div className="flex items-center gap-3">
                 <input
                   id="accent"
@@ -190,19 +192,19 @@ function BrandingPage() {
             </div>
 
             <div className="rounded-md border p-3">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">Pré-visualização</div>
+              <div className="mb-2 text-xs font-medium text-muted-foreground">{t("branding.preview.label")}</div>
               <div className="flex items-center gap-2">
                 <span
                   className="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-white"
                   style={{ background: cfg.primaryColor }}
                 >
-                  Botão primário
+                  {t("branding.preview.primaryButton")}
                 </span>
                 <span
                   className="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-white"
                   style={{ background: cfg.accentColor }}
                 >
-                  Destaque
+                  {t("branding.preview.accent")}
                 </span>
               </div>
             </div>
@@ -213,9 +215,9 @@ function BrandingPage() {
       <div className="flex justify-between">
         <Button variant="ghost" onClick={handleReset}>
           <RotateCcw className="mr-2 h-4 w-4" />
-          Restaurar padrão
+          {t("branding.resetButton")}
         </Button>
-        <Button onClick={handleSave}>Salvar identidade</Button>
+        <Button onClick={handleSave}>{t("branding.saveButton")}</Button>
       </div>
 
       <PoweredBy />

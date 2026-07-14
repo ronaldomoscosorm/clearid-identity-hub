@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, ClipboardPaste, RefreshCw, Upload, User, X } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,19 +27,23 @@ interface Props {
   identityId: string;
 }
 
-async function toJpeg(blob: Blob, quality = 0.92): Promise<Blob> {
+async function toJpeg(
+  t: (k: string, vars?: Record<string, string | number>) => string,
+  blob: Blob,
+  quality = 0.92,
+): Promise<Blob> {
   const bitmap = await createImageBitmap(blob);
   const canvas = document.createElement("canvas");
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas indisponível");
+  if (!ctx) throw new Error(t("picturePanel.canvasUnavailable"));
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bitmap, 0, 0);
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("Falha ao converter imagem"))),
+      (b) => (b ? resolve(b) : reject(new Error(t("picturePanel.convertError")))),
       "image/jpeg",
       quality,
     );
@@ -46,6 +51,7 @@ async function toJpeg(blob: Blob, quality = 0.92): Promise<Blob> {
 }
 
 export function IdentityPicturePanel({ identityId }: Props) {
+  const { t } = useT();
   const qc = useQueryClient();
   const siteId = useDefaultSiteId();
   const [url, setUrl] = useState<string | null>(null);
@@ -73,7 +79,7 @@ export function IdentityPicturePanel({ identityId }: Props) {
   const upload = useMutation({
     mutationFn: (blob: Blob) => argusApi.uploadIdentityPicture(identityId, blob),
     onSuccess: async () => {
-      toast.success("Foto atualizada");
+      toast.success(t("picturePanel.toast.updated"));
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["identity-picture", siteId, identityId] }),
         qc.invalidateQueries({ queryKey: ["identity", siteId, identityId] }),
@@ -99,16 +105,16 @@ export function IdentityPicturePanel({ identityId }: Props) {
 
   const handleBlob = async (blob: Blob) => {
     if (!blob.type.startsWith("image/")) {
-      toast.error("O conteúdo da área de transferência não é uma imagem.");
+      toast.error(t("picturePanel.toast.notImage"));
       return;
     }
     try {
-      const jpeg = blob.type === "image/jpeg" ? blob : await toJpeg(blob);
+      const jpeg = blob.type === "image/jpeg" ? blob : await toJpeg(t, blob);
       clearPaste();
       setPasteBlob(jpeg);
       setPasteUrl(URL.createObjectURL(jpeg));
     } catch (e) {
-      toast.error("Não foi possível processar a imagem: " + (e as Error).message);
+      toast.error(t("picturePanel.toast.processError", { message: (e as Error).message }));
     }
   };
 
@@ -127,12 +133,12 @@ export function IdentityPicturePanel({ identityId }: Props) {
             return;
           }
         }
-        toast.message("Nenhuma imagem encontrada. Copie uma imagem e tecle Ctrl+V.");
+        toast.message(t("picturePanel.toast.noImageFound"));
         return;
       }
-      toast.message("Tecle Ctrl+V para colar a imagem.");
+      toast.message(t("picturePanel.toast.pressCtrlV"));
     } catch {
-      toast.message("Tecle Ctrl+V para colar a imagem.");
+      toast.message(t("picturePanel.toast.pressCtrlV"));
     }
   };
 
@@ -159,24 +165,24 @@ export function IdentityPicturePanel({ identityId }: Props) {
     <div className="flex items-start gap-4">
       <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
         {url ? (
-          <img src={url} alt="Foto" className="h-full w-full object-cover" />
+          <img src={url} alt={t("picturePanel.imgAlt")} className="h-full w-full object-cover" />
         ) : (
           <User className="h-10 w-10 text-muted-foreground" />
         )}
       </div>
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium">Foto biométrica</p>
+        <p className="text-sm font-medium">{t("picturePanel.biometricPhoto")}</p>
         <p className="text-xs text-muted-foreground">
-          {url ? "Foto cadastrada no ClearID." : "Nenhuma foto cadastrada."}
+          {url ? t("picturePanel.registered") : t("picturePanel.notRegistered")}
           {" "}
-          Você também pode colar uma imagem com Ctrl+V.
+          {t("picturePanel.pasteHint")}
         </p>
         <div className="flex gap-2">
           <Button type="button" size="sm" variant="outline" onClick={() => setOpen(true)}>
-            <Camera className="mr-1 h-4 w-4" /> Tirar foto
+            <Camera className="mr-1 h-4 w-4" /> {t("picturePanel.takePhoto")}
           </Button>
           <Button type="button" size="sm" variant="outline" onClick={pasteFromClipboard}>
-            <ClipboardPaste className="mr-1 h-4 w-4" /> Colar imagem
+            <ClipboardPaste className="mr-1 h-4 w-4" /> {t("picturePanel.pasteImage")}
           </Button>
           <Button
             type="button"
@@ -184,7 +190,7 @@ export function IdentityPicturePanel({ identityId }: Props) {
             variant="outline"
             onClick={() => fileInputRef.current?.click()}
           >
-            <Upload className="mr-1 h-4 w-4" /> Enviar arquivo
+            <Upload className="mr-1 h-4 w-4" /> {t("picturePanel.uploadFile")}
           </Button>
           <input
             ref={fileInputRef}
@@ -216,18 +222,18 @@ export function IdentityPicturePanel({ identityId }: Props) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Gravar esta imagem?</AlertDialogTitle>
+            <AlertDialogTitle>{t("picturePanel.confirmPasteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              A imagem da área de transferência substituirá a foto atual da identidade.
+              {t("picturePanel.confirmPasteDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {pasteUrl && (
             <div className="overflow-hidden rounded-md border bg-muted">
-              <img src={pasteUrl} alt="Pré-visualização" className="mx-auto max-h-64 object-contain" />
+              <img src={pasteUrl} alt={t("picturePanel.previewAlt")} className="mx-auto max-h-64 object-contain" />
             </div>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={upload.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={upload.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               disabled={upload.isPending || !pasteBlob}
               onClick={(e) => {
@@ -235,7 +241,7 @@ export function IdentityPicturePanel({ identityId }: Props) {
                 if (pasteBlob) upload.mutate(pasteBlob);
               }}
             >
-              {upload.isPending ? "Enviando..." : "Sim, gravar"}
+              {upload.isPending ? t("picturePanel.sending") : t("picturePanel.yesSave")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -255,6 +261,7 @@ function WebcamDialog({
   onCapture: (blob: Blob) => void;
   uploading: boolean;
 }) {
+  const { t } = useT();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [snapshot, setSnapshot] = useState<string | null>(null);
@@ -324,7 +331,7 @@ function WebcamDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Capturar foto</DialogTitle>
+          <DialogTitle>{t("picturePanel.captureTitle")}</DialogTitle>
         </DialogHeader>
         <div className="relative aspect-video w-full overflow-hidden rounded-md border bg-black">
           {err ? (
@@ -332,7 +339,7 @@ function WebcamDialog({
               {err}
             </div>
           ) : snapshot ? (
-            <img src={snapshot} alt="Captura" className="h-full w-full object-cover" />
+            <img src={snapshot} alt={t("picturePanel.captureAlt")} className="h-full w-full object-cover" />
           ) : (
             <video
               ref={videoRef}
@@ -344,15 +351,15 @@ function WebcamDialog({
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            <X className="mr-1 h-4 w-4" /> Cancelar
+            <X className="mr-1 h-4 w-4" /> {t("common.cancel")}
           </Button>
           {snapshot ? (
             <Button type="button" variant="outline" onClick={retake} disabled={uploading}>
-              <RefreshCw className="mr-1 h-4 w-4" /> Repetir
+              <RefreshCw className="mr-1 h-4 w-4" /> {t("picturePanel.retake")}
             </Button>
           ) : (
             <Button type="button" onClick={capture} disabled={!!err}>
-              <Camera className="mr-1 h-4 w-4" /> Capturar
+              <Camera className="mr-1 h-4 w-4" /> {t("picturePanel.capture")}
             </Button>
           )}
         </DialogFooter>
@@ -366,15 +373,14 @@ function WebcamDialog({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Gravar esta foto?</AlertDialogTitle>
+              <AlertDialogTitle>{t("picturePanel.confirmPhotoTitle")}</AlertDialogTitle>
               <AlertDialogDescription>
-                A foto capturada será enviada e substituirá a foto atual da identidade. Deseja
-                continuar?
+                {t("picturePanel.confirmPhotoDescription")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={uploading} onClick={() => retake()}>
-                Não, repetir
+                {t("picturePanel.noRetake")}
               </AlertDialogCancel>
               <AlertDialogAction
                 disabled={uploading || !snapshotBlob}
@@ -383,7 +389,7 @@ function WebcamDialog({
                   if (snapshotBlob) onCapture(snapshotBlob);
                 }}
               >
-                {uploading ? "Enviando..." : "Sim, gravar"}
+                {uploading ? t("picturePanel.sending") : t("picturePanel.yesSave")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -11,6 +11,7 @@ import {
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
 import { clearIdToFormValues } from "@/lib/argus-client";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
@@ -39,6 +40,7 @@ function IdentityDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const siteId = useDefaultSiteId();
+  const { t } = useT();
 
   const query = useQuery({
     queryKey: ["identity", siteId, id],
@@ -74,7 +76,7 @@ function IdentityDetail() {
       companyId: string | null;
     }) => argusApi.updateIdentity(id, vars.data),
     onSuccess: async (updated, vars) => {
-      const ok: string[] = ["dados principais"];
+      const ok: string[] = [t("identityDetail.mainData")];
       const fail: string[] = [];
 
       // Etapa — campos personalizados via PATCH (isola erros de valor, ex.: CPF
@@ -88,27 +90,32 @@ function IdentityDetail() {
       if (cf.length) {
         try {
           await argusApi.patchIdentityCustomFields(id, cf);
-          ok.push("customizáveis");
+          ok.push(t("identityDetail.customFieldsShort"));
         } catch (e) {
-          fail.push(`campos customizáveis (${(e as Error).message})`);
+          fail.push(t("identityDetail.customFieldsFail", { error: (e as Error).message }));
         }
       }
 
       // Etapa — regra padrão (se não houver nenhuma).
       try {
         const rule = await argusApi.ensureDefaultRule(id);
-        if (rule.assigned) ok.push(`regra padrão (${rule.ruleName ?? "regra"})`);
+        if (rule.assigned)
+          ok.push(
+            t("identityDetail.defaultRuleAssigned", {
+              rule: rule.ruleName ?? t("identityDetail.rule"),
+            }),
+          );
       } catch (e) {
-        fail.push(`regra padrão (${(e as Error).message})`);
+        fail.push(t("identityDetail.defaultRuleFail", { error: (e as Error).message }));
       }
 
       if (fail.length) {
-        toast.warning(`Identity atualizada com pendências. Gravado: ${ok.join(", ")}.`, {
-          description: `Falhou: ${fail.join("; ")}`,
+        toast.warning(t("identityDetail.updatePartial", { saved: ok.join(", ") }), {
+          description: t("identityDetail.updateFailedDesc", { failed: fail.join("; ") }),
           duration: 12000,
         });
       } else {
-        toast.success(`Identity atualizada — gravado: ${ok.join(", ")}.`);
+        toast.success(t("identityDetail.updateSuccess", { saved: ok.join(", ") }));
       }
       await mirrorIdentities([updated]);
       await saveIdentityCompany(id, vars.companyId);
@@ -125,7 +132,7 @@ function IdentityDetail() {
   const deactivate = useMutation({
     mutationFn: () => argusApi.deactivateIdentity(id),
     onSuccess: () => {
-      toast.success("Identity desativada");
+      toast.success(t("identityDetail.deactivated"));
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
@@ -138,7 +145,7 @@ function IdentityDetail() {
   const activate = useMutation({
     mutationFn: () => argusApi.activateIdentity(id),
     onSuccess: () => {
-      toast.success("Identity ativada");
+      toast.success(t("identityDetail.activated"));
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
@@ -156,16 +163,16 @@ function IdentityDetail() {
       <div>
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link to="/identities">
-            <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
+            <ArrowLeft className="mr-1 h-4 w-4" /> {t("identityDetail.back")}
           </Link>
         </Button>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-          {query.data ? `${query.data.firstName} ${query.data.lastName}` : "Identity"}
+          {query.data ? `${query.data.firstName} ${query.data.lastName}` : t("identityDetail.fallbackTitle")}
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{id}</p>
         {identitySiteId && (
           <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Site:</span>{" "}
+            <span className="font-medium text-foreground">{t("identityDetail.siteLabel")}</span>{" "}
             <span>{siteName ?? "—"}</span>{" "}
             <span className="font-mono text-[10px] opacity-70">({identitySiteId})</span>
           </p>
@@ -214,8 +221,8 @@ function IdentityDetail() {
           onCancel={() => navigate({ to: "/identities" })}
           statusBadge={
             <span
-              aria-label={isActive ? "Ativo" : "Inativo"}
-              title={isActive ? "Ativo" : "Inativo"}
+              aria-label={isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
+              title={isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
               className={`inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-bold uppercase tracking-wide shadow-sm sm:gap-2 sm:px-3.5 sm:py-1.5 sm:text-sm ${
                 isActive
                   ? "border-green-700 bg-green-600 text-white dark:border-green-400 dark:bg-green-500"
@@ -227,7 +234,7 @@ function IdentityDetail() {
                   isActive ? "animate-pulse" : ""
                 }`}
               />
-              {isActive ? "Ativo" : "Inativo"}
+              {isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
             </span>
           }
           extraActions={
@@ -242,7 +249,7 @@ function IdentityDetail() {
                     ) : (
                       <PowerOff className="mr-1 h-4 w-4" />
                     )}
-                    {isToggling ? "Processando..." : "Desativar"}
+                    {isToggling ? t("identityDetail.processing") : t("identityDetail.deactivate")}
                   </Button>
                 ) : (
                   <Button type="button" variant="secondary" disabled={isToggling}>
@@ -251,27 +258,29 @@ function IdentityDetail() {
                     ) : (
                       <Power className="mr-1 h-4 w-4" />
                     )}
-                    {isToggling ? "Processando..." : "Ativar"}
+                    {isToggling ? t("identityDetail.processing") : t("identityDetail.activate")}
                   </Button>
                 )}
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    {isActive ? "Deseja desativar?" : "Deseja ativar?"}
+                    {isActive
+                      ? t("identityDetail.confirmDeactivateTitle")
+                      : t("identityDetail.confirmActivateTitle")}
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     {isActive
-                      ? "O registro será marcado como inativo no ClearID."
-                      : "O registro será marcado como ativo no ClearID."}
+                      ? t("identityDetail.confirmDeactivateDesc")
+                      : t("identityDetail.confirmActivateDesc")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => (isActive ? deactivate.mutate() : activate.mutate())}
                   >
-                    {isActive ? "Desativar" : "Ativar"}
+                    {isActive ? t("identityDetail.deactivate") : t("identityDetail.activate")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

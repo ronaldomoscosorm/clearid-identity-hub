@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { dictionaries } from "./i18n-dict";
+import { generated } from "./i18n-generated";
 
 export type Lang = "pt-BR" | "en-US" | "es-ES";
 
@@ -55,9 +56,12 @@ export function useLang(): Lang {
 }
 
 /** Traduz `key` para `lang` (fallback: pt-BR → a própria key). Interpola {vars}. */
+function lookup(lang: Lang, key: string): string | undefined {
+  return generated[lang]?.[key] ?? dictionaries[lang]?.[key];
+}
+
 export function translate(key: string, lang: Lang, vars?: Record<string, string | number>): string {
-  const raw =
-    dictionaries[lang]?.[key] ?? dictionaries[DEFAULT_LANG]?.[key] ?? key;
+  const raw = lookup(lang, key) ?? lookup(DEFAULT_LANG, key) ?? key;
   if (!vars) return raw;
   return raw.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`));
 }

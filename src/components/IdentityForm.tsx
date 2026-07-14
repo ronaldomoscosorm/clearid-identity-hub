@@ -5,6 +5,7 @@ import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { useIdentityFieldLabels } from "@/lib/identity-labels";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
@@ -28,13 +29,16 @@ import type { IdentityUpsert } from "@/lib/argus-client";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import type { SiteFieldValue } from "@/lib/supabase-mirror";
 
-const baseSchema = z.object({
-  externalId: z.string().trim().max(120).optional().default(""),
-  firstName: z.string().trim().min(1, "Obrigatório").max(100),
-  lastName: z.string().trim().min(1, "Obrigatório").max(100),
-  email: z.string().trim().email("E-mail inválido").max(255),
-  status: z.enum(["Active", "Inactive"]),
-});
+type TFunc = (k: string, vars?: Record<string, string | number>) => string;
+
+const makeBaseSchema = (t: TFunc) =>
+  z.object({
+    externalId: z.string().trim().max(120).optional().default(""),
+    firstName: z.string().trim().min(1, t("identityForm.validation.required")).max(100),
+    lastName: z.string().trim().min(1, t("identityForm.validation.required")).max(100),
+    email: z.string().trim().email(t("identityForm.validation.invalidEmail")).max(255),
+    status: z.enum(["Active", "Inactive"]),
+  });
 
 // Campos adicionais do modelo ClearID, além dos fixos (nome/sobrenome/email/
 // site/tipo). Cada um é controlável por apelido (visibilidade + rótulo).
@@ -94,6 +98,7 @@ export function IdentityForm({
   statusBadge,
   showCustomFields = false,
 }: IdentityFormProps) {
+  const { t } = useT();
   const [externalId, setExternalId] = useState(initial?.externalId ?? "");
   const [firstName, setFirstName] = useState(initial?.firstName ?? "");
   const [lastName, setLastName] = useState(initial?.lastName ?? "");
@@ -218,7 +223,7 @@ export function IdentityForm({
   // Havendo campos do site para o tipo, exibe apenas os obrigatórios + esses.
   const hasSiteFields = siteFields.length > 0;
   const siteFieldLabel = (sf: SiteFieldLite) =>
-    pickLang(sf.display_name_override) || sf.definition?.custom_field_name || "Campo";
+    pickLang(sf.display_name_override) || sf.definition?.custom_field_name || t("identityForm.fieldFallback");
 
   // Empresas do site (para vincular a identidade e herdar valores).
   const companiesQuery = useQuery({
@@ -310,7 +315,7 @@ export function IdentityForm({
       });
     }
   }
-  const OUTROS = "Outros";
+  const OUTROS = t("identityForm.otherSection");
   const groupedSiteFields = (() => {
     const groups = new Map<string, { display: string; sIdx: number; items: { sf: SiteFieldLite; fIdx: number }[] }>();
     for (const sf of siteFields) {
@@ -337,7 +342,7 @@ export function IdentityForm({
         <Label htmlFor={`sf-${sf.id}`} className="text-xs text-muted-foreground">
           {siteFieldLabel(sf)}
           {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
-          {disabled && <span className="ml-1 text-muted-foreground">(somente leitura)</span>}
+          {disabled && <span className="ml-1 text-muted-foreground">{t("identityForm.readOnly")}</span>}
         </Label>
         {kind === "boolean" ? (
           <div className="flex h-9 items-center">
@@ -351,7 +356,7 @@ export function IdentityForm({
         ) : kind === "list" ? (
           <Select value={value} onValueChange={(v) => setField(name, v)} disabled={disabled}>
             <SelectTrigger id={`sf-${sf.id}`} className={cn(err && "border-destructive")}>
-              <SelectValue placeholder="Selecione" />
+              <SelectValue placeholder={t("identityForm.selectPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
               {optionsOf(sf.value_range).map((opt) => (
@@ -379,7 +384,7 @@ export function IdentityForm({
   const renderExtraFields = (section: ExtraField["section"]) =>
     EXTRA_FIELDS.filter((f) => f.section === section && isVisible(f.key)).map((f) => (
       <div key={f.key} className="space-y-2">
-        <Label htmlFor={`x-${f.key}`}>{alias(f.key, f.label)}</Label>
+        <Label htmlFor={`x-${f.key}`}>{alias(f.key, t(`identityForm.extra.${f.key}`))}</Label>
         <Input
           id={`x-${f.key}`}
           type={f.type === "date" ? "date" : f.type === "email" ? "email" : "text"}
@@ -456,7 +461,7 @@ export function IdentityForm({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = baseSchema.safeParse({ externalId, firstName, lastName, email, status });
+    const parsed = makeBaseSchema(t).safeParse({ externalId, firstName, lastName, email, status });
     const out: Record<string, string> = {};
     if (!parsed.success) {
       for (const i of parsed.error.issues) out[i.path[0] as string] = i.message;
@@ -466,13 +471,12 @@ export function IdentityForm({
     const effectiveWorkerTypeCode =
       workerTypes.find((w) => w.id === workerTypeId)?.argus_worker_type_code ?? "";
     if (!workerTypeId) {
-      out.workerTypeCode = "Selecione o tipo do trabalhador";
+      out.workerTypeCode = t("identityForm.validation.selectWorkerType");
     } else if (!effectiveWorkerTypeCode) {
-      out.workerTypeCode =
-        "Tipo do trabalhador sem mapeamento para o ClearID (configure em worker_types).";
+      out.workerTypeCode = t("identityForm.validation.workerTypeUnmapped");
     }
     if (!siteId) {
-      out.siteId = "Selecione um site";
+      out.siteId = t("identityForm.validation.selectSite");
     }
     for (const sf of siteFields) {
       if (
@@ -481,7 +485,7 @@ export function IdentityForm({
         sf.definition &&
         isBlank(customFields[sf.definition.custom_field_name])
       ) {
-        out[`sf-${sf.id}`] = "Campo obrigatório";
+        out[`sf-${sf.id}`] = t("identityForm.validation.requiredField");
       }
     }
     if (Object.keys(out).length) {
@@ -507,7 +511,7 @@ export function IdentityForm({
         // Aceita ISO (vindo do GET sem edição) ou dd/MM/yyyy
         const iso = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : brToIso(raw);
         if (iso === null || iso === "") {
-          cfErrors[`cf-${key}`] = "Data inválida (use dd/mm/aaaa)";
+          cfErrors[`cf-${key}`] = t("identityForm.validation.invalidDate");
           continue;
         }
         cf[key] = iso;
@@ -572,7 +576,7 @@ export function IdentityForm({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base">
-            {alias("company_worker_type_code", "Tipo do Trabalhador")}
+            {alias("company_worker_type_code", t("identityForm.workerType"))}
             <span className="ml-0.5 text-destructive">*</span>
           </CardTitle>
           {statusBadge}
@@ -584,7 +588,7 @@ export function IdentityForm({
               onValueChange={(id) => setWorkerTypeId(id)}
             >
               <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
-                <SelectValue placeholder="Selecione o tipo" />
+                <SelectValue placeholder={t("identityForm.selectWorkerTypePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {workerTypes.map((w) => (
@@ -603,13 +607,13 @@ export function IdentityForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Identificação</CardTitle>
+          <CardTitle className="text-base">{t("identityForm.identification")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           {/* Obrigatórios — sempre exibidos (apelido apenas renomeia). */}
           <div className="space-y-2">
             <Label htmlFor="firstName">
-              {alias("first_name", "Nome")}
+              {alias("first_name", t("common.name"))}
               <span className="ml-0.5 text-destructive">*</span>
             </Label>
             <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
@@ -617,24 +621,24 @@ export function IdentityForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="lastName">
-              {alias("last_name", "Sobrenome")}
+              {alias("last_name", t("identityForm.lastName"))}
               <span className="ml-0.5 text-destructive">*</span>
             </Label>
             <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
             {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="displayName">{alias("display_name", "Nome de exibição")}</Label>
+            <Label htmlFor="displayName">{alias("display_name", t("identityForm.displayName"))}</Label>
             <Input
               id="displayName"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Padrão: Nome + Sobrenome"
+              placeholder={t("identityForm.displayNamePlaceholder")}
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="email">
-              {alias("email", "E-mail")}
+              {alias("email", t("common.email"))}
               <span className="ml-0.5 text-destructive">*</span>
             </Label>
             <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -642,12 +646,12 @@ export function IdentityForm({
           </div>
           <div className="space-y-2">
             <Label>
-              {alias("company_site_id", "Site")}
+              {alias("company_site_id", t("identityForm.site"))}
               <span className="ml-0.5 text-destructive">*</span>
             </Label>
             <Select value={siteId} onValueChange={setSiteId}>
               <SelectTrigger className={cn(errors.siteId && "border-destructive")}>
-                <SelectValue placeholder={sitesQuery.isLoading ? "Carregando..." : "Selecione um site"} />
+                <SelectValue placeholder={sitesQuery.isLoading ? t("common.loading") : t("identityForm.selectSitePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {sites.map((s) => (
@@ -660,16 +664,16 @@ export function IdentityForm({
             {errors.siteId && <p className="text-xs text-destructive">{errors.siteId}</p>}
           </div>
           <div className="space-y-2">
-            <Label>Empresa</Label>
+            <Label>{t("identityForm.company")}</Label>
             <Select
               value={companyId || "__NONE__"}
               onValueChange={(v) => setCompanyId(v === "__NONE__" ? "" : v)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Nenhuma" />
+                <SelectValue placeholder={t("identityForm.none")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__NONE__">Nenhuma</SelectItem>
+                <SelectItem value="__NONE__">{t("identityForm.none")}</SelectItem>
                 {companies.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}
@@ -685,7 +689,7 @@ export function IdentityForm({
       {!hasSiteFields && hasSection("personal") && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Dados pessoais</CardTitle>
+            <CardTitle className="text-base">{t("identityForm.personalData")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             {renderExtraFields("personal")}
@@ -696,7 +700,7 @@ export function IdentityForm({
       {!hasSiteFields && hasSection("company") && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Vínculo corporativo</CardTitle>
+            <CardTitle className="text-base">{t("identityForm.corporateLink")}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             {renderExtraFields("company")}
@@ -707,7 +711,7 @@ export function IdentityForm({
       {workerTypeId && siteFields.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Campos personalizados do site</CardTitle>
+            <CardTitle className="text-base">{t("identityForm.siteCustomFields")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {groupedSiteFields.map((g) => (
@@ -725,7 +729,7 @@ export function IdentityForm({
       {showCustomFields && (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Atributos customizados</CardTitle>
+          <CardTitle className="text-base">{t("identityForm.customAttributes")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {fieldsQuery.isLoading ? (
@@ -736,7 +740,7 @@ export function IdentityForm({
             </div>
           ) : defs.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              Nenhum campo personalizado definido.
+              {t("identityForm.noCustomFields")}
             </p>
           ) : (
             <div className="space-y-6">
@@ -776,10 +780,10 @@ export function IdentityForm({
                                       )}
                                     >
                                       <CalendarIcon className="mr-2 h-4 w-4" />
-                                      {selected ? format(selected, "dd/MM/yyyy", { locale: ptBR }) : "dd/mm/aaaa"}
+                                      {selected ? format(selected, "dd/MM/yyyy", { locale: ptBR }) : t("identityForm.datePlaceholder")}
                                       {isExpired && (
                                         <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
-                                          Vencida
+                                          {t("identityForm.expiredBadge")}
                                         </span>
                                       )}
                                     </Button>
@@ -804,7 +808,7 @@ export function IdentityForm({
                                           className="w-full"
                                           onClick={() => setField(name, "")}
                                         >
-                                          Limpar
+                                          {t("identityForm.clear")}
                                         </Button>
                                       </div>
                                     )}
@@ -812,7 +816,7 @@ export function IdentityForm({
                                 </Popover>
                                 {isExpired && (
                                   <p className="text-xs font-medium text-destructive">
-                                    Data vencida
+                                    {t("identityForm.expiredDate")}
                                   </p>
                                 )}
                                 </>
@@ -868,11 +872,11 @@ export function IdentityForm({
         {extraActions}
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
         )}
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Salvando..." : mode === "create" ? "Criar" : "Salvar"}
+          {submitting ? t("common.saving") : mode === "create" ? t("identityForm.create") : t("common.save")}
         </Button>
       </div>
     </form>

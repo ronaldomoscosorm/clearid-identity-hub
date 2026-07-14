@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useDefaultSiteId } from "@/lib/argus-client";
+import { useT, type TFn } from "@/lib/i18n";
 import { typeOf, pickLang, optionsOf, isTruthy } from "@/lib/custom-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -90,11 +91,16 @@ function toForm(c: Company): FormState {
   };
 }
 
-function fieldLabel(sf: SiteField): string {
-  return pickLang(sf.display_name_override) || sf.definition?.custom_field_name || "Campo";
+function fieldLabel(sf: SiteField, t: TFn): string {
+  return (
+    pickLang(sf.display_name_override) ||
+    sf.definition?.custom_field_name ||
+    t("companies.customField.fallback")
+  );
 }
 
 function EmpresasPage() {
+  const { t } = useT();
   const siteId = useDefaultSiteId();
   const qc = useQueryClient();
 
@@ -175,7 +181,7 @@ function EmpresasPage() {
       }
     },
     onSuccess: () => {
-      toast.success(editing ? "Empresa atualizada" : "Empresa criada");
+      toast.success(editing ? t("companies.toast.updated") : t("companies.toast.created"));
       qc.invalidateQueries({ queryKey: ["companies", siteId] });
       setDialogOpen(false);
     },
@@ -188,7 +194,7 @@ function EmpresasPage() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      toast.success("Empresa excluída");
+      toast.success(t("companies.toast.deleted"));
       qc.invalidateQueries({ queryKey: ["companies", siteId] });
       setToDelete(null);
     },
@@ -218,12 +224,12 @@ function EmpresasPage() {
 
   const submit = () => {
     if (!form.name.trim()) {
-      toast.error("Informe o nome da empresa");
+      toast.error(t("companies.validation.nameRequired"));
       return;
     }
     const missing = siteFields.find((sf) => sf.is_required && !customValues[sf.id]?.trim());
     if (missing) {
-      toast.error(`Campo obrigatório: ${fieldLabel(missing)}`);
+      toast.error(t("companies.validation.requiredField", { field: fieldLabel(missing, t) }));
       return;
     }
     upsert.mutate(form);
@@ -236,10 +242,10 @@ function EmpresasPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Empresas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Cadastro de empresas do site selecionado.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("companies.title")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("companies.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -249,10 +255,10 @@ function EmpresasPage() {
             disabled={query.isFetching || !siteId}
           >
             <RefreshCw className={`mr-1 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
-            Atualizar
+            {t("companies.refreshButton")}
           </Button>
           <Button size="sm" onClick={openCreate} disabled={!siteId}>
-            <Plus className="mr-1 h-4 w-4" /> Nova empresa
+            <Plus className="mr-1 h-4 w-4" /> {t("companies.newButton")}
           </Button>
         </div>
       </div>
@@ -260,15 +266,20 @@ function EmpresasPage() {
       {!siteId ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Selecione um site em <span className="font-medium">Configurações</span> para gerenciar
-            empresas.
+            {t("companies.noSite.before")}
+            <span className="font-medium">{t("companies.noSite.settings")}</span>
+            {t("companies.noSite.after")}
           </CardContent>
         </Card>
       ) : (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {query.data ? `${items.length} ${items.length === 1 ? "empresa" : "empresas"}` : "Empresas"}
+              {query.data
+                ? items.length === 1
+                  ? t("companies.count.one", { count: items.length })
+                  : t("companies.count.other", { count: items.length })
+                : t("companies.title")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -284,17 +295,17 @@ function EmpresasPage() {
               </div>
             ) : items.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                Nenhuma empresa cadastrada para este site.
+                {t("companies.emptyState")}
               </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Razão social</TableHead>
-                    <TableHead>CNPJ</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[100px] text-right">Ações</TableHead>
+                    <TableHead>{t("common.name")}</TableHead>
+                    <TableHead>{t("companies.col.legalName")}</TableHead>
+                    <TableHead>{t("companies.col.taxId")}</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                    <TableHead className="w-[100px] text-right">{t("common.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -305,7 +316,7 @@ function EmpresasPage() {
                       <TableCell className="text-muted-foreground">{c.tax_id ?? "—"}</TableCell>
                       <TableCell>
                         <Badge variant={c.status === "Active" ? "default" : "secondary"}>
-                          {c.status === "Active" ? "Ativa" : "Inativa"}
+                          {c.status === "Active" ? t("companies.status.active") : t("companies.status.inactive")}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
@@ -338,25 +349,25 @@ function EmpresasPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
-              {editing ? "Editar empresa" : "Nova empresa"}
+              {editing ? t("companies.dialog.editTitle") : t("companies.newButton")}
             </DialogTitle>
             <DialogDescription>
-              {editing ? "Atualize os dados da empresa." : "Cadastre uma nova empresa para o site."}
+              {editing ? t("companies.dialog.editDescription") : t("companies.dialog.createDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="name">Nome *</Label>
+              <Label htmlFor="name">{t("companies.form.name")}</Label>
               <Input
                 id="name"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Nome fantasia"
+                placeholder={t("companies.form.namePlaceholder")}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="legal_name">Razão social</Label>
+              <Label htmlFor="legal_name">{t("companies.col.legalName")}</Label>
               <Input
                 id="legal_name"
                 value={form.legal_name}
@@ -365,7 +376,7 @@ function EmpresasPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="tax_id">CNPJ</Label>
+                <Label htmlFor="tax_id">{t("companies.col.taxId")}</Label>
                 <Input
                   id="tax_id"
                   value={form.tax_id}
@@ -374,7 +385,7 @@ function EmpresasPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
+                <Label htmlFor="status">{t("common.status")}</Label>
                 <Select
                   value={form.status}
                   onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
@@ -383,14 +394,14 @@ function EmpresasPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Active">Ativa</SelectItem>
-                    <SelectItem value="Inactive">Inativa</SelectItem>
+                    <SelectItem value="Active">{t("companies.status.active")}</SelectItem>
+                    <SelectItem value="Inactive">{t("companies.status.inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Descrição</Label>
+              <Label htmlFor="description">{t("companies.form.description")}</Label>
               <Textarea
                 id="description"
                 value={form.description}
@@ -402,11 +413,13 @@ function EmpresasPage() {
             {/* Campos personalizados do site */}
             {siteFields.length > 0 && (
               <div className="space-y-4 border-t pt-4">
-                <p className="text-sm font-medium text-foreground">Campos personalizados</p>
+                <p className="text-sm font-medium text-foreground">
+                  {t("companies.customField.section")}
+                </p>
                 {siteFields.map((sf) => {
                   const kind = typeOf(sf.definition?.custom_field_type);
                   const value = customValues[sf.id] ?? "";
-                  const label = fieldLabel(sf);
+                  const label = fieldLabel(sf, t);
                   return (
                     <div key={sf.id} className="space-y-2">
                       <Label>
@@ -423,7 +436,7 @@ function EmpresasPage() {
                       ) : kind === "list" ? (
                         <Select value={value} onValueChange={(v) => setCV(sf.id, v)}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione" />
+                            <SelectValue placeholder={t("companies.customField.selectPlaceholder")} />
                           </SelectTrigger>
                           <SelectContent>
                             {optionsOf(sf.value_range).map((opt) => (
@@ -449,10 +462,10 @@ function EmpresasPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button onClick={submit} disabled={upsert.isPending}>
-              {upsert.isPending ? "Salvando..." : "Salvar"}
+              {upsert.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -462,20 +475,21 @@ function EmpresasPage() {
       <AlertDialog open={Boolean(toDelete)} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir empresa</AlertDialogTitle>
+            <AlertDialogTitle>{t("companies.delete.title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir <span className="font-medium">{toDelete?.name}</span>?
-              Esta ação não pode ser desfeita.
+              {t("companies.delete.confirmBefore")}
+              <span className="font-medium">{toDelete?.name}</span>
+              {t("companies.delete.confirmAfter")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => toDelete && remove.mutate(toDelete.id)}
               disabled={remove.isPending}
             >
-              {remove.isPending ? "Excluindo..." : "Excluir"}
+              {remove.isPending ? t("companies.delete.deleting") : t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/dialog";
 import { IdentityThumb } from "@/components/IdentityThumb";
 import { IdentityPictureDialog } from "@/components/IdentityPictureDialog";
+import { useT } from "@/lib/i18n";
 
 const searchSchema = z.object({
   teamId: z.string().optional(),
@@ -73,6 +74,7 @@ export const Route = createFileRoute("/_authenticated/regras")({
 });
 
 function RegrasPage() {
+  const { t } = useT();
   const navigate = useNavigate({ from: Route.fullPath });
   const { teamId, view } = Route.useSearch();
   const siteId = useDefaultSiteId();
@@ -93,19 +95,19 @@ function RegrasPage() {
   // se há novas regras cadastradas.
   useEffect(() => {
     if (!siteId) return;
-    const toastId = toast.loading("Verificando novas regras...");
+    const toastId = toast.loading(t("rules.checkingNew"));
     teamsQuery
       .refetch()
       .then((res) => {
         if (res.error) {
-          toast.error("Falha ao atualizar regras.", { id: toastId });
+          toast.error(t("rules.refreshTeamsError"), { id: toastId });
         } else {
-          toast.success("Regras atualizadas.", { id: toastId });
+          toast.success(t("rules.refreshTeamsSuccess"), { id: toastId });
         }
       })
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : "Erro desconhecido";
-        toast.error(`Falha ao atualizar regras: ${msg}`, { id: toastId });
+        const msg = err instanceof Error ? err.message : t("rules.unknownError");
+        toast.error(t("rules.refreshTeamsErrorDetail", { msg }), { id: toastId });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId]);
@@ -136,16 +138,16 @@ function RegrasPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Regras</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t("rules.title")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Selecione uma regra para visualizar seus membros no site padrão.
+          {t("rules.subtitle")}
         </p>
       </div>
 
       <Card className="p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[280px] flex-1 space-y-2">
-            <Label htmlFor="team">Regra</Label>
+            <Label htmlFor="team">{t("rules.teamLabel")}</Label>
             <Select
               value={teamId ?? ""}
               onValueChange={setTeam}
@@ -155,12 +157,12 @@ function RegrasPage() {
                 <SelectValue
                   placeholder={
                     !siteId
-                      ? "Selecione um site padrão em Configurações"
+                      ? t("rules.selectSiteFirst")
                       : teamsQuery.isLoading
-                      ? "Carregando regras..."
+                      ? t("rules.loadingTeams")
                       : teamsQuery.error
-                        ? "Falha ao carregar regras"
-                        : "Selecione uma regra"
+                        ? t("rules.loadTeamsError")
+                        : t("rules.selectTeam")
                   }
                 />
               </SelectTrigger>
@@ -182,10 +184,10 @@ function RegrasPage() {
                 disabled={membersQuery.isFetching}
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${membersQuery.isFetching ? "animate-spin" : ""}`} />
-                Atualizar
+                {t("rules.refresh")}
               </Button>
               <Button size="sm" onClick={() => setAddOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" /> Adicionar membros
+                <Plus className="mr-2 h-4 w-4" /> {t("rules.addMembers")}
               </Button>
             </>
           )}
@@ -197,33 +199,33 @@ function RegrasPage() {
 
       {!teamId ? (
         <Card className="p-12 text-center text-sm text-muted-foreground">
-          Selecione uma regra acima para listar seus membros.
+          {t("rules.emptyState")}
         </Card>
       ) : (
         <Card>
           <div className="border-b px-4 py-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              {selectedTeam?.name ?? "Membros"}
+              {selectedTeam?.name ?? t("rules.members")}
               {membersQuery.isFetching && !membersQuery.isLoading && (
                 <span className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground">
                   <RefreshCw className="h-3 w-3 animate-spin" />
-                  Atualizando...
+                  {t("rules.updating")}
                 </span>
               )}
             </h2>
             <p className="text-xs text-muted-foreground">
               {membersQuery.isLoading
-                ? "Carregando..."
-                : `${membersQuery.data?.length ?? 0} membro(s)`}
+                ? t("common.loading")
+                : t("rules.memberCount", { count: membersQuery.data?.length ?? 0 })}
             </p>
           </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-14"></TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead className="hidden font-mono text-xs md:table-cell">Identity ID</TableHead>
+                <TableHead>{t("common.name")}</TableHead>
+                <TableHead>{t("rules.col.email")}</TableHead>
+                <TableHead className="hidden font-mono text-xs md:table-cell">{t("rules.col.identityId")}</TableHead>
                 <TableHead className="w-14"></TableHead>
               </TableRow>
             </TableHeader>
@@ -247,7 +249,7 @@ function RegrasPage() {
               ) : (membersQuery.data ?? []).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                    Nenhum membro encontrado.
+                    {t("rules.noMembers")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -277,12 +279,12 @@ function RegrasPage() {
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <MoreHorizontal className="h-4 w-4" />
-                              <span className="sr-only">Ações</span>
+                              <span className="sr-only">{t("common.actions")}</span>
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openView(m.identityId)}>
-                              <Eye className="mr-2 h-4 w-4" /> Visualizar
+                              <Eye className="mr-2 h-4 w-4" /> {t("rules.view")}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() =>
@@ -292,12 +294,12 @@ function RegrasPage() {
                                 })
                               }
                             >
-                              <Camera className="mr-2 h-4 w-4" /> Atualizar foto
+                              <Camera className="mr-2 h-4 w-4" /> {t("rules.updatePhoto")}
                             </DropdownMenuItem>
                             {m.identityEmail && (
                               <DropdownMenuItem asChild>
                                 <a href={`mailto:${m.identityEmail}`}>
-                                  <Mail className="mr-2 h-4 w-4" /> Enviar e-mail
+                                  <Mail className="mr-2 h-4 w-4" /> {t("rules.sendEmail")}
                                 </a>
                               </DropdownMenuItem>
                             )}
@@ -339,6 +341,7 @@ function ViewIdentityDialog({
   identityId: string | null;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const open = !!identityId;
   const query = useQuery({
     queryKey: ["identity", identityId],
@@ -353,7 +356,7 @@ function ViewIdentityDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {data ? `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim() : "Identity"}
+            {data ? `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim() : t("rules.identity")}
           </DialogTitle>
           <DialogDescription className="font-mono text-xs">
             {identityId}
@@ -381,34 +384,34 @@ function ViewIdentityDialog({
                 </Badge>
               </div>
             </div>
-            <Field label="Email" value={data.email} />
-            <Field label="External ID" value={data.externalId ?? data.systemData?.externalId} mono />
-            <Field label="Identity Type" value={data.identityType} />
-            <Field label="Country" value={data.countryCode} />
+            <Field label={t("rules.field.email")} value={data.email} />
+            <Field label={t("rules.field.externalId")} value={data.externalId ?? data.systemData?.externalId} mono />
+            <Field label={t("rules.field.identityType")} value={data.identityType} />
+            <Field label={t("rules.field.country")} value={data.countryCode} />
             <Field
-              label="Job Title"
+              label={t("rules.field.jobTitle")}
               value={(data.companyData as Record<string, unknown> | null)?.jobTitle as string | undefined}
             />
             <Field
-              label="Company"
+              label={t("rules.field.company")}
               value={(data.companyData as Record<string, unknown> | null)?.companyName as string | undefined}
             />
             <Field
-              label="Department"
+              label={t("rules.field.department")}
               value={(data.companyData as Record<string, unknown> | null)?.departmentName as string | undefined}
             />
-            <Field label="Description" value={data.description} />
+            <Field label={t("rules.field.description")} value={data.description} />
           </div>
         ) : null}
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={onClose}>
-            Fechar
+            {t("common.close")}
           </Button>
           {data && (
             <Button asChild>
               <Link to="/identities/$id" params={{ id: data.identityId }}>
-                <ExternalLink className="mr-2 h-4 w-4" /> Abrir edição
+                <ExternalLink className="mr-2 h-4 w-4" /> {t("rules.openEdit")}
               </Link>
             </Button>
           )}
@@ -463,6 +466,7 @@ function AddMembersDialog({
   teamName: string | null;
   siteId: string | null;
 }) {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
   const [selected, setSelected] = useState<Record<string, ClearIdIdentity>>({});
@@ -525,7 +529,7 @@ function AddMembersDialog({
 
   const submit = useMutation({
     mutationFn: async (ids: string[]) => {
-      if (!teamId) throw new Error("Selecione uma regra antes.");
+      if (!teamId) throw new Error(t("rules.selectTeamFirst"));
       return argusApi.addTeamMembers(teamId, {
         identityIds: ids,
         sourceId: siteId ?? null,
@@ -535,7 +539,7 @@ function AddMembersDialog({
       });
     },
     onSuccess: (_d, ids) => {
-      toast.success(`${ids.length} membro(s) adicionado(s).`);
+      toast.success(t("rules.membersAdded", { count: ids.length }));
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       setSelected({});
@@ -544,16 +548,16 @@ function AddMembersDialog({
       setStartAt(currentLocalDateTimeValue());
       setEndAt("");
       onClose();
-      const toastId = toast.loading("Atualizando lista de membros...");
+      const toastId = toast.loading(t("rules.updatingMembers"));
       queryClient
         .refetchQueries({ queryKey: ["team-members", siteId, teamId] })
-        .then(() => toast.success("Lista de membros atualizada.", { id: toastId }))
+        .then(() => toast.success(t("rules.membersUpdated"), { id: toastId }))
         .catch((e: Error) =>
-          toast.error(e.message || "Falha ao atualizar a lista de membros.", { id: toastId }),
+          toast.error(e.message || t("rules.membersUpdateError"), { id: toastId }),
         );
     },
     onError: (e: Error) => {
-      toast.error(e.message || "Falha ao adicionar membros.");
+      toast.error(e.message || t("rules.addMembersError"));
     },
   });
 
@@ -564,31 +568,35 @@ function AddMembersDialog({
 
   const handleAdd = () => {
     if (!startAt) {
-      toast.error("Informe a data de início.");
+      toast.error(t("rules.startDateRequired"));
       return;
     }
     const start = new Date(startAt);
     if (isNaN(start.getTime())) {
-      toast.error("Data de início inválida.");
+      toast.error(t("rules.startDateInvalid"));
       return;
     }
     if (endAt) {
       const end = new Date(endAt);
       if (isNaN(end.getTime())) {
-        toast.error("Data de término inválida.");
+        toast.error(t("rules.endDateInvalid"));
         return;
       }
       if (end <= start) {
-        toast.error("A data de término deve ser posterior à data de início.");
+        toast.error(t("rules.endAfterStart"));
         return;
       }
     }
     const count = selectedList.length;
     const endMsg = endAt
-      ? `até ${new Date(endAt).toLocaleString()}`
-      : "sem prazo final (data de término em branco)";
+      ? t("rules.untilDate", { date: new Date(endAt).toLocaleString() })
+      : t("rules.noEndDate");
     const ok = window.confirm(
-      `Confirma a adição de ${count} membro(s) a partir de ${new Date(startAt).toLocaleString()} ${endMsg}?`,
+      t("rules.confirmAdd", {
+        count,
+        start: new Date(startAt).toLocaleString(),
+        end: endMsg,
+      }),
     );
     if (!ok) return;
     submit.mutate(selectedList.map((i) => i.identityId));
@@ -599,18 +607,16 @@ function AddMembersDialog({
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>
-            Adicionar membros{teamName ? ` — ${teamName}` : ""}
+            {t("rules.addMembers")}{teamName ? ` — ${teamName}` : ""}
           </DialogTitle>
           <DialogDescription>
-            Pesquise por nome ou email. Por padrão, a busca é feita no site
-            atual — marque "Todos os sites" para pesquisar em todos. Selecione
-            um membro para limpar a busca e procurar outro.
+            {t("rules.addMembersDesc")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-1">
           <Label className="text-primary">
-            Identidades <span className="text-primary">*</span>
+            {t("rules.identities")} <span className="text-primary">*</span>
           </Label>
           <div
             className="flex min-h-11 flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5 focus-within:ring-2 focus-within:ring-ring"
@@ -637,7 +643,7 @@ function AddMembersDialog({
                       toggle(i);
                     }}
                     className="ml-0.5 rounded-full p-0.5 text-muted-foreground hover:bg-muted-foreground/20"
-                    aria-label={`Remover ${name}`}
+                    aria-label={t("rules.removeAria", { name })}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -648,7 +654,7 @@ function AddMembersDialog({
               data-chip-input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Digite para pesquisar..."
+              placeholder={t("rules.searchPlaceholder")}
               autoFocus
               className="min-w-[12rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm outline-none placeholder:text-muted-foreground"
               onKeyDown={(e) => {
@@ -667,7 +673,7 @@ function AddMembersDialog({
                 checked={searchAllSites}
                 onCheckedChange={(v) => setSearchAllSites(!!v)}
               />
-              <span>Pesquisar em todos os sites</span>
+              <span>{t("rules.searchAllSites")}</span>
             </label>
           </div>
         </div>
@@ -678,22 +684,22 @@ function AddMembersDialog({
               <TableRow>
                 <TableHead className="w-10"></TableHead>
                 <TableHead className="w-14"></TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead className="hidden font-mono text-xs md:table-cell">Identity ID</TableHead>
+                <TableHead>{t("common.name")}</TableHead>
+                <TableHead>{t("rules.col.email")}</TableHead>
+                <TableHead className="hidden font-mono text-xs md:table-cell">{t("rules.col.identityId")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {!query ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                    Digite um nome ou email e clique em Pesquisar.
+                    {t("rules.searchHint")}
                   </TableCell>
                 </TableRow>
               ) : searchQuery.isLoading ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Pesquisando...
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> {t("rules.searching")}
                   </TableCell>
                 </TableRow>
               ) : searchQuery.error ? (
@@ -705,7 +711,7 @@ function AddMembersDialog({
               ) : items.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                    Nenhum resultado.
+                    {t("rules.noResults")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -743,7 +749,7 @@ function AddMembersDialog({
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <Label htmlFor="startAt">Data de início</Label>
+            <Label htmlFor="startAt">{t("rules.startDate")}</Label>
             <Input
               id="startAt"
               type="datetime-local"
@@ -752,7 +758,7 @@ function AddMembersDialog({
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="endAt">Data de término</Label>
+            <Label htmlFor="endAt">{t("rules.endDate")}</Label>
             <div className="flex gap-2">
               {endAt ? (
                 <>
@@ -769,8 +775,8 @@ function AddMembersDialog({
                     size="icon"
                     onClick={() => setEndAt("")}
                     disabled={submit.isPending}
-                    aria-label="Limpar data de término"
-                    title="Limpar"
+                    aria-label={t("rules.clearEndDate")}
+                    title={t("rules.clear")}
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -783,7 +789,7 @@ function AddMembersDialog({
                     type="text"
                     value=""
                     readOnly
-                    aria-label="Data de término em branco"
+                    aria-label={t("rules.endDateBlank")}
                   />
                   <Button
                     type="button"
@@ -791,7 +797,7 @@ function AddMembersDialog({
                     onClick={() => setEndAt(currentLocalDateTimeValue())}
                     disabled={submit.isPending}
                   >
-                    <Plus className="mr-2 h-4 w-4" /> Definir
+                    <Plus className="mr-2 h-4 w-4" /> {t("rules.set")}
                   </Button>
                 </>
               )}
@@ -801,14 +807,14 @@ function AddMembersDialog({
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={handleClose} disabled={submit.isPending}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleAdd}
             disabled={selectedList.length === 0 || submit.isPending || !teamId}
           >
             {submit.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Adicionar {selectedList.length > 0 ? `(${selectedList.length})` : ""}
+            {t("common.add")} {selectedList.length > 0 ? `(${selectedList.length})` : ""}
           </Button>
         </DialogFooter>
       </DialogContent>

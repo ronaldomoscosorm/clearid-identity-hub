@@ -5,6 +5,7 @@ import type { ClearIdCustomFieldDef } from "@/lib/argus-client";
 import { RefreshCw } from "lucide-react";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,6 +34,7 @@ function formatDate(iso?: string | null) {
 }
 
 function CustomFieldsPage() {
+  const { t } = useT();
   const query = useQuery({
     queryKey: ["custom-fields"],
     queryFn: () => argusApi.listCustomFields(),
@@ -60,7 +62,7 @@ function CustomFieldsPage() {
   const groupedItems = useMemo(() => {
     const groups = new Map<string, ClearIdCustomFieldDef[]>();
     for (const f of items) {
-      const key = sectionByField.get(f.customFieldName) ?? "Outros";
+      const key = sectionByField.get(f.customFieldName) ?? t("customFields.sectionOther");
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(f);
     }
@@ -77,7 +79,7 @@ function CustomFieldsPage() {
       );
     }
     return arr;
-  }, [items, sectionByField]);
+  }, [items, sectionByField, t]);
 
   // Espelha as definições de campos para o Supabase (cache local, best-effort).
   useEffect(() => {
@@ -92,9 +94,15 @@ function CustomFieldsPage() {
         <Badge variant="secondary">{f.customFieldType ?? "—"}</Badge>
       </TableCell>
       <TableCell>
-        {f.synchronizationEnabled ? <Badge>Ativa</Badge> : <Badge variant="outline">Inativa</Badge>}
+        {f.synchronizationEnabled ? (
+          <Badge>{t("customFields.syncActive")}</Badge>
+        ) : (
+          <Badge variant="outline">{t("customFields.syncInactive")}</Badge>
+        )}
       </TableCell>
-      <TableCell className="text-sm text-muted-foreground">{f.isReadOnly ? "Sim" : "Não"}</TableCell>
+      <TableCell className="text-sm text-muted-foreground">
+        {f.isReadOnly ? t("common.yes") : t("common.no")}
+      </TableCell>
       <TableCell className="text-sm text-muted-foreground">
         {formatDate(f.lastModificationDateUtc)}
       </TableCell>
@@ -106,10 +114,10 @@ function CustomFieldsPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Campos personalizados
+            {t("customFields.title")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Definições de campos personalizados disponíveis para as identities.
+            {t("customFields.subtitle")}
           </p>
         </div>
         <Button
@@ -119,14 +127,18 @@ function CustomFieldsPage() {
           disabled={query.isFetching}
         >
           <RefreshCw className={`mr-1 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
-          Atualizar
+          {t("customFields.refresh")}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            {query.data ? `${items.length} ${items.length === 1 ? "campo" : "campos"}` : "Campos"}
+            {query.data
+              ? items.length === 1
+                ? t("customFields.countSingular", { count: items.length })
+                : t("customFields.countPlural", { count: items.length })
+              : t("customFields.fieldsLabel")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -142,7 +154,7 @@ function CustomFieldsPage() {
             </div>
           ) : items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum campo personalizado encontrado.
+              {t("customFields.emptyState")}
             </p>
           ) : (
             <div className="space-y-6">
@@ -152,12 +164,12 @@ function CustomFieldsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nome de exibição</TableHead>
-                        <TableHead>Identificador</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Sincronização</TableHead>
-                        <TableHead>Somente leitura</TableHead>
-                        <TableHead>Última alteração</TableHead>
+                        <TableHead>{t("customFields.col.displayName")}</TableHead>
+                        <TableHead>{t("customFields.col.identifier")}</TableHead>
+                        <TableHead>{t("customFields.col.type")}</TableHead>
+                        <TableHead>{t("customFields.col.synchronization")}</TableHead>
+                        <TableHead>{t("customFields.col.readOnly")}</TableHead>
+                        <TableHead>{t("customFields.col.lastModified")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>{fields.map(renderRow)}</TableBody>

@@ -4,6 +4,7 @@ import { ArrowLeft, Power, PowerOff } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
 import { clearIdToFormValues, serializeCustomFieldsForPatch } from "@/lib/argus-client";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
@@ -28,6 +29,7 @@ export const Route = createFileRoute("/_authenticated/terceirizados/$id")({
 });
 
 function IdentityDetail() {
+  const { t } = useT();
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -80,7 +82,7 @@ function IdentityDetail() {
       }
     },
     onSuccess: () => {
-      toast.success("Identity atualizada");
+      toast.success(t("contractorDetail.toast.updated"));
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
@@ -93,7 +95,7 @@ function IdentityDetail() {
   const deactivate = useMutation({
     mutationFn: () => argusApi.deactivateIdentity(id),
     onSuccess: () => {
-      toast.success("Identity desativada");
+      toast.success(t("contractorDetail.toast.deactivated"));
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
@@ -106,7 +108,7 @@ function IdentityDetail() {
   const activate = useMutation({
     mutationFn: () => argusApi.activateIdentity(id),
     onSuccess: () => {
-      toast.success("Identity ativada");
+      toast.success(t("contractorDetail.toast.activated"));
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
@@ -139,23 +141,23 @@ function IdentityDetail() {
       <div>
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link to="/terceirizados">
-            <ArrowLeft className="mr-1 h-4 w-4" /> Voltar
+            <ArrowLeft className="mr-1 h-4 w-4" /> {t("contractorDetail.back")}
           </Link>
         </Button>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-          {query.data ? `${query.data.firstName} ${query.data.lastName}` : "Identity"}
+          {query.data ? `${query.data.firstName} ${query.data.lastName}` : t("contractorDetail.identity")}
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{id}</p>
         {identitySiteId && (
           <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Site:</span>{" "}
+            <span className="font-medium text-foreground">{t("contractorDetail.siteLabel")}</span>{" "}
             <span>{siteName ?? "—"}</span>{" "}
             <span className="font-mono text-[10px] opacity-70">({identitySiteId})</span>
           </p>
         )}
         {activationDate && (
           <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Data de ativação:</span>{" "}
+            <span className="font-medium text-foreground">{t("contractorDetail.activationDateLabel")}</span>{" "}
             <span>{fmtDate(activationDate)}</span>
           </p>
         )}
@@ -206,8 +208,8 @@ function IdentityDetail() {
           onCancel={() => navigate({ to: "/terceirizados" })}
           statusBadge={
             <span
-              aria-label={isActive ? "Ativo" : "Inativo"}
-              title={isActive ? "Ativo" : "Inativo"}
+              aria-label={isActive ? t("contractorDetail.active") : t("contractorDetail.inactive")}
+              title={isActive ? t("contractorDetail.active") : t("contractorDetail.inactive")}
               className={`inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-bold uppercase tracking-wide shadow-sm sm:gap-2 sm:px-3.5 sm:py-1.5 sm:text-sm ${
                 isActive
                   ? "border-green-700 bg-green-600 text-white dark:border-green-400 dark:bg-green-500"
@@ -219,7 +221,7 @@ function IdentityDetail() {
                   isActive ? "animate-pulse" : ""
                 }`}
               />
-              {isActive ? "Ativo" : "Inativo"}
+              {isActive ? t("contractorDetail.active") : t("contractorDetail.inactive")}
             </span>
           }
           extraActions={
@@ -229,31 +231,33 @@ function IdentityDetail() {
               <AlertDialogTrigger asChild>
                 {isActive ? (
                   <Button type="button" variant="destructive">
-                    <PowerOff className="mr-1 h-4 w-4" /> Desativar
+                    <PowerOff className="mr-1 h-4 w-4" /> {t("contractorDetail.deactivate")}
                   </Button>
                 ) : (
                   <Button type="button" variant="secondary">
-                    <Power className="mr-1 h-4 w-4" /> Ativar
+                    <Power className="mr-1 h-4 w-4" /> {t("contractorDetail.activate")}
                   </Button>
                 )}
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    {isActive ? "Deseja desativar?" : "Deseja ativar?"}
+                    {isActive
+                      ? t("contractorDetail.deactivateConfirmTitle")
+                      : t("contractorDetail.activateConfirmTitle")}
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     {isActive
-                      ? "O registro será marcado como inativo no ClearID."
-                      : "O registro será marcado como ativo no ClearID."}
+                      ? t("contractorDetail.deactivateConfirmDesc")
+                      : t("contractorDetail.activateConfirmDesc")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={() => (isActive ? deactivate.mutate() : activate.mutate())}
                   >
-                    {isActive ? "Desativar" : "Ativar"}
+                    {isActive ? t("contractorDetail.deactivate") : t("contractorDetail.activate")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
 import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff, Camera, Loader2 } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,7 @@ export const Route = createFileRoute("/_authenticated/identities/")({
 });
 
 function IdentitiesList() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const siteId = useDefaultSiteId();
   const [confirm, setConfirm] = useState<{ id: string; activate: boolean; name: string } | null>(
@@ -113,7 +115,7 @@ function IdentitiesList() {
       return await argusApi.getIdentity(id);
     },
     onSuccess: (updated, vars) => {
-      toast.success(vars.activate ? "Identity ativada" : "Identity desativada");
+      toast.success(vars.activate ? t("identities.toast.activated") : t("identities.toast.deactivated"));
       // Atualiza o item dentro do cache da listagem atual
       queryClient.setQueryData(
         ["identities", applied],
@@ -161,14 +163,14 @@ function IdentitiesList() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Identities</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t("identities.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Cadastros sincronizados com o Identity Service v4 do ClearID.
+            {t("identities.subtitle")}
           </p>
         </div>
         <Button asChild>
           <Link to="/identities/new">
-            <Plus className="mr-1 h-4 w-4" /> Nova identity
+            <Plus className="mr-1 h-4 w-4" /> {t("identities.newButton")}
           </Link>
         </Button>
       </div>
@@ -177,73 +179,73 @@ function IdentitiesList() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
-              <Label htmlFor="f-first-name">Nome</Label>
+              <Label htmlFor="f-first-name">{t("common.name")}</Label>
               <Input
                 id="f-first-name"
                 value={fFirstName}
                 onChange={(e) => setFFirstName(e.target.value)}
-                placeholder="Ex: Maria"
+                placeholder={t("identities.filter.namePlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="f-email">E-mail</Label>
+              <Label htmlFor="f-email">{t("common.email")}</Label>
               <Input
                 id="f-email"
                 value={fEmail}
                 onChange={(e) => setFEmail(e.target.value)}
-                placeholder="usuario@empresa.com"
+                placeholder={t("identities.filter.emailPlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="f-company">Empresa</Label>
+              <Label htmlFor="f-company">{t("identities.filter.company")}</Label>
               <Input
                 id="f-company"
                 value={fCompany}
                 onChange={(e) => setFCompany(e.target.value)}
-                placeholder="Empresa"
+                placeholder={t("identities.filter.company")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="f-job-title">Cargo</Label>
+              <Label htmlFor="f-job-title">{t("identities.filter.jobTitle")}</Label>
               <Input
                 id="f-job-title"
                 value={fJobTitle}
                 onChange={(e) => setFJobTitle(e.target.value)}
-                placeholder="Cargo"
+                placeholder={t("identities.filter.jobTitle")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="f-department">Departamento</Label>
+              <Label htmlFor="f-department">{t("identities.filter.department")}</Label>
               <Input
                 id="f-department"
                 value={fDepartment}
                 onChange={(e) => setFDepartment(e.target.value)}
-                placeholder="Departamento"
+                placeholder={t("identities.filter.department")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Status</Label>
+              <Label>{t("common.status")}</Label>
               <Select value={fStatus} onValueChange={setFStatus}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Active">Ativos</SelectItem>
-                  <SelectItem value="Inactive">Inativos</SelectItem>
-                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="Active">{t("identities.status.active")}</SelectItem>
+                  <SelectItem value="Inactive">{t("identities.status.inactive")}</SelectItem>
+                  <SelectItem value="all">{t("identities.status.all")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Tipo do Trabalhador</Label>
+              <Label>{t("identities.filter.workerType")}</Label>
               <Select value={fWorkerType} onValueChange={setFWorkerType}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os tipos</SelectItem>
-                  <SelectItem value="Terceiros">Terceiros</SelectItem>
-                  <SelectItem value="Colaborador">Colaborador</SelectItem>
+                  <SelectItem value="all">{t("identities.workerType.all")}</SelectItem>
+                  <SelectItem value="Terceiros">{t("identities.workerType.contractor")}</SelectItem>
+                  <SelectItem value="Colaborador">{t("identities.workerType.employee")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -256,11 +258,11 @@ function IdentitiesList() {
                 onCheckedChange={(v) => setFAllSites(!!v)}
               />
               <Label htmlFor="f-all-sites" className="cursor-pointer text-sm font-normal">
-                Todos os sites
+                {t("identities.filter.allSites")}
               </Label>
             </div>
             <Button type="button" variant="ghost" onClick={onClear} disabled={query.isFetching}>
-              Limpar
+              {t("identities.filter.clear")}
             </Button>
             <Button
               type="button"
@@ -268,12 +270,12 @@ function IdentitiesList() {
               size="icon"
               onClick={() => query.refetch()}
               disabled={query.isFetching}
-              title="Recarregar"
+              title={t("identities.filter.reload")}
             >
               <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
             </Button>
             <Button type="submit" disabled={query.isFetching}>
-              <Search className="mr-1 h-4 w-4" /> Pesquisar
+              <Search className="mr-1 h-4 w-4" /> {t("common.search")}
             </Button>
           </div>
         </form>
@@ -283,12 +285,12 @@ function IdentitiesList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-14">Foto</TableHead>
-              <TableHead>IdentityId</TableHead>
-              <TableHead>Nome</TableHead>
-              <TableHead>E-mail</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Relevância</TableHead>
+              <TableHead className="w-14">{t("identities.col.photo")}</TableHead>
+              <TableHead>{t("identities.col.identityId")}</TableHead>
+              <TableHead>{t("common.name")}</TableHead>
+              <TableHead>{t("common.email")}</TableHead>
+              <TableHead>{t("common.status")}</TableHead>
+              <TableHead>{t("identities.col.relevance")}</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
@@ -296,7 +298,9 @@ function IdentitiesList() {
             {!hasSearched ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Informe filtros e clique em <span className="font-medium text-foreground">Pesquisar</span> para listar identities.
+                  {t("identities.emptyPrompt.before")}{" "}
+                  <span className="font-medium text-foreground">{t("common.search")}</span>{" "}
+                  {t("identities.emptyPrompt.after")}
                 </TableCell>
               </TableRow>
             ) : query.isLoading || query.isFetching ? (
@@ -318,7 +322,7 @@ function IdentitiesList() {
             ) : !query.data?.items?.length ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhuma identity encontrada para os filtros informados.
+                  {t("identities.emptyResult")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -356,13 +360,13 @@ function IdentitiesList() {
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
                             <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Ações</span>
+                            <span className="sr-only">{t("common.actions")}</span>
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
                             <Link to="/identities/$id" params={{ id: it.identityId }}>
-                              <Eye className="mr-2 h-4 w-4" /> Visualizar
+                              <Eye className="mr-2 h-4 w-4" /> {t("identities.action.view")}
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -375,7 +379,7 @@ function IdentitiesList() {
                               })
                             }
                           >
-                            <Camera className="mr-2 h-4 w-4" /> Atualizar foto
+                            <Camera className="mr-2 h-4 w-4" /> {t("identities.action.updatePhoto")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           {isActive ? (
@@ -390,7 +394,7 @@ function IdentitiesList() {
                               }
                               disabled={toggleStatus.isPending}
                             >
-                              <PowerOff className="mr-2 h-4 w-4" /> Desativar
+                              <PowerOff className="mr-2 h-4 w-4" /> {t("identities.action.deactivate")}
                             </DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem
@@ -404,7 +408,7 @@ function IdentitiesList() {
                               }
                               disabled={toggleStatus.isPending}
                             >
-                              <Power className="mr-2 h-4 w-4" /> Ativar
+                              <Power className="mr-2 h-4 w-4" /> {t("identities.action.activate")}
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -422,15 +426,15 @@ function IdentitiesList() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirm?.activate ? "Ativar identity?" : "Desativar identity?"}
+              {confirm?.activate ? t("identities.confirm.activateTitle") : t("identities.confirm.deactivateTitle")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Você tem certeza que deseja {confirm?.activate ? "ativar" : "desativar"}{" "}
+              {confirm?.activate ? t("identities.confirm.activatePrefix") : t("identities.confirm.deactivatePrefix")}{" "}
               <strong>{confirm?.name}</strong>?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={toggleStatus.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={toggleStatus.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               disabled={toggleStatus.isPending}
               onClick={(e) => {
@@ -444,10 +448,10 @@ function IdentitiesList() {
             >
               {toggleStatus.isPending ? (
                 <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Processando...
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("identities.confirm.processing")}
                 </>
               ) : (
-                "Confirmar"
+                t("identities.confirm.confirm")
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { IDENTITY_FIELD_KEYS } from "@/lib/identity-labels";
 import { pickLang } from "@/lib/custom-fields";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,6 +68,7 @@ const EMPTY_FORM: FormState = {
 };
 
 function ApelidosPage() {
+  const { t } = useT();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<LabelRow | null>(null);
@@ -110,7 +112,7 @@ function ApelidosPage() {
       }
     },
     onSuccess: () => {
-      toast.success(editing ? "Apelido atualizado" : "Apelido criado");
+      toast.success(editing ? t("aliases.toast.updated") : t("aliases.toast.created"));
       qc.invalidateQueries({ queryKey: ["identity-field-labels-admin"] });
       qc.invalidateQueries({ queryKey: ["identity-field-labels"] });
       setDialogOpen(false);
@@ -124,7 +126,7 @@ function ApelidosPage() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      toast.success("Apelido removido");
+      toast.success(t("aliases.toast.removed"));
       qc.invalidateQueries({ queryKey: ["identity-field-labels-admin"] });
       qc.invalidateQueries({ queryKey: ["identity-field-labels"] });
       setToDelete(null);
@@ -151,11 +153,11 @@ function ApelidosPage() {
   };
   const submit = () => {
     if (!form.field_key.trim()) {
-      toast.error("Informe o campo (field_key)");
+      toast.error(t("aliases.validation.fieldKeyRequired"));
       return;
     }
     if (!form.ptBR.trim() && !form.enUS.trim()) {
-      toast.error("Informe ao menos um apelido");
+      toast.error(t("aliases.validation.aliasRequired"));
       return;
     }
     upsert.mutate(form);
@@ -168,10 +170,10 @@ function ApelidosPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Apelidos dos campos
+            {t("aliases.title")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Defina apelidos multilíngues para os campos de identidade exibidos no frontend.
+            {t("aliases.subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -182,10 +184,10 @@ function ApelidosPage() {
             disabled={query.isFetching}
           >
             <RefreshCw className={`mr-1 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
-            Atualizar
+            {t("aliases.refresh")}
           </Button>
           <Button size="sm" onClick={openCreate}>
-            <Plus className="mr-1 h-4 w-4" /> Novo apelido
+            <Plus className="mr-1 h-4 w-4" /> {t("aliases.newButton")}
           </Button>
         </div>
       </div>
@@ -193,7 +195,11 @@ function ApelidosPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            {query.data ? `${items.length} ${items.length === 1 ? "apelido" : "apelidos"}` : "Apelidos"}
+            {query.data
+              ? items.length === 1
+                ? t("aliases.countOne", { count: items.length })
+                : t("aliases.countMany", { count: items.length })
+              : t("aliases.cardTitle")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -208,17 +214,17 @@ function ApelidosPage() {
             </div>
           ) : items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum apelido cadastrado.
+              {t("aliases.emptyState")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Campo</TableHead>
+                  <TableHead>{t("aliases.col.field")}</TableHead>
                   <TableHead>pt-BR</TableHead>
                   <TableHead>en-US</TableHead>
-                  <TableHead>Visível</TableHead>
-                  <TableHead className="w-[100px] text-right">Ações</TableHead>
+                  <TableHead>{t("aliases.col.visible")}</TableHead>
+                  <TableHead className="w-[100px] text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -231,9 +237,9 @@ function ApelidosPage() {
                     </TableCell>
                     <TableCell>
                       {row.is_visible ? (
-                        <Badge variant="secondary">Sim</Badge>
+                        <Badge variant="secondary">{t("common.yes")}</Badge>
                       ) : (
-                        <Badge variant="outline">Não</Badge>
+                        <Badge variant="outline">{t("common.no")}</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -265,20 +271,20 @@ function ApelidosPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Tag className="h-5 w-5" />
-              {editing ? "Editar apelido" : "Novo apelido"}
+              {editing ? t("aliases.dialog.editTitle") : t("aliases.dialog.newTitle")}
             </DialogTitle>
-            <DialogDescription>Apelido multilíngue para um campo de identidade.</DialogDescription>
+            <DialogDescription>{t("aliases.dialog.description")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label htmlFor="field_key">Campo (field_key) *</Label>
+              <Label htmlFor="field_key">{t("aliases.form.fieldKeyLabel")}</Label>
               <Input
                 id="field_key"
                 list="identity-field-keys"
                 value={form.field_key}
                 onChange={(e) => setForm((f) => ({ ...f, field_key: e.target.value }))}
-                placeholder="ex.: first_name"
+                placeholder={t("aliases.form.fieldKeyPlaceholder")}
                 disabled={Boolean(editing)}
               />
               <datalist id="identity-field-keys">
@@ -288,7 +294,7 @@ function ApelidosPage() {
               </datalist>
             </div>
             <div className="space-y-2">
-              <Label>Apelido</Label>
+              <Label>{t("aliases.form.aliasLabel")}</Label>
               <div className="grid grid-cols-3 gap-3">
                 <Input
                   value={form.ptBR}
@@ -309,7 +315,7 @@ function ApelidosPage() {
             </div>
             <div className="grid grid-cols-2 items-end gap-3">
               <div className="space-y-2">
-                <Label>Ordem</Label>
+                <Label>{t("aliases.form.orderLabel")}</Label>
                 <Input
                   type="number"
                   value={form.display_index}
@@ -322,17 +328,17 @@ function ApelidosPage() {
                   checked={form.is_visible}
                   onCheckedChange={(v) => setForm((f) => ({ ...f, is_visible: v }))}
                 />
-                <Label className="cursor-pointer">Visível</Label>
+                <Label className="cursor-pointer">{t("aliases.col.visible")}</Label>
               </div>
             </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button onClick={submit} disabled={upsert.isPending}>
-              {upsert.isPending ? "Salvando..." : "Salvar"}
+              {upsert.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -342,19 +348,20 @@ function ApelidosPage() {
       <AlertDialog open={Boolean(toDelete)} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover apelido</AlertDialogTitle>
+            <AlertDialogTitle>{t("aliases.delete.title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Remover o apelido de <span className="font-mono">{toDelete?.field_key}</span>?
+              {t("aliases.delete.confirmPrefix")}{" "}
+              <span className="font-mono">{toDelete?.field_key}</span>?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => toDelete && remove.mutate(toDelete.id)}
               disabled={remove.isPending}
             >
-              {remove.isPending ? "Removendo..." : "Remover"}
+              {remove.isPending ? t("aliases.delete.removing") : t("aliases.delete.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

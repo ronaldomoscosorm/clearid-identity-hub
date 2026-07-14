@@ -10,6 +10,7 @@ import {
   type PhotoCampaignResult,
   type PhotoCampaignTarget,
 } from "@/lib/argus-client";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,22 +59,26 @@ function formatDate(iso?: string | null) {
   }
 }
 
-function statusBadge(status: string) {
+function statusBadge(
+  t: (k: string, vars?: Record<string, string | number>) => string,
+  status: string,
+) {
   switch (status) {
     case "Sent":
-      return <Badge>Enviado</Badge>;
+      return <Badge>{t("campaigns.status.sent")}</Badge>;
     case "Used":
-      return <Badge variant="secondary">Utilizado</Badge>;
+      return <Badge variant="secondary">{t("campaigns.status.used")}</Badge>;
     case "Failed":
-      return <Badge variant="destructive">Falhou</Badge>;
+      return <Badge variant="destructive">{t("campaigns.status.failed")}</Badge>;
     case "SkippedNoEmail":
-      return <Badge variant="outline">Sem e-mail</Badge>;
+      return <Badge variant="outline">{t("campaigns.noEmailLabel")}</Badge>;
     default:
-      return <Badge variant="secondary">Pendente</Badge>;
+      return <Badge variant="secondary">{t("campaigns.status.pending")}</Badge>;
   }
 }
 
 function CampanhasFotoPage() {
+  const { t } = useT();
   const siteId = useDefaultSiteId();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -84,7 +89,7 @@ function CampanhasFotoPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => argusApi.deletePhotoCampaign(id),
     onSuccess: () => {
-      toast.success("Campanha excluída.");
+      toast.success(t("campaigns.deleteSuccess"));
       setDeleting(null);
       qc.invalidateQueries({ queryKey: ["photo-campaigns"] });
     },
@@ -103,9 +108,9 @@ function CampanhasFotoPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Campanhas de Foto</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t("campaigns.title")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Recadastramento de biometria facial por link de uso único enviado por e-mail.
+            {t("campaigns.subtitle")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -116,10 +121,10 @@ function CampanhasFotoPage() {
             disabled={listQuery.isFetching}
           >
             <RefreshCw className={`mr-1 h-4 w-4 ${listQuery.isFetching ? "animate-spin" : ""}`} />
-            Atualizar
+            {t("campaigns.refresh")}
           </Button>
           <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" /> Nova campanha
+            <Plus className="mr-1 h-4 w-4" /> {t("campaigns.newCampaign")}
           </Button>
         </div>
       </div>
@@ -128,8 +133,10 @@ function CampanhasFotoPage() {
         <CardHeader>
           <CardTitle className="text-base">
             {listQuery.data
-              ? `${items.length} ${items.length === 1 ? "campanha" : "campanhas"}`
-              : "Campanhas"}
+              ? items.length === 1
+                ? t("campaigns.countOne", { count: items.length })
+                : t("campaigns.countOther", { count: items.length })
+              : t("campaigns.heading")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -144,20 +151,20 @@ function CampanhasFotoPage() {
             </div>
           ) : items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhuma campanha criada ainda.
+              {t("campaigns.emptyState")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Ambiente</TableHead>
-                  <TableHead>Alvos</TableHead>
-                  <TableHead>Enviados</TableHead>
-                  <TableHead>Sem e-mail</TableHead>
-                  <TableHead>Falhas</TableHead>
-                  <TableHead>Criada</TableHead>
-                  <TableHead className="w-[130px] text-right">Ações</TableHead>
+                  <TableHead>{t("common.name")}</TableHead>
+                  <TableHead>{t("campaigns.col.environment")}</TableHead>
+                  <TableHead>{t("campaigns.col.targets")}</TableHead>
+                  <TableHead>{t("campaigns.col.sent")}</TableHead>
+                  <TableHead>{t("campaigns.noEmailLabel")}</TableHead>
+                  <TableHead>{t("campaigns.col.failed")}</TableHead>
+                  <TableHead>{t("campaigns.col.created")}</TableHead>
+                  <TableHead className="w-[130px] text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -166,7 +173,7 @@ function CampanhasFotoPage() {
                     <TableCell className="font-medium">{c.name || "—"}</TableCell>
                     <TableCell>
                       <Badge variant="secondary">{c.environment}</Badge>
-                      {c.dryRun && <Badge variant="outline" className="ml-1">DryRun</Badge>}
+                      {c.dryRun && <Badge variant="outline" className="ml-1">{t("campaigns.dryRun")}</Badge>}
                     </TableCell>
                     <TableCell>{c.totalTargets}</TableCell>
                     <TableCell>{c.sent}</TableCell>
@@ -182,7 +189,7 @@ function CampanhasFotoPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Detalhe"
+                          title={t("campaigns.detailAction")}
                           onClick={() => setDetailId(c.campaignId)}
                         >
                           <Eye className="h-4 w-4" />
@@ -190,7 +197,7 @@ function CampanhasFotoPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Renomear"
+                          title={t("common.rename")}
                           onClick={() => setEditing(c)}
                         >
                           <Pencil className="h-4 w-4" />
@@ -198,7 +205,7 @@ function CampanhasFotoPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Excluir"
+                          title={t("common.delete")}
                           className="text-destructive hover:text-destructive"
                           onClick={() => setDeleting(c)}
                         >
@@ -236,14 +243,15 @@ function CampanhasFotoPage() {
       <AlertDialog open={Boolean(deleting)} onOpenChange={(v) => !v && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir campanha?</AlertDialogTitle>
+            <AlertDialogTitle>{t("campaigns.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              A campanha <strong>{deleting?.name || "sem nome"}</strong> será excluída
-              permanentemente. Esta ação não pode ser desfeita.
+              {t("campaigns.deleteConfirmPrefix")}{" "}
+              <strong>{deleting?.name || t("campaigns.unnamed")}</strong>{" "}
+              {t("campaigns.deleteConfirmSuffix")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={deleteMutation.isPending}
@@ -252,7 +260,7 @@ function CampanhasFotoPage() {
                 if (deleting) deleteMutation.mutate(deleting.campaignId);
               }}
             >
-              {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
+              {deleteMutation.isPending ? t("campaigns.deleting") : t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -270,6 +278,7 @@ function RenameCampaignDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useT();
   const [name, setName] = useState("");
 
   useEffect(() => {
@@ -280,7 +289,7 @@ function RenameCampaignDialog({
     mutationFn: () =>
       argusApi.updatePhotoCampaign(campaign!.campaignId, { name: name.trim() || null }),
     onSuccess: () => {
-      toast.success("Campanha atualizada.");
+      toast.success(t("campaigns.updateSuccess"));
       onSaved();
     },
     onError: (e) => toast.error((e as ArgusApiError).message),
@@ -291,28 +300,28 @@ function RenameCampaignDialog({
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Pencil className="h-4 w-4" /> Renomear campanha
+            <Pencil className="h-4 w-4" /> {t("campaigns.renameTitle")}
           </DialogTitle>
           <DialogDescription>
-            Os alvos (identidades) são definidos na criação e não podem ser alterados aqui.
+            {t("campaigns.renameDescription")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-2">
-          <Label htmlFor="rename">Nome</Label>
+          <Label htmlFor="rename">{t("common.name")}</Label>
           <Input
             id="rename"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !rename.isPending && rename.mutate()}
-            placeholder="Nome da campanha"
+            placeholder={t("campaigns.namePlaceholder")}
           />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button onClick={() => rename.mutate()} disabled={rename.isPending}>
-            {rename.isPending ? "Salvando..." : "Salvar"}
+            {rename.isPending ? t("common.saving") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -331,6 +340,7 @@ function CreateCampaignDialog({
   siteId?: string | null;
   onCreated: () => void;
 }) {
+  const { t } = useT();
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"site" | "identities">("site");
   const [search, setSearch] = useState("");
@@ -355,8 +365,12 @@ function CreateCampaignDialog({
     onSuccess: (r: PhotoCampaignResult) => {
       toast.success(
         r.dryRun
-          ? `Campanha criada (DryRun) — ${r.totalTargets} alvo(s), nenhum e-mail enviado.`
-          : `Campanha criada — ${r.sent} enviado(s), ${r.skippedNoEmail} sem e-mail, ${r.failed} falha(s).`,
+          ? t("campaigns.createdDryRun", { total: r.totalTargets })
+          : t("campaigns.createdResult", {
+              sent: r.sent,
+              noEmail: r.skippedNoEmail,
+              failed: r.failed,
+            }),
       );
       onCreated();
       reset();
@@ -383,11 +397,11 @@ function CreateCampaignDialog({
 
   const submit = () => {
     if (mode === "site" && !siteId) {
-      toast.error("Selecione um site padrão em Configurações.");
+      toast.error(t("campaigns.selectDefaultSite"));
       return;
     }
     if (mode === "identities" && Object.keys(selected).length === 0) {
-      toast.error("Selecione ao menos uma identidade.");
+      toast.error(t("campaigns.selectAtLeastOne"));
       return;
     }
     create.mutate();
@@ -401,26 +415,26 @@ function CreateCampaignDialog({
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Camera className="h-5 w-5" /> Nova campanha de foto
+            <Camera className="h-5 w-5" /> {t("campaigns.createTitle")}
           </DialogTitle>
           <DialogDescription>
-            Dispara um link de uso único por e-mail para recadastro da foto.
+            {t("campaigns.createDescription")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="camp-name">Nome (opcional)</Label>
+            <Label htmlFor="camp-name">{t("campaigns.nameOptional")}</Label>
             <Input
               id="camp-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Atualização de foto 2026"
+              placeholder={t("campaigns.namePlaceholderExample")}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Alvos</Label>
+            <Label>{t("campaigns.targets")}</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -428,7 +442,7 @@ function CreateCampaignDialog({
                 size="sm"
                 onClick={() => setMode("site")}
               >
-                Todo o site
+                {t("campaigns.wholeSite")}
               </Button>
               <Button
                 type="button"
@@ -436,7 +450,7 @@ function CreateCampaignDialog({
                 size="sm"
                 onClick={() => setMode("identities")}
               >
-                Selecionar identidades
+                {t("campaigns.selectIdentities")}
               </Button>
             </div>
           </div>
@@ -448,7 +462,7 @@ function CreateCampaignDialog({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && setApplied(search.trim())}
-                  placeholder="Buscar por nome ou e-mail"
+                  placeholder={t("campaigns.searchPlaceholder")}
                 />
                 <Button type="button" variant="outline" size="sm" onClick={() => setApplied(search.trim())}>
                   <Search className="h-4 w-4" />
@@ -457,10 +471,10 @@ function CreateCampaignDialog({
               <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-2">
                 {idsQuery.isFetching ? (
                   <div className="flex items-center gap-2 p-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Buscando...
+                    <Loader2 className="h-4 w-4 animate-spin" /> {t("campaigns.searching")}
                   </div>
                 ) : applied && results.length === 0 ? (
-                  <p className="p-2 text-sm text-muted-foreground">Nenhuma identidade encontrada.</p>
+                  <p className="p-2 text-sm text-muted-foreground">{t("campaigns.noIdentitiesFound")}</p>
                 ) : (
                   results.map((i) => {
                     const dn = `${i.firstName} ${i.lastName}`.trim();
@@ -474,14 +488,14 @@ function CreateCampaignDialog({
                           onCheckedChange={() => toggle(i.identityId, dn)}
                         />
                         <span className="flex-1">{dn}</span>
-                        <span className="text-xs text-muted-foreground">{i.email ?? "sem e-mail"}</span>
+                        <span className="text-xs text-muted-foreground">{i.email ?? t("campaigns.noEmailValue")}</span>
                       </label>
                     );
                   })
                 )}
               </div>
               {selectedCount > 0 && (
-                <p className="text-xs text-muted-foreground">{selectedCount} selecionada(s)</p>
+                <p className="text-xs text-muted-foreground">{t("campaigns.selectedCount", { count: selectedCount })}</p>
               )}
             </div>
           )}
@@ -489,10 +503,10 @@ function CreateCampaignDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => (reset(), onOpenChange(false))}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button onClick={submit} disabled={create.isPending}>
-            {create.isPending ? "Disparando..." : "Disparar campanha"}
+            {create.isPending ? t("campaigns.dispatching") : t("campaigns.dispatch")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -501,6 +515,7 @@ function CreateCampaignDialog({
 }
 
 function CampaignDetailDialog({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const { t } = useT();
   const query = useQuery({
     queryKey: ["photo-campaign", id],
     queryFn: () => argusApi.getPhotoCampaign(id as string),
@@ -513,8 +528,8 @@ function CampaignDetailDialog({ id, onClose }: { id: string | null; onClose: () 
     <Dialog open={Boolean(id)} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[720px]">
         <DialogHeader>
-          <DialogTitle>{query.data?.name || "Campanha"}</DialogTitle>
-          <DialogDescription>Status por identidade.</DialogDescription>
+          <DialogTitle>{query.data?.name || t("campaigns.detailFallbackTitle")}</DialogTitle>
+          <DialogDescription>{t("campaigns.detailDescription")}</DialogDescription>
         </DialogHeader>
         {query.isLoading ? (
           <Skeleton className="h-40 w-full" />
@@ -524,37 +539,37 @@ function CampaignDetailDialog({ id, onClose }: { id: string | null; onClose: () 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Identidade</TableHead>
-                <TableHead>E-mail</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Expira</TableHead>
-                <TableHead>Usado</TableHead>
+                <TableHead>{t("campaigns.col.identity")}</TableHead>
+                <TableHead>{t("common.email")}</TableHead>
+                <TableHead>{t("common.status")}</TableHead>
+                <TableHead>{t("campaigns.col.expires")}</TableHead>
+                <TableHead>{t("campaigns.col.used")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {targets.map((t) => (
-                <TableRow key={t.identityId}>
-                  <TableCell className="font-medium">{t.displayName ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{t.email ?? "—"}</TableCell>
+              {targets.map((target) => (
+                <TableRow key={target.identityId}>
+                  <TableCell className="font-medium">{target.displayName ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">{target.email ?? "—"}</TableCell>
                   <TableCell>
-                    {statusBadge(t.status)}
-                    {t.error && <p className="mt-1 text-xs text-destructive">{t.error}</p>}
-                    {t.dryRunLink && (
+                    {statusBadge(t, target.status)}
+                    {target.error && <p className="mt-1 text-xs text-destructive">{target.error}</p>}
+                    {target.dryRunLink && (
                       <a
-                        href={t.dryRunLink}
+                        href={target.dryRunLink}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-1 block text-xs text-primary underline"
                       >
-                        link (DryRun)
+                        {t("campaigns.dryRunLink")}
                       </a>
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(t.expiresUtc)}
+                    {formatDate(target.expiresUtc)}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(t.usedUtc)}
+                    {formatDate(target.usedUtc)}
                   </TableCell>
                 </TableRow>
               ))}

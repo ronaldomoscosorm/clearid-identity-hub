@@ -6,6 +6,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { IdentityPicturePanel } from "@/components/IdentityPicturePanel";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   identityId: string;
@@ -15,13 +16,16 @@ interface Props {
 }
 
 export function IdentityPictureDialog({ identityId, identityName, open, onOpenChange }: Props) {
+  const { t } = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Atualizar foto</DialogTitle>
+          <DialogTitle>{t("pictureDialog.title")}</DialogTitle>
           <DialogDescription>
-            {identityName ? `Identidade: ${identityName}` : `Identidade: ${identityId}`}
+            {identityName
+              ? t("pictureDialog.identity", { value: identityName })
+              : t("pictureDialog.identity", { value: identityId })}
           </DialogDescription>
         </DialogHeader>
         <IdentityPicturePanel identityId={identityId} />

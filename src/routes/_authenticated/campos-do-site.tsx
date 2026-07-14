@@ -8,6 +8,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { typeOf, pickLang } from "@/lib/custom-fields";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -170,6 +171,7 @@ function rangeToForm(v: Json | null): Pick<FormState, "rangeMin" | "rangeMax" | 
 }
 
 function CamposDoSitePage() {
+  const { t } = useT();
   const siteId = useDefaultSiteId();
   const qc = useQueryClient();
 
@@ -285,14 +287,14 @@ function CamposDoSitePage() {
   const availableBySection = useMemo(() => {
     const groups = new Map<string, Definition[]>();
     for (const d of availableDefs) {
-      const key = sectionByField.get(d.custom_field_name) ?? "Outros";
+      const key = sectionByField.get(d.custom_field_name) ?? t("siteFields.otherSection");
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(d);
     }
     return [...groups.entries()].sort((a, b) =>
       a[0].localeCompare(b[0], "pt-BR", { sensitivity: "base" }),
     );
-  }, [availableDefs, sectionByField]);
+  }, [availableDefs, sectionByField, t]);
 
   const selectedDef = useMemo(
     () => (defsQuery.data ?? []).find((d) => d.id === form.definition_id) ?? null,
@@ -366,7 +368,7 @@ function CamposDoSitePage() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      toast.success(editing ? "Campo atualizado" : "Campos adicionados ao site");
+      toast.success(editing ? t("siteFields.toast.updated") : t("siteFields.toast.added"));
       qc.invalidateQueries({ queryKey: ["site-custom-fields", siteId] });
       setDialogOpen(false);
     },
@@ -379,7 +381,7 @@ function CamposDoSitePage() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      toast.success("Campo removido do site");
+      toast.success(t("siteFields.toast.removed"));
       qc.invalidateQueries({ queryKey: ["site-custom-fields", siteId] });
       setToDelete(null);
     },
@@ -411,11 +413,11 @@ function CamposDoSitePage() {
   };
   const submit = () => {
     if (form.entity_type === "identity" && !form.worker_type_id) {
-      toast.error("Selecione o tipo do trabalhador");
+      toast.error(t("siteFields.validation.workerType"));
       return;
     }
     if (editing ? !form.definition_id : form.selectedIds.length === 0) {
-      toast.error("Selecione ao menos um campo");
+      toast.error(t("siteFields.validation.field"));
       return;
     }
     upsert.mutate(form);
@@ -441,7 +443,7 @@ function CamposDoSitePage() {
   const groupedItems = useMemo(() => {
     const groups = new Map<string, SiteFieldRow[]>();
     for (const row of items) {
-      const key = sectionByField.get(row.definition?.custom_field_name ?? "") ?? "Outros";
+      const key = sectionByField.get(row.definition?.custom_field_name ?? "") ?? t("siteFields.otherSection");
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(row);
     }
@@ -458,14 +460,14 @@ function CamposDoSitePage() {
       );
     }
     return arr;
-  }, [items, sectionByField]);
+  }, [items, sectionByField, t]);
 
   const renderRow = (row: SiteFieldRow) => (
     <TableRow key={row.id}>
       <TableCell className="font-medium">{row.definition?.custom_field_name ?? "—"}</TableCell>
       <TableCell>
         <Badge variant={row.entity_type === "company" ? "default" : "secondary"}>
-          {row.entity_type === "company" ? "Empresa" : "Identidade"}
+          {row.entity_type === "company" ? t("siteFields.entity.company") : t("siteFields.entity.identity")}
         </Badge>
       </TableCell>
       <TableCell>
@@ -478,13 +480,17 @@ function CamposDoSitePage() {
         {langFromJson(row.display_name_override)["pt-BR"] || "—"}
       </TableCell>
       <TableCell>
-        {row.is_required ? <Badge>Sim</Badge> : <Badge variant="secondary">Não</Badge>}
+        {row.is_required ? (
+          <Badge>{t("common.yes")}</Badge>
+        ) : (
+          <Badge variant="secondary">{t("common.no")}</Badge>
+        )}
       </TableCell>
       <TableCell>
         {row.is_active ? (
-          <Badge variant="secondary">Sim</Badge>
+          <Badge variant="secondary">{t("common.yes")}</Badge>
         ) : (
-          <Badge variant="outline">Não</Badge>
+          <Badge variant="outline">{t("common.no")}</Badge>
         )}
       </TableCell>
       <TableCell className="text-right">
@@ -509,11 +515,10 @@ function CamposDoSitePage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Campos do site</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Defina quais campos personalizados valem para o site, obrigatoriedade, nome de exibição
-            e faixa de valores.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("siteFields.title")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("siteFields.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -523,10 +528,10 @@ function CamposDoSitePage() {
             disabled={fieldsQuery.isFetching || !siteId}
           >
             <RefreshCw className={`mr-1 h-4 w-4 ${fieldsQuery.isFetching ? "animate-spin" : ""}`} />
-            Atualizar
+            {t("siteFields.refresh")}
           </Button>
           <Button size="sm" onClick={openCreate} disabled={!siteId}>
-            <Plus className="mr-1 h-4 w-4" /> Adicionar campo
+            <Plus className="mr-1 h-4 w-4" /> {t("siteFields.addButton")}
           </Button>
         </div>
       </div>
@@ -534,8 +539,9 @@ function CamposDoSitePage() {
       {!siteId ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Selecione um site em <span className="font-medium">Configurações</span> para gerenciar os
-            campos.
+            {t("siteFields.noSite.prefix")}{" "}
+            <span className="font-medium">{t("siteFields.noSite.settings")}</span>{" "}
+            {t("siteFields.noSite.suffix")}
           </CardContent>
         </Card>
       ) : (
@@ -543,8 +549,10 @@ function CamposDoSitePage() {
           <CardHeader>
             <CardTitle className="text-base">
               {fieldsQuery.data
-                ? `${items.length} ${items.length === 1 ? "campo" : "campos"}`
-                : "Campos"}
+                ? items.length === 1
+                  ? t("siteFields.countOne", { count: items.length })
+                  : t("siteFields.countOther", { count: items.length })
+                : t("siteFields.countLabel")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -559,7 +567,7 @@ function CamposDoSitePage() {
               </div>
             ) : items.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                Nenhum campo associado a este site.
+                {t("siteFields.emptyState")}
               </p>
             ) : (
               <div className="space-y-6">
@@ -569,14 +577,14 @@ function CamposDoSitePage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Campo</TableHead>
-                          <TableHead>Entidade</TableHead>
-                          <TableHead>Trabalhador</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Exibição (pt-BR)</TableHead>
-                          <TableHead>Obrigatório</TableHead>
-                          <TableHead>Ativo</TableHead>
-                          <TableHead className="w-[100px] text-right">Ações</TableHead>
+                          <TableHead>{t("siteFields.col.field")}</TableHead>
+                          <TableHead>{t("siteFields.col.entity")}</TableHead>
+                          <TableHead>{t("siteFields.col.worker")}</TableHead>
+                          <TableHead>{t("siteFields.col.type")}</TableHead>
+                          <TableHead>{t("siteFields.col.display")}</TableHead>
+                          <TableHead>{t("siteFields.col.required")}</TableHead>
+                          <TableHead>{t("siteFields.col.active")}</TableHead>
+                          <TableHead className="w-[100px] text-right">{t("common.actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>{rows.map(renderRow)}</TableBody>
@@ -595,16 +603,14 @@ function CamposDoSitePage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <SlidersHorizontal className="h-5 w-5" />
-              {editing ? "Editar campo do site" : "Adicionar campo ao site"}
+              {editing ? t("siteFields.dialog.editTitle") : t("siteFields.dialog.addTitle")}
             </DialogTitle>
-            <DialogDescription>
-              O catálogo de campos é sincronizado automaticamente do Argus (ClearID).
-            </DialogDescription>
+            <DialogDescription>{t("siteFields.dialog.description")}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Entidade *</Label>
+              <Label>{t("siteFields.form.entity")}</Label>
               <Select
                 value={form.entity_type}
                 onValueChange={(v) =>
@@ -616,14 +622,14 @@ function CamposDoSitePage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="identity">Identidade</SelectItem>
-                  <SelectItem value="company">Empresa</SelectItem>
+                  <SelectItem value="identity">{t("siteFields.entity.identity")}</SelectItem>
+                  <SelectItem value="company">{t("siteFields.entity.company")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {form.entity_type === "identity" && (
               <div className="space-y-2">
-                <Label>Tipo do trabalhador *</Label>
+                <Label>{t("siteFields.form.workerType")}</Label>
                 <Select
                   value={form.worker_type_id}
                   onValueChange={(v) =>
@@ -632,10 +638,10 @@ function CamposDoSitePage() {
                   disabled={Boolean(editing)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
+                    <SelectValue placeholder={t("siteFields.form.workerTypePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL_WORKER_TYPES}>Todos os tipos</SelectItem>
+                    <SelectItem value={ALL_WORKER_TYPES}>{t("siteFields.form.allWorkerTypes")}</SelectItem>
                     {workerTypes.map((w) => (
                       <SelectItem key={w.id} value={w.id}>
                         {w.name}
@@ -646,17 +652,17 @@ function CamposDoSitePage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label>Seção</Label>
+              <Label>{t("siteFields.form.section")}</Label>
               <Select
                 value={form.section}
                 onValueChange={(v) => setForm((f) => ({ ...f, section: v, definition_id: "" }))}
                 disabled={Boolean(editing)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Todas as seções" />
+                  <SelectValue placeholder={t("siteFields.form.allSections")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_SECTIONS}>Todas as seções</SelectItem>
+                  <SelectItem value={ALL_SECTIONS}>{t("siteFields.form.allSections")}</SelectItem>
                   {[...sections]
                     .sort((a, b) =>
                       (a.displayName || a.sectionName).localeCompare(
@@ -675,10 +681,10 @@ function CamposDoSitePage() {
             </div>
             {editing ? (
               <div className="space-y-2">
-                <Label>Campo</Label>
+                <Label>{t("siteFields.col.field")}</Label>
                 <Select value={form.definition_id} onValueChange={() => {}} disabled>
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione um campo do catálogo" />
+                    <SelectValue placeholder={t("siteFields.form.fieldPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {availableDefs.map((d) => (
@@ -693,16 +699,21 @@ function CamposDoSitePage() {
             ) : (
               <div className="space-y-2">
                 <Label>
-                  Campos * <span className="text-muted-foreground">({form.selectedIds.length})</span>
+                  {t("siteFields.form.fields")}{" "}
+                  <span className="text-muted-foreground">({form.selectedIds.length})</span>
                 </Label>
                 {form.entity_type === "identity" && !form.worker_type_id ? (
                   <p className="text-xs text-muted-foreground">
-                    Selecione o tipo do trabalhador primeiro.
+                    {t("siteFields.form.selectWorkerFirst")}
                   </p>
                 ) : defsQuery.isLoading ? (
-                  <p className="text-xs text-muted-foreground">Carregando campos do Argus...</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("siteFields.form.loadingFields")}
+                  </p>
                 ) : availableBySection.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Nenhum campo disponível.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("siteFields.form.noFieldsAvailable")}
+                  </p>
                 ) : (
                   <div className="max-h-64 space-y-3 overflow-y-auto rounded-md border p-3">
                     {availableBySection.map(([section, defs]) => {
@@ -747,14 +758,14 @@ function CamposDoSitePage() {
             {editing && (
             <>
             <div className="space-y-2">
-              <Label>Nome de exibição</Label>
+              <Label>{t("siteFields.form.displayName")}</Label>
               <div className="grid grid-cols-3 gap-3">
                 <Input
                   value={form.override["pt-BR"]}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, override: { ...f.override, "pt-BR": e.target.value } }))
                   }
-                  placeholder="pt-BR (padrão)"
+                  placeholder={t("siteFields.form.ptDefault")}
                 />
                 <Input
                   value={form.override["en-US"]}
@@ -777,7 +788,7 @@ function CamposDoSitePage() {
             {kind === "number" || kind === "date" ? (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Valor mínimo</Label>
+                  <Label>{t("siteFields.form.minValue")}</Label>
                   <Input
                     type={kind === "date" ? "text" : "number"}
                     inputMode={kind === "date" ? "numeric" : undefined}
@@ -792,7 +803,7 @@ function CamposDoSitePage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Valor máximo</Label>
+                  <Label>{t("siteFields.form.maxValue")}</Label>
                   <Input
                     type={kind === "date" ? "text" : "number"}
                     inputMode={kind === "date" ? "numeric" : undefined}
@@ -809,26 +820,26 @@ function CamposDoSitePage() {
               </div>
             ) : kind === "list" ? (
               <div className="space-y-2">
-                <Label>Opções (uma por linha)</Label>
+                <Label>{t("siteFields.form.options")}</Label>
                 <Textarea
                   value={form.options}
                   onChange={(e) => setForm((f) => ({ ...f, options: e.target.value }))}
                   rows={4}
-                  placeholder={"Opção A\nOpção B"}
+                  placeholder={t("siteFields.form.optionsPlaceholder")}
                 />
               </div>
             ) : kind === "text" ? (
               <div className="space-y-2">
-                <Label>Valor padrão (opcional)</Label>
+                <Label>{t("siteFields.form.defaultValue")}</Label>
                 <Input
                   value={form.rangeMin}
                   onChange={(e) => setForm((f) => ({ ...f, rangeMin: e.target.value }))}
-                  placeholder="Pode ficar em branco"
+                  placeholder={t("siteFields.form.defaultValuePlaceholder")}
                 />
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Faixa de valores não se aplica a este tipo de campo.
+                {t("siteFields.form.rangeNotApplicable")}
               </p>
             )}
             </>
@@ -836,7 +847,7 @@ function CamposDoSitePage() {
 
             <div className="grid grid-cols-3 items-end gap-3">
               <div className="space-y-2">
-                <Label>Ordem</Label>
+                <Label>{t("siteFields.form.order")}</Label>
                 <Input
                   type="number"
                   value={form.display_index}
@@ -849,14 +860,14 @@ function CamposDoSitePage() {
                   checked={form.is_required}
                   onCheckedChange={(v) => setForm((f) => ({ ...f, is_required: v }))}
                 />
-                <Label className="cursor-pointer">Obrigatório</Label>
+                <Label className="cursor-pointer">{t("siteFields.form.required")}</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Switch
                   checked={form.is_active}
                   onCheckedChange={(v) => setForm((f) => ({ ...f, is_active: v }))}
                 />
-                <Label className="cursor-pointer">Ativo</Label>
+                <Label className="cursor-pointer">{t("siteFields.form.active")}</Label>
               </div>
             </div>
 
@@ -866,13 +877,13 @@ function CamposDoSitePage() {
                   checked={form.fillable}
                   onCheckedChange={(v) => setForm((f) => ({ ...f, fillable: v }))}
                 />
-                <Label className="cursor-pointer">Pode ser preenchido no cadastro</Label>
+                <Label className="cursor-pointer">{t("siteFields.form.fillable")}</Label>
               </div>
             )}
 
             {form.entity_type === "company" && (
               <div className="space-y-2">
-                <Label>Relacionar com campo de identidade</Label>
+                <Label>{t("siteFields.form.relatedField")}</Label>
                 <Select
                   value={form.related_identity_field_id}
                   onValueChange={(v) =>
@@ -880,10 +891,10 @@ function CamposDoSitePage() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Nenhum" />
+                    <SelectValue placeholder={t("siteFields.form.none")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_RELATION}>Nenhum</SelectItem>
+                    <SelectItem value={NO_RELATION}>{t("siteFields.form.none")}</SelectItem>
                     {(fieldsQuery.data ?? [])
                       .filter((r) => r.entity_type === "identity")
                       .map((r) => (
@@ -895,8 +906,7 @@ function CamposDoSitePage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  O valor do custom da empresa não existe no ClearID — vem do campo de identidade
-                  relacionado.
+                  {t("siteFields.form.relatedFieldHint")}
                 </p>
               </div>
             )}
@@ -904,10 +914,10 @@ function CamposDoSitePage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button onClick={submit} disabled={upsert.isPending}>
-              {upsert.isPending ? "Salvando..." : "Salvar"}
+              {upsert.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -917,20 +927,21 @@ function CamposDoSitePage() {
       <AlertDialog open={Boolean(toDelete)} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover campo do site</AlertDialogTitle>
+            <AlertDialogTitle>{t("siteFields.delete.title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Remover <span className="font-medium">{toDelete?.definition?.custom_field_name}</span>{" "}
-              deste site? Os valores associados também serão excluídos.
+              {t("siteFields.delete.prefix")}{" "}
+              <span className="font-medium">{toDelete?.definition?.custom_field_name}</span>{" "}
+              {t("siteFields.delete.suffix")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => toDelete && remove.mutate(toDelete.id)}
               disabled={remove.isPending}
             >
-              {remove.isPending ? "Removendo..." : "Remover"}
+              {remove.isPending ? t("siteFields.delete.removing") : t("common.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
