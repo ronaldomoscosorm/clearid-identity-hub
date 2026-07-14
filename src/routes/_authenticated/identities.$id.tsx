@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { IdentityForm } from "@/components/IdentityForm";
 import { IdentityPicturePanel } from "@/components/IdentityPicturePanel";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
+import { TeamsDialog } from "@/components/TeamsDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -239,6 +240,7 @@ function IdentityDetail() {
           }
           extraActions={
             <>
+              <TeamsDialog identityId={id} />
               <CredentialsDialog identityId={id} />
               <AlertDialog>
               <AlertDialogTrigger asChild>

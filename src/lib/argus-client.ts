@@ -942,6 +942,15 @@ export const argusApi = {
       }),
     }),
 
+  removeTeamMembers: (teamId: string, payload: { identityIds: string[]; reason?: string }) =>
+    argusFetch<unknown>(`/api/teams/${encodeURIComponent(teamId)}/members`, {
+      method: "DELETE",
+      body: JSON.stringify({
+        identityIds: payload.identityIds,
+        reason: payload.reason ?? "Portal Argus",
+      }),
+    }),
+
   /** Identidades com o e-mail informado (busca exata, em todos os sites). */
   findIdentitiesByEmail: async (email: string): Promise<ClearIdIdentity[]> => {
     const e = (email ?? "").trim();
