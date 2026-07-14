@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, Languages, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
@@ -8,6 +8,7 @@ import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
 import { useT, LANGS } from "@/lib/i18n";
+import { FlagIcon } from "@/components/FlagIcon";
 import { Button } from "@/components/ui/button";
 import { PoweredBy } from "@/components/PoweredBy";
 import {
@@ -212,7 +213,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     className="h-8 gap-1.5 font-normal"
                     title={t("shell.language")}
                   >
-                    <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                    <FlagIcon lang={lang} />
                     <span className="text-xs">
                       {LANGS.find((l) => l.code === lang)?.short ?? lang}
                     </span>
@@ -226,9 +227,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <DropdownMenuItem
                       key={l.code}
                       onClick={() => setLang(l.code)}
-                      className="flex items-center justify-between gap-2"
+                      className="flex items-center gap-2"
                     >
-                      <span>{l.label}</span>
+                      <FlagIcon lang={l.code} />
+                      <span className="flex-1">{l.label}</span>
                       {l.code === lang && <Check className="h-4 w-4 text-primary" />}
                     </DropdownMenuItem>
                   ))}
