@@ -55,6 +55,11 @@ const FIELD_TYPES = ["Text", "Numeric", "Boolean", "DateTime", "Decimal", "Date"
 // Grupo dos campos que não pertencem a nenhuma seção.
 const OTHER_SECTION = "__other__";
 
+// Limites da API (swagger custom-fields).
+const SECTION_NAME_MAX = 30;
+const FIELD_NAME_MAX = 50;
+const DISPLAY_NAME_MAX = 100;
+
 export const Route = createFileRoute("/_authenticated/campos-personalizados")({
   head: () => ({ meta: [{ title: "Campos personalizados — Argus ClearID" }] }),
   component: CustomFieldsPage,
@@ -514,8 +519,14 @@ function SectionDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={mode === "edit"}
+              maxLength={SECTION_NAME_MAX}
               placeholder="ex.: DocumentosEmpresa"
             />
+            {mode === "create" && (
+              <p className="text-xs text-muted-foreground">
+                {name.length}/{SECTION_NAME_MAX}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="sec-display">{t("customFields.col.displayName")}</Label>
@@ -523,6 +534,7 @@ function SectionDialog({
               id="sec-display"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={DISPLAY_NAME_MAX}
             />
           </div>
           <div className="space-y-2">
@@ -631,8 +643,14 @@ function CustomFieldDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={mode === "edit"}
+              maxLength={FIELD_NAME_MAX}
               placeholder="ex.: cpf_colaborador"
             />
+            {mode === "create" && (
+              <p className="text-xs text-muted-foreground">
+                {name.length}/{FIELD_NAME_MAX}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -641,6 +659,7 @@ function CustomFieldDialog({
               id="cf-display"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={DISPLAY_NAME_MAX}
             />
           </div>
 
