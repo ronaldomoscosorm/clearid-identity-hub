@@ -117,11 +117,26 @@ function CustomFieldsPage() {
   });
 
   const del = useMutation({
-    mutationFn: (name: string) => argusApi.deleteCustomField(name),
+    mutationFn: async (f: ClearIdCustomFieldDef) => {
+      // O ClearID recusa (400) excluir um campo que ainda pertence a uma seção.
+      // Tiramos o vínculo antes: PUT da seção com a lista de campos sem ele.
+      const secName = sectionOfField.get(f.customFieldName);
+      const sec = secName ? sectionByName.get(secName) : undefined;
+      if (sec) {
+        await argusApi.updateCustomFieldSection(sec.sectionName, {
+          displayName: sec.displayName,
+          index: sec.index,
+          identityCustomFields: sec.fields.filter((x) => x.name !== f.customFieldName),
+          eTag: sec.eTag,
+        });
+      }
+      return argusApi.deleteCustomField(f.customFieldName);
+    },
     onSuccess: () => {
       toast.success(t("customFields.deleted"));
       setDeleting(null);
       reload();
+      reloadSections(); // o campo pode ter sido desvinculado de uma seção
     },
     onError: (e) => toast.error((e as ArgusApiError).message),
   });
@@ -458,7 +473,7 @@ function CustomFieldsPage() {
               disabled={del.isPending}
               onClick={(e) => {
                 e.preventDefault();
-                if (deleting) del.mutate(deleting.customFieldName);
+                if (deleting) del.mutate(deleting);
               }}
             >
               {del.isPending ? t("common.saving") : t("common.delete")}
