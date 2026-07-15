@@ -655,6 +655,15 @@ export interface ClearIdCustomFieldSection {
   identityCustomFields?: Array<{ name: string; index: number }>;
 }
 
+/** Seção de campos personalizados, já normalizada para a UI. */
+export interface CustomFieldSectionSummary {
+  sectionName: string;
+  displayName: string;
+  index: number;
+  eTag: string | null;
+  fields: { name: string; index: number }[];
+}
+
 export interface CustomFieldPatchValue {
   customFieldName: string;
   customFieldValue: string | null;
@@ -921,15 +930,14 @@ export const argusApi = {
     ),
 
   /** Lista todas as seções de campos personalizados (nome, exibição, campos). */
-  listCustomFieldSections: async (): Promise<
-    { sectionName: string; displayName: string; index: number; fields: { name: string; index: number }[] }[]
-  > => {
+  listCustomFieldSections: async (): Promise<CustomFieldSectionSummary[]> => {
     const data = await unwrap<unknown>(argusFetch(`/api/custom-fields/sections`));
     const arr = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
     return arr.map((s) => ({
       sectionName: String(s.identityCustomFieldsSectionName ?? s.sectionName ?? ""),
       displayName: String(s.displayName ?? s.identityCustomFieldsSectionName ?? s.sectionName ?? ""),
       index: typeof s.index === "number" ? s.index : 0,
+      eTag: typeof s.eTag === "string" ? s.eTag : null,
       fields: Array.isArray(s.identityCustomFields)
         ? (s.identityCustomFields as Record<string, unknown>[]).map((f) => ({
             name: String(f.name ?? ""),
@@ -938,6 +946,48 @@ export const argusApi = {
         : [],
     }));
   },
+
+  /** Cria uma seção de campos personalizados. O nome é imutável depois. */
+  createCustomFieldSection: (payload: {
+    identityCustomFieldsSectionName: string;
+    displayName: string;
+    index?: number | null;
+    identityCustomFields?: { name: string; index: number }[] | null;
+  }) =>
+    unwrap<unknown>(
+      argusFetch(`/api/custom-fields/sections`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    ),
+
+  /**
+   * Atualiza a seção. `identityCustomFields` deve conter os campos atuais — o
+   * PUT substitui o agrupamento, então omiti-lo esvaziaria a seção.
+   */
+  updateCustomFieldSection: (
+    sectionName: string,
+    payload: {
+      displayName: string;
+      index: number;
+      identityCustomFields?: { name: string; index: number }[] | null;
+      eTag?: string | null;
+    },
+  ) =>
+    unwrap<unknown>(
+      argusFetch(`/api/custom-fields/sections/${encodeURIComponent(sectionName)}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    ),
+
+  /** Remove a seção (o agrupamento). Os campos personalizados não são excluídos. */
+  deleteCustomFieldSection: (sectionName: string) =>
+    unwrap<unknown>(
+      argusFetch(`/api/custom-fields/sections/${encodeURIComponent(sectionName)}`, {
+        method: "DELETE",
+      }),
+    ),
 
   getCustomFieldSection: async (
     sectionName: string,

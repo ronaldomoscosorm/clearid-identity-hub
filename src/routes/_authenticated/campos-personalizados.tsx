@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ClearIdCustomFieldDef } from "@/lib/argus-client";
+import type { ClearIdCustomFieldDef, CustomFieldSectionSummary } from "@/lib/argus-client";
 import { RefreshCw, Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
@@ -51,6 +51,9 @@ import {
 // Tipos aceitos pela API (CreateIdentityCustomFieldRequest.customFieldType).
 const FIELD_TYPES = ["Text", "Numeric", "Boolean", "DateTime", "Decimal", "Date"] as const;
 
+// Grupo dos campos que não pertencem a nenhuma seção.
+const OTHER_SECTION = "__other__";
+
 export const Route = createFileRoute("/_authenticated/campos-personalizados")({
   head: () => ({ meta: [{ title: "Campos personalizados — Argus ClearID" }] }),
   component: CustomFieldsPage,
@@ -71,6 +74,9 @@ function CustomFieldsPage() {
   const [editing, setEditing] = useState<ClearIdCustomFieldDef | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<ClearIdCustomFieldDef | null>(null);
+  const [editingSection, setEditingSection] = useState<CustomFieldSectionSummary | null>(null);
+  const [creatingSection, setCreatingSection] = useState(false);
+  const [deletingSection, setDeletingSection] = useState<CustomFieldSectionSummary | null>(null);
 
   const query = useQuery({
     queryKey: ["custom-fields"],
@@ -79,6 +85,17 @@ function CustomFieldsPage() {
   });
 
   const reload = () => qc.invalidateQueries({ queryKey: ["custom-fields"] });
+  const reloadSections = () => qc.invalidateQueries({ queryKey: ["custom-field-sections"] });
+
+  const delSection = useMutation({
+    mutationFn: (name: string) => argusApi.deleteCustomFieldSection(name),
+    onSuccess: () => {
+      toast.success(t("customFields.sectionDeleted"));
+      setDeletingSection(null);
+      reloadSections();
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message),
+  });
 
   const del = useMutation({
     mutationFn: (name: string) => argusApi.deleteCustomField(name),
@@ -98,25 +115,43 @@ function CustomFieldsPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // custom_field_name -> nome de exibição da seção.
-  const sectionByField = useMemo(() => {
+  // custom_field_name -> sectionName (chave única da seção).
+  const sectionOfField = useMemo(() => {
     const m = new Map<string, string>();
     for (const sec of sectionsQuery.data ?? []) {
-      for (const f of sec.fields) m.set(f.name, sec.displayName || sec.sectionName);
+      for (const f of sec.fields) m.set(f.name, sec.sectionName);
     }
     return m;
   }, [sectionsQuery.data]);
 
-  // Agrupa os campos por seção (ordem alfabética de seção e de campo).
+  const sectionByName = useMemo(() => {
+    const m = new Map<string, CustomFieldSectionSummary>();
+    for (const s of sectionsQuery.data ?? []) m.set(s.sectionName, s);
+    return m;
+  }, [sectionsQuery.data]);
+
+  const labelOf = (key: string) =>
+    key === OTHER_SECTION
+      ? t("customFields.sectionOther")
+      : sectionByName.get(key)?.displayName || key;
+
+  // Agrupa os campos por seção. Seções sem campos também aparecem, para poderem
+  // ser editadas/excluídas.
   const groupedItems = useMemo(() => {
     const groups = new Map<string, ClearIdCustomFieldDef[]>();
+    for (const s of sectionsQuery.data ?? []) groups.set(s.sectionName, []);
     for (const f of items) {
-      const key = sectionByField.get(f.customFieldName) ?? t("customFields.sectionOther");
+      const key = sectionOfField.get(f.customFieldName) ?? OTHER_SECTION;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(f);
     }
+    if (groups.get(OTHER_SECTION)?.length === 0) groups.delete(OTHER_SECTION);
+    const name = (k: string) =>
+      k === OTHER_SECTION
+        ? t("customFields.sectionOther")
+        : sectionByName.get(k)?.displayName || k;
     const arr = [...groups.entries()].sort((a, b) =>
-      a[0].localeCompare(b[0], "pt-BR", { sensitivity: "base" }),
+      name(a[0]).localeCompare(name(b[0]), "pt-BR", { sensitivity: "base" }),
     );
     for (const [, fs] of arr) {
       fs.sort((a, b) =>
@@ -128,7 +163,7 @@ function CustomFieldsPage() {
       );
     }
     return arr;
-  }, [items, sectionByField, t]);
+  }, [items, sectionOfField, sectionByName, sectionsQuery.data, t]);
 
   // Espelha as definições de campos para o Supabase (cache local, best-effort).
   useEffect(() => {
@@ -195,6 +230,9 @@ function CustomFieldsPage() {
             <RefreshCw className={`mr-1 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
             {t("customFields.refresh")}
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setCreatingSection(true)}>
+            <Plus className="mr-1 h-4 w-4" /> {t("customFields.newSection")}
+          </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="mr-1 h-4 w-4" /> {t("customFields.newField")}
           </Button>
@@ -228,9 +266,40 @@ function CustomFieldsPage() {
             </p>
           ) : (
             <div className="space-y-6">
-              {groupedItems.map(([section, fields]) => (
-                <div key={section} className="space-y-2">
-                  <p className="text-sm font-medium text-foreground">{section}</p>
+              {groupedItems.map(([sectionKey, fields]) => {
+                const sec = sectionKey === OTHER_SECTION ? null : sectionByName.get(sectionKey);
+                return (
+                <div key={sectionKey} className="space-y-2">
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm font-medium text-foreground">{labelOf(sectionKey)}</p>
+                    {sec && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          title={t("customFields.editSection")}
+                          onClick={() => setEditingSection(sec)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-destructive hover:text-destructive"
+                          title={t("customFields.deleteSection")}
+                          onClick={() => setDeletingSection(sec)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  {fields.length === 0 ? (
+                    <p className="py-2 text-xs text-muted-foreground">
+                      {t("customFields.sectionEmpty")}
+                    </p>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -247,8 +316,10 @@ function CustomFieldsPage() {
                     </TableHeader>
                     <TableBody>{fields.map(renderRow)}</TableBody>
                   </Table>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -273,6 +344,57 @@ function CustomFieldsPage() {
           reload();
         }}
       />
+
+      <SectionDialog
+        mode="create"
+        open={creatingSection}
+        onClose={() => setCreatingSection(false)}
+        onSaved={() => {
+          setCreatingSection(false);
+          reloadSections();
+        }}
+      />
+      <SectionDialog
+        mode="edit"
+        section={editingSection ?? undefined}
+        open={Boolean(editingSection)}
+        onClose={() => setEditingSection(null)}
+        onSaved={() => {
+          setEditingSection(null);
+          reloadSections();
+        }}
+      />
+
+      <AlertDialog
+        open={Boolean(deletingSection)}
+        onOpenChange={(v) => !v && setDeletingSection(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("customFields.confirmDeleteSectionTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("customFields.confirmDeleteSectionDesc", {
+                name: deletingSection?.displayName || deletingSection?.sectionName || "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={delSection.isPending}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={delSection.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deletingSection) delSection.mutate(deletingSection.sectionName);
+              }}
+            >
+              {delSection.isPending ? t("common.saving") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={Boolean(deleting)} onOpenChange={(v) => !v && setDeleting(null)}>
         <AlertDialogContent>
@@ -300,6 +422,115 @@ function CustomFieldsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** Criação/edição de seção. O nome é imutável na edição. */
+function SectionDialog({
+  mode,
+  section,
+  open,
+  onClose,
+  onSaved,
+}: {
+  mode: "create" | "edit";
+  section?: CustomFieldSectionSummary;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useT();
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [index, setIndex] = useState("0");
+
+  useEffect(() => {
+    if (!open) return;
+    setName(section?.sectionName ?? "");
+    setDisplayName(section?.displayName ?? "");
+    setIndex(String(section?.index ?? 0));
+  }, [open, section]);
+
+  const save = useMutation({
+    mutationFn: () => {
+      const idx = Number.parseInt(index, 10);
+      return mode === "create"
+        ? argusApi.createCustomFieldSection({
+            identityCustomFieldsSectionName: name.trim(),
+            displayName: displayName.trim(),
+            index: Number.isFinite(idx) ? idx : 0,
+          })
+        : argusApi.updateCustomFieldSection(section!.sectionName, {
+            displayName: displayName.trim(),
+            index: Number.isFinite(idx) ? idx : 0,
+            // PUT substitui o agrupamento: reenvia os campos atuais para não
+            // esvaziar a seção.
+            identityCustomFields: section!.fields,
+            eTag: section!.eTag,
+          });
+    },
+    onSuccess: () => {
+      toast.success(
+        mode === "create" ? t("customFields.sectionCreated") : t("customFields.sectionUpdated"),
+      );
+      onSaved();
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message),
+  });
+
+  const canSave =
+    displayName.trim().length > 0 && (mode === "edit" || name.trim().length > 0) && !save.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "create" ? t("customFields.newSection") : t("customFields.editSection")}
+          </DialogTitle>
+          <DialogDescription>{t("customFields.sectionHint")}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="sec-name">{t("customFields.sectionIdentifier")}</Label>
+            <Input
+              id="sec-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={mode === "edit"}
+              placeholder="ex.: DocumentosEmpresa"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="sec-display">{t("customFields.col.displayName")}</Label>
+            <Input
+              id="sec-display"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="sec-index">{t("customFields.sectionIndex")}</Label>
+            <Input
+              id="sec-index"
+              type="number"
+              value={index}
+              onChange={(e) => setIndex(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => save.mutate()} disabled={!canSave}>
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
