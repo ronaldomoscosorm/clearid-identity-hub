@@ -878,6 +878,48 @@ export const argusApi = {
     return data?.customFields ?? [];
   },
 
+  /** Cria uma definição de campo personalizado. O nome/tipo são imutáveis depois. */
+  createCustomField: (payload: {
+    customFieldName: string;
+    displayName: string;
+    customFieldType: string;
+    isReadOnly: boolean;
+    synchronizationEnabled: boolean;
+  }) =>
+    unwrap<ClearIdCustomFieldDef>(
+      argusFetch(`/api/custom-fields`, { method: "POST", body: JSON.stringify(payload) }, {
+        allSites: true,
+      }),
+    ),
+
+  /** Atualiza uma definição (nome e tipo não são alteráveis pela API). */
+  updateCustomField: (
+    customFieldName: string,
+    payload: {
+      displayName: string;
+      isReadOnly: boolean;
+      synchronizationEnabled: boolean;
+      eTag?: string | null;
+    },
+  ) =>
+    unwrap<ClearIdCustomFieldDef>(
+      argusFetch(
+        `/api/custom-fields/${encodeURIComponent(customFieldName)}`,
+        { method: "PUT", body: JSON.stringify(payload) },
+        { allSites: true },
+      ),
+    ),
+
+  /** Remove a definição de campo personalizado da conta. */
+  deleteCustomField: (customFieldName: string) =>
+    unwrap<unknown>(
+      argusFetch(
+        `/api/custom-fields/${encodeURIComponent(customFieldName)}`,
+        { method: "DELETE" },
+        { allSites: true },
+      ),
+    ),
+
   /** Lista todas as seções de campos personalizados (nome, exibição, campos). */
   listCustomFieldSections: async (): Promise<
     { sectionName: string; displayName: string; index: number; fields: { name: string; index: number }[] }[]
