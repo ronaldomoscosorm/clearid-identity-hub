@@ -4,6 +4,10 @@ import type { Lang } from "./i18n";
 // NÃO editar à mão em massa — regenerar via workflow se precisar.
 export const generated: Record<Lang, Record<string, string>> = {
   "pt-BR": {
+    "visits.endHint": "Padrão: 12h após o início.",
+    "visits.credentialStep": "Visita criada — atribua a credencial",
+    "visits.credentialStepHint": "O check-in já foi feito. Atribua o cartão de cada visitante.",
+    "visits.finish": "Concluir",
     "visits.selectReason": "Selecione o motivo",
     "visits.title": "Visitas",
     "visits.subtitle": "Portaria: crie visitas, faça check-in/check-out e atribua credenciais.",
@@ -618,6 +622,10 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "en-US": {
+    "visits.endHint": "Default: 12h after the start.",
+    "visits.credentialStep": "Visit created — assign the credential",
+    "visits.credentialStepHint": "Check-in is done. Assign each visitor's card.",
+    "visits.finish": "Finish",
     "visits.selectReason": "Select the reason",
     "visits.title": "Visits",
     "visits.subtitle": "Front desk: create visits, check in/out and assign credentials.",
@@ -1232,6 +1240,10 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "es-ES": {
+    "visits.endHint": "Predeterminado: 12h después del inicio.",
+    "visits.credentialStep": "Visita creada — asigne la credencial",
+    "visits.credentialStepHint": "El check-in ya se hizo. Asigne la tarjeta de cada visitante.",
+    "visits.finish": "Finalizar",
     "visits.selectReason": "Seleccione el motivo",
     "visits.title": "Visitas",
     "visits.subtitle": "Recepción: cree visitas, haga check-in/check-out y asigne credenciales.",

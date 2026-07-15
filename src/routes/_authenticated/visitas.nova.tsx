@@ -3,7 +3,13 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Search, Trash2, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
+import {
+  argusApi,
+  ArgusApiError,
+  useDefaultSiteId,
+  type VisitVisitor,
+} from "@/lib/argus-client";
+import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +38,15 @@ function toUtcIso(local: string): string {
   return new Date(local).toISOString();
 }
 
+/** Date → valor de <input type="datetime-local"> (hora local). */
+function toLocalInput(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Duração padrão da visita: o término é 12h após o início. */
+const VISIT_HOURS = 12;
+
 function NovaVisitaPage() {
   const { t } = useT();
   const navigate = useNavigate();
@@ -50,6 +65,8 @@ function NovaVisitaPage() {
     { firstName: "", lastName: "", email: "" },
   ]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Fluxo A concluído: visitantes com check-in, aguardando a credencial.
+  const [checkedIn, setCheckedIn] = useState<VisitVisitor[] | null>(null);
 
   const sitesQuery = useQuery({
     queryKey: ["sites"],
@@ -104,22 +121,25 @@ function NovaVisitaPage() {
           })),
       });
 
-      if (mode === "schedule") return { visit, checkedIn: 0 };
+      if (mode === "schedule") return { visit, visitors: [] as VisitVisitor[] };
 
       // Fluxo A: busca os visitorId gerados e faz o check-in em lote.
       const vs = await argusApi.listVisitVisitors(visit.visitEventId);
       const ids = vs.map((v) => v.visitorId).filter(Boolean);
       if (ids.length) await argusApi.checkInVisitors(visit.visitEventId, ids);
-      return { visit, checkedIn: ids.length };
+      // Relê para trazer o identityId/estado já atualizados (necessário p/ credencial).
+      const after = await argusApi.listVisitVisitors(visit.visitEventId);
+      return { visit, visitors: after };
     },
-    onSuccess: ({ checkedIn }) => {
-      toast.success(
-        mode === "schedule"
-          ? t("visits.createdScheduled")
-          : t("visits.createdCheckedIn", { n: checkedIn }),
-        { description: mode === "now" ? t("visits.credentialHint") : undefined, duration: 8000 },
-      );
-      navigate({ to: "/visitas" });
+    onSuccess: ({ visitors: vs }) => {
+      if (mode === "schedule") {
+        toast.success(t("visits.createdScheduled"));
+        navigate({ to: "/visitas" });
+        return;
+      }
+      // Fluxo A: fica na tela para atribuir a credencial de cada visitante.
+      toast.success(t("visits.createdCheckedIn", { n: vs.length }));
+      setCheckedIn(vs);
     },
     onError: (e) => {
       const err = e as ArgusApiError;
@@ -135,6 +155,46 @@ function NovaVisitaPage() {
     if (!validate()) return;
     create.mutate();
   };
+
+  // Passo de credencial do Fluxo A: visita criada + check-in feito.
+  if (checkedIn) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {t("visits.credentialStep")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("visits.credentialStepHint")}</p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("visits.visitors")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {checkedIn.map((v) => (
+              <div key={v.visitorId} className="flex items-center gap-2 rounded border p-2 text-sm">
+                <span className="flex-1">
+                  {[v.firstName, v.lastName].filter(Boolean).join(" ") || "—"}
+                </span>
+                <Badge>{t("visits.state.checkedIn")}</Badge>
+                {v.identityId ? (
+                  <CredentialsDialog identityId={v.identityId} />
+                ) : (
+                  // Sem identityId a API não permite atribuir credencial.
+                  <span className="text-xs text-muted-foreground">
+                    {t("visits.noIdentityForCredential")}
+                  </span>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <div className="flex justify-end">
+          <Button onClick={() => navigate({ to: "/visitas" })}>{t("visits.finish")}</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -225,10 +285,24 @@ function NovaVisitaPage() {
           </Field>
           <div />
           <Field label={t("visits.start")} error={errors.start}>
-            <Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} />
+            <Input
+              type="datetime-local"
+              value={start}
+              onChange={(e) => {
+                const v = e.target.value;
+                setStart(v);
+                // Término padrão: 12h após o início (continua editável).
+                if (v) {
+                  const d = new Date(v);
+                  d.setHours(d.getHours() + VISIT_HOURS);
+                  setEnd(toLocalInput(d));
+                }
+              }}
+            />
           </Field>
           <Field label={t("visits.end")} error={errors.end}>
             <Input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} />
+            <p className="text-xs text-muted-foreground">{t("visits.endHint")}</p>
           </Field>
         </CardContent>
       </Card>
