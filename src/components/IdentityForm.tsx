@@ -99,7 +99,7 @@ export function IdentityForm({
   statusBadge,
   showCustomFields = false,
 }: IdentityFormProps) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const [externalId, setExternalId] = useState(initial?.externalId ?? "");
   const [firstName, setFirstName] = useState(initial?.firstName ?? "");
   const [lastName, setLastName] = useState(initial?.lastName ?? "");
@@ -599,7 +599,7 @@ export function IdentityForm({
               <SelectContent>
                 {workerTypes.map((w) => (
                   <SelectItem key={w.id} value={w.id}>
-                    {w.name}
+                    {pickLang(w.name_i18n, lang) || w.name}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -64,7 +64,7 @@ type Definition = Database["public"]["Tables"]["custom_field_definitions"]["Row"
 type WorkerType = Database["public"]["Tables"]["worker_types"]["Row"];
 type SiteFieldRow = Database["public"]["Tables"]["site_custom_fields"]["Row"] & {
   definition: Pick<Definition, "custom_field_name" | "custom_field_type" | "display_name"> | null;
-  worker_type: Pick<WorkerType, "name"> | null;
+  worker_type: Pick<WorkerType, "name" | "name_i18n"> | null;
 };
 
 type MultiLang = { "pt-BR": string; "en-US": string; "es-ES": string };
@@ -171,7 +171,7 @@ function rangeToForm(v: Json | null): Pick<FormState, "rangeMin" | "rangeMax" | 
 }
 
 function CamposDoSitePage() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const siteId = useDefaultSiteId();
   const qc = useQueryClient();
 
@@ -186,7 +186,7 @@ function CamposDoSitePage() {
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
-          "*, definition:custom_field_definitions(custom_field_name, custom_field_type, display_name), worker_type:worker_types(name)",
+          "*, definition:custom_field_definitions(custom_field_name, custom_field_type, display_name), worker_type:worker_types(name, name_i18n)",
         )
         .eq("site_id", siteId as string)
         .order("display_index", { ascending: true, nullsFirst: false })
@@ -471,7 +471,9 @@ function CamposDoSitePage() {
         </Badge>
       </TableCell>
       <TableCell>
-        <Badge variant="outline">{row.worker_type?.name ?? "—"}</Badge>
+        <Badge variant="outline">
+          {pickLang(row.worker_type?.name_i18n, lang) || row.worker_type?.name || "—"}
+        </Badge>
       </TableCell>
       <TableCell className="text-muted-foreground">
         {row.definition?.custom_field_type ?? "—"}
@@ -644,7 +646,7 @@ function CamposDoSitePage() {
                     <SelectItem value={ALL_WORKER_TYPES}>{t("siteFields.form.allWorkerTypes")}</SelectItem>
                     {workerTypes.map((w) => (
                       <SelectItem key={w.id} value={w.id}>
-                        {w.name}
+                        {pickLang(w.name_i18n, lang) || w.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -900,7 +902,9 @@ function CamposDoSitePage() {
                       .map((r) => (
                         <SelectItem key={r.id} value={r.id}>
                           {r.definition?.custom_field_name ?? "—"}
-                          {r.worker_type?.name ? ` · ${r.worker_type.name}` : ""}
+                          {r.worker_type
+                            ? ` · ${pickLang(r.worker_type.name_i18n, lang) || r.worker_type.name}`
+                            : ""}
                         </SelectItem>
                       ))}
                   </SelectContent>
