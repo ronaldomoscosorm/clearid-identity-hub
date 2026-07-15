@@ -947,7 +947,13 @@ export const argusApi = {
     }));
   },
 
-  /** Cria uma seção de campos personalizados. O nome é imutável depois. */
+  /**
+   * Cria uma seção de campos personalizados. O nome é imutável depois.
+   *
+   * Atenção: o `index` precisa ser único entre as seções. Se colidir, o backend
+   * responde 400 com a mensagem enganosa "Já existe uma section com o nome X"
+   * (fala do nome, mas o conflito é do índice).
+   */
   createCustomFieldSection: (payload: {
     identityCustomFieldsSectionName: string;
     displayName: string;

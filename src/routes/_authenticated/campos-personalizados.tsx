@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -347,6 +348,7 @@ function CustomFieldsPage() {
 
       <SectionDialog
         mode="create"
+        sections={sectionsQuery.data ?? []}
         open={creatingSection}
         onClose={() => setCreatingSection(false)}
         onSaved={() => {
@@ -357,6 +359,7 @@ function CustomFieldsPage() {
       <SectionDialog
         mode="edit"
         section={editingSection ?? undefined}
+        sections={sectionsQuery.data ?? []}
         open={Boolean(editingSection)}
         onClose={() => setEditingSection(null)}
         onSaved={() => {
@@ -429,12 +432,14 @@ function CustomFieldsPage() {
 function SectionDialog({
   mode,
   section,
+  sections,
   open,
   onClose,
   onSaved,
 }: {
   mode: "create" | "edit";
   section?: CustomFieldSectionSummary;
+  sections: CustomFieldSectionSummary[];
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -448,8 +453,15 @@ function SectionDialog({
     if (!open) return;
     setName(section?.sectionName ?? "");
     setDisplayName(section?.displayName ?? "");
-    setIndex(String(section?.index ?? 0));
-  }, [open, section]);
+    // O índice precisa ser único: no create, já sugere o próximo livre.
+    const next = sections.length ? Math.max(...sections.map((s) => s.index)) + 1 : 0;
+    setIndex(String(section?.index ?? next));
+  }, [open, section, sections]);
+
+  const idxNum = Number.parseInt(index, 10);
+  const indexTaken =
+    Number.isFinite(idxNum) &&
+    sections.some((s) => s.index === idxNum && s.sectionName !== section?.sectionName);
 
   const save = useMutation({
     mutationFn: () => {
@@ -479,7 +491,10 @@ function SectionDialog({
   });
 
   const canSave =
-    displayName.trim().length > 0 && (mode === "edit" || name.trim().length > 0) && !save.isPending;
+    displayName.trim().length > 0 &&
+    (mode === "edit" || name.trim().length > 0) &&
+    !indexTaken &&
+    !save.isPending;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -517,7 +532,11 @@ function SectionDialog({
               type="number"
               value={index}
               onChange={(e) => setIndex(e.target.value)}
+              className={cn(indexTaken && "border-destructive")}
             />
+            {indexTaken && (
+              <p className="text-xs text-destructive">{t("customFields.sectionIndexTaken")}</p>
+            )}
           </div>
         </div>
 
