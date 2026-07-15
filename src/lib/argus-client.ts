@@ -694,6 +694,67 @@ export interface CredentialRecord {
   [k: string]: unknown;
 }
 
+// ---- Visitas ----
+export interface VisitProfile {
+  visitProfileId: string;
+  siteId?: string | null;
+  name?: string | null;
+  isEnabled?: boolean;
+  isDefault?: boolean;
+  plannedVisitAllowed?: boolean;
+  selfCheckInAllowed?: boolean;
+  plannedVisitSettings?: {
+    /** Motivos aceitos pelo ClearID. Qualquer outro valor gera 400 na criação. */
+    visitReasons?: string[] | null;
+  } | null;
+}
+
+export interface VisitVisitor {
+  visitorId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  identityId?: string | null;
+  registrationCode?: string | null;
+  /** Expected | CheckedIn | CheckedOut | ... */
+  visitorState?: string | null;
+  checkinTimestampUtc?: string | null;
+  checkoutTimestampUtc?: string | null;
+}
+
+export interface VisitEvent {
+  visitEventId: string;
+  visitEventName?: string | null;
+  startDateTimeUtc?: string | null;
+  endDateTimeUtc?: string | null;
+  reason?: string | null;
+  siteId?: string | null;
+  /** Pending | Approved | Denied | Cancelled | ... */
+  status?: string | null;
+  requesterId?: string | null;
+  eTag?: string | null;
+  hosts?: { identityId: string; displayName?: string | null }[] | null;
+  visitors?: VisitVisitor[] | null;
+}
+
+export interface CreateVisitPayload {
+  visitEventName: string;
+  startDateTimeUtc: string;
+  endDateTimeUtc: string;
+  reason: string;
+  siteId: string;
+  requesterId: string;
+  hosts: { identityId: string }[];
+  visitors: {
+    firstName: string;
+    lastName?: string | null;
+    email?: string | null;
+    identityId?: string | null;
+  }[];
+  internalNotes?: string | null;
+  visitProfileId?: string | null;
+}
+
 export interface CredentialUpsert {
   identityId: string;
   formatId: string;
@@ -1224,6 +1285,84 @@ export const argusApi = {
     argusFetch<void>(`/api/identities/${encodeURIComponent(id)}/activate`, { method: "POST" }),
 
   // ---- Credentials ----
+  // ---- Visitas ----
+  /**
+   * Perfis de visita do site. O perfil define os motivos permitidos
+   * (`visitReasons`) — o ClearID rejeita motivos fora dessa lista.
+   */
+  listVisitProfiles: async (): Promise<VisitProfile[]> => {
+    const data = await unwrap<{ visitProfiles?: VisitProfile[] } | VisitProfile[]>(
+      argusFetch(`/api/visit-profiles`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.visitProfiles ?? [];
+  },
+
+  /** Busca visitas. `futureOnly` limita às que ainda vão ocorrer. */
+  listVisits: async (params?: {
+    searchTerm?: string;
+    status?: string;
+    identityId?: string;
+    futureOnly?: boolean;
+    take?: number;
+  }): Promise<VisitEvent[]> => {
+    const q = new URLSearchParams();
+    q.set("take", String(params?.take ?? 50));
+    if (params?.searchTerm) q.set("searchTerm", params.searchTerm);
+    if (params?.status) q.set("status", params.status);
+    if (params?.identityId) q.set("identityId", params.identityId);
+    if (params?.futureOnly) q.set("futureOnly", "true");
+    const data = await unwrap<{ visitEvents?: VisitEvent[]; results?: VisitEvent[] } | VisitEvent[]>(
+      argusFetch(`/api/visits?${q.toString()}`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.visitEvents ?? data?.results ?? [];
+  },
+
+  getVisit: (visitEventId: string) =>
+    unwrap<VisitEvent>(argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}`)),
+
+  createVisit: (payload: CreateVisitPayload) =>
+    unwrap<VisitEvent>(
+      argusFetch(`/api/visits`, { method: "POST", body: JSON.stringify(payload) }),
+    ),
+
+  /** Visitantes da visita — traz o visitorId e o identityId (necessário p/ credencial). */
+  listVisitVisitors: async (visitEventId: string): Promise<VisitVisitor[]> => {
+    const data = await unwrap<{ visitors?: VisitVisitor[] } | VisitVisitor[]>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}/visitors`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.visitors ?? [];
+  },
+
+  /** Check-in em lote. `timestampUtc` omitido = agora (decidido pelo ClearID). */
+  checkInVisitors: (visitEventId: string, visitorIds: string[]) =>
+    unwrap<unknown>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}/checkin`, {
+        method: "POST",
+        body: JSON.stringify({ visitorCheckIns: visitorIds.map((visitorId) => ({ visitorId })) }),
+      }),
+    ),
+
+  /** Check-out em lote. */
+  checkOutVisitors: (visitEventId: string, visitorIds: string[]) =>
+    unwrap<unknown>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}/checkout`, {
+        method: "POST",
+        body: JSON.stringify({ visitorCheckOuts: visitorIds.map((visitorId) => ({ visitorId })) }),
+      }),
+    ),
+
+  /** Decisão sobre a visita: approve | deny | cancel. */
+  decideVisit: (visitEventId: string, decision: "approve" | "deny" | "cancel", comment?: string) =>
+    unwrap<unknown>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}/${decision}`, {
+        method: "POST",
+        body: JSON.stringify({ comment: comment ?? null }),
+      }),
+    ),
+
   listCredentialFormats: async (): Promise<CredentialFormat[]> => {
     const accountId = getAccountId();
     const systemObjectId = getSystemObjectId();

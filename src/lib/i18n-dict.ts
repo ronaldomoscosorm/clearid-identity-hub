@@ -6,6 +6,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
   "pt-BR": {
     // Navegação
     "nav.identities": "Pessoas",
+    "nav.visitas": "Visitas",
     "nav.cadastro": "Cadastro",
     "nav.empresas": "Empresas",
     "nav.regras": "Regras",
@@ -71,6 +72,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
   },
   "en-US": {
     "nav.identities": "People",
+    "nav.visitas": "Visits",
     "nav.cadastro": "Registration",
     "nav.empresas": "Companies",
     "nav.regras": "Rules",
@@ -133,6 +135,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
   },
   "es-ES": {
     "nav.identities": "Personas",
+    "nav.visitas": "Visitas",
     "nav.cadastro": "Registro",
     "nav.empresas": "Empresas",
     "nav.regras": "Reglas",

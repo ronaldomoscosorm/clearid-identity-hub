@@ -22,8 +22,10 @@ import { Route as AuthenticatedCamposDoSiteRouteImport } from './routes/_authent
 import { Route as AuthenticatedCampanhasFotoRouteImport } from './routes/_authenticated/campanhas-foto'
 import { Route as AuthenticatedBrandingRouteImport } from './routes/_authenticated/branding'
 import { Route as AuthenticatedApelidosRouteImport } from './routes/_authenticated/apelidos'
+import { Route as AuthenticatedVisitasIndexRouteImport } from './routes/_authenticated/visitas.index'
 import { Route as AuthenticatedTerceirizadosIndexRouteImport } from './routes/_authenticated/terceirizados.index'
 import { Route as AuthenticatedIdentitiesIndexRouteImport } from './routes/_authenticated/identities.index'
+import { Route as AuthenticatedVisitasNovaRouteImport } from './routes/_authenticated/visitas.nova'
 import { Route as AuthenticatedTerceirizadosIdRouteImport } from './routes/_authenticated/terceirizados.$id'
 import { Route as AuthenticatedIdentitiesNewRouteImport } from './routes/_authenticated/identities.new'
 import { Route as AuthenticatedIdentitiesIdRouteImport } from './routes/_authenticated/identities.$id'
@@ -96,6 +98,12 @@ const AuthenticatedApelidosRoute = AuthenticatedApelidosRouteImport.update({
   path: '/apelidos',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedVisitasIndexRoute =
+  AuthenticatedVisitasIndexRouteImport.update({
+    id: '/visitas/',
+    path: '/visitas/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTerceirizadosIndexRoute =
   AuthenticatedTerceirizadosIndexRouteImport.update({
     id: '/terceirizados/',
@@ -107,6 +115,12 @@ const AuthenticatedIdentitiesIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedIdentitiesRoute,
+  } as any)
+const AuthenticatedVisitasNovaRoute =
+  AuthenticatedVisitasNovaRouteImport.update({
+    id: '/visitas/nova',
+    path: '/visitas/nova',
+    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedTerceirizadosIdRoute =
   AuthenticatedTerceirizadosIdRouteImport.update({
@@ -143,8 +157,10 @@ export interface FileRoutesByFullPath {
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
+  '/visitas/nova': typeof AuthenticatedVisitasNovaRoute
   '/identities/': typeof AuthenticatedIdentitiesIndexRoute
   '/terceirizados/': typeof AuthenticatedTerceirizadosIndexRoute
+  '/visitas/': typeof AuthenticatedVisitasIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -161,8 +177,10 @@ export interface FileRoutesByTo {
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
+  '/visitas/nova': typeof AuthenticatedVisitasNovaRoute
   '/identities': typeof AuthenticatedIdentitiesIndexRoute
   '/terceirizados': typeof AuthenticatedTerceirizadosIndexRoute
+  '/visitas': typeof AuthenticatedVisitasIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -182,8 +200,10 @@ export interface FileRoutesById {
   '/_authenticated/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/_authenticated/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/_authenticated/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
+  '/_authenticated/visitas/nova': typeof AuthenticatedVisitasNovaRoute
   '/_authenticated/identities/': typeof AuthenticatedIdentitiesIndexRoute
   '/_authenticated/terceirizados/': typeof AuthenticatedTerceirizadosIndexRoute
+  '/_authenticated/visitas/': typeof AuthenticatedVisitasIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -203,8 +223,10 @@ export interface FileRouteTypes {
     | '/identities/$id'
     | '/identities/new'
     | '/terceirizados/$id'
+    | '/visitas/nova'
     | '/identities/'
     | '/terceirizados/'
+    | '/visitas/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -221,8 +243,10 @@ export interface FileRouteTypes {
     | '/identities/$id'
     | '/identities/new'
     | '/terceirizados/$id'
+    | '/visitas/nova'
     | '/identities'
     | '/terceirizados'
+    | '/visitas'
   id:
     | '__root__'
     | '/'
@@ -241,8 +265,10 @@ export interface FileRouteTypes {
     | '/_authenticated/identities/$id'
     | '/_authenticated/identities/new'
     | '/_authenticated/terceirizados/$id'
+    | '/_authenticated/visitas/nova'
     | '/_authenticated/identities/'
     | '/_authenticated/terceirizados/'
+    | '/_authenticated/visitas/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -344,6 +370,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApelidosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/visitas/': {
+      id: '/_authenticated/visitas/'
+      path: '/visitas'
+      fullPath: '/visitas/'
+      preLoaderRoute: typeof AuthenticatedVisitasIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/terceirizados/': {
       id: '/_authenticated/terceirizados/'
       path: '/terceirizados'
@@ -357,6 +390,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/identities/'
       preLoaderRoute: typeof AuthenticatedIdentitiesIndexRouteImport
       parentRoute: typeof AuthenticatedIdentitiesRoute
+    }
+    '/_authenticated/visitas/nova': {
+      id: '/_authenticated/visitas/nova'
+      path: '/visitas/nova'
+      fullPath: '/visitas/nova'
+      preLoaderRoute: typeof AuthenticatedVisitasNovaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/terceirizados/$id': {
       id: '/_authenticated/terceirizados/$id'
@@ -412,7 +452,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTerceirizadosIdRoute: typeof AuthenticatedTerceirizadosIdRoute
+  AuthenticatedVisitasNovaRoute: typeof AuthenticatedVisitasNovaRoute
   AuthenticatedTerceirizadosIndexRoute: typeof AuthenticatedTerceirizadosIndexRoute
+  AuthenticatedVisitasIndexRoute: typeof AuthenticatedVisitasIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -428,7 +470,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTerceirizadosIdRoute: AuthenticatedTerceirizadosIdRoute,
+  AuthenticatedVisitasNovaRoute: AuthenticatedVisitasNovaRoute,
   AuthenticatedTerceirizadosIndexRoute: AuthenticatedTerceirizadosIndexRoute,
+  AuthenticatedVisitasIndexRoute: AuthenticatedVisitasIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
