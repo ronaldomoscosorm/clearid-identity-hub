@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClearIdCustomFieldDef, CustomFieldSectionSummary } from "@/lib/argus-client";
-import { RefreshCw, Plus, Pencil, Trash2 } from "lucide-react";
+import { RefreshCw, Plus, Pencil, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
@@ -67,6 +67,15 @@ export const Route = createFileRoute("/_authenticated/campos-personalizados")({
   component: CustomFieldsPage,
 });
 
+/** Minúsculas sem acento, para a busca casar "apolice" com "Apólice". */
+function normalize(s?: string | null) {
+  return (s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 function formatDate(iso?: string | null) {
   if (!iso) return "—";
   try {
@@ -85,6 +94,8 @@ function CustomFieldsPage() {
   const [editingSection, setEditingSection] = useState<CustomFieldSectionSummary | null>(null);
   const [creatingSection, setCreatingSection] = useState(false);
   const [deletingSection, setDeletingSection] = useState<CustomFieldSectionSummary | null>(null);
+
+  const [search, setSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["custom-fields"],
@@ -115,7 +126,19 @@ function CustomFieldsPage() {
     onError: (e) => toast.error((e as ArgusApiError).message),
   });
 
-  const items = (query.data ?? []).filter((f) => !f.isDeleted);
+  const q = normalize(search);
+  const allItems = useMemo(() => (query.data ?? []).filter((f) => !f.isDeleted), [query.data]);
+  // Busca por nome de exibição ou identificador, ignorando acentos/caixa.
+  const items = useMemo(
+    () =>
+      q
+        ? allItems.filter(
+            (f) =>
+              normalize(f.displayName).includes(q) || normalize(f.customFieldName).includes(q),
+          )
+        : allItems,
+    [allItems, q],
+  );
 
   const sectionsQuery = useQuery({
     queryKey: ["custom-field-sections"],
@@ -143,11 +166,11 @@ function CustomFieldsPage() {
       ? t("customFields.sectionOther")
       : sectionByName.get(key)?.displayName || key;
 
-  // Agrupa os campos por seção. Seções sem campos também aparecem, para poderem
-  // ser editadas/excluídas.
+  // Agrupa os campos por seção. Sem busca, seções vazias também aparecem (para
+  // poderem ser editadas/excluídas); com busca, só grupos com resultado.
   const groupedItems = useMemo(() => {
     const groups = new Map<string, ClearIdCustomFieldDef[]>();
-    for (const s of sectionsQuery.data ?? []) groups.set(s.sectionName, []);
+    if (!q) for (const s of sectionsQuery.data ?? []) groups.set(s.sectionName, []);
     for (const f of items) {
       const key = sectionOfField.get(f.customFieldName) ?? OTHER_SECTION;
       if (!groups.has(key)) groups.set(key, []);
@@ -171,7 +194,7 @@ function CustomFieldsPage() {
       );
     }
     return arr;
-  }, [items, sectionOfField, sectionByName, sectionsQuery.data, t]);
+  }, [items, sectionOfField, sectionByName, sectionsQuery.data, q, t]);
 
   // Espelha as definições de campos para o Supabase (cache local, best-effort).
   useEffect(() => {
@@ -248,7 +271,7 @@ function CustomFieldsPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
           <CardTitle className="text-base">
             {query.data
               ? items.length === 1
@@ -256,6 +279,15 @@ function CustomFieldsPage() {
                 : t("customFields.countPlural", { count: items.length })
               : t("customFields.fieldsLabel")}
           </CardTitle>
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("customFields.searchPlaceholder")}
+              className="pl-8"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {query.isLoading ? (
@@ -270,7 +302,7 @@ function CustomFieldsPage() {
             </div>
           ) : items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {t("customFields.emptyState")}
+              {q ? t("customFields.noSearchResults", { query: search.trim() }) : t("customFields.emptyState")}
             </p>
           ) : (
             <div className="space-y-6">
