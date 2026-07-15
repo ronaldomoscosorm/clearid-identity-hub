@@ -54,6 +54,8 @@ const FIELD_TYPES = ["Text", "Numeric", "Boolean", "DateTime", "Decimal", "Date"
 
 // Grupo dos campos que não pertencem a nenhuma seção.
 const OTHER_SECTION = "__other__";
+// Valor do dropdown de seção quando o campo não fica em nenhuma.
+const NO_SECTION = "__none__";
 
 // Limites da API (swagger custom-fields).
 const SECTION_NAME_MAX = 30;
@@ -333,16 +335,19 @@ function CustomFieldsPage() {
 
       <CustomFieldDialog
         mode="create"
+        sections={sectionsQuery.data ?? []}
         open={creating}
         onClose={() => setCreating(false)}
         onSaved={() => {
           setCreating(false);
           reload();
+          reloadSections(); // o campo pode ter sido vinculado a uma seção
         }}
       />
       <CustomFieldDialog
         mode="edit"
         field={editing ?? undefined}
+        sections={sectionsQuery.data ?? []}
         open={Boolean(editing)}
         onClose={() => setEditing(null)}
         onSaved={() => {
@@ -569,12 +574,14 @@ function SectionDialog({
 function CustomFieldDialog({
   mode,
   field,
+  sections,
   open,
   onClose,
   onSaved,
 }: {
   mode: "create" | "edit";
   field?: ClearIdCustomFieldDef;
+  sections: CustomFieldSectionSummary[];
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -585,6 +592,7 @@ function CustomFieldDialog({
   const [type, setType] = useState<string>("Text");
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [sync, setSync] = useState(true);
+  const [sectionName, setSectionName] = useState<string>(NO_SECTION);
 
   useEffect(() => {
     if (!open) return;
@@ -593,24 +601,42 @@ function CustomFieldDialog({
     setType(field?.customFieldType ?? "Text");
     setIsReadOnly(Boolean(field?.isReadOnly));
     setSync(field?.synchronizationEnabled ?? true);
+    setSectionName(NO_SECTION);
   }, [open, field]);
 
   const save = useMutation({
-    mutationFn: () =>
-      mode === "create"
-        ? argusApi.createCustomField({
-            customFieldName: name.trim(),
-            displayName: displayName.trim(),
-            customFieldType: type,
-            isReadOnly,
-            synchronizationEnabled: sync,
-          })
-        : argusApi.updateCustomField(field!.customFieldName, {
-            displayName: displayName.trim(),
-            isReadOnly,
-            synchronizationEnabled: sync,
-            eTag: field?.eTag ?? null,
-          }),
+    mutationFn: async () => {
+      if (mode === "edit") {
+        return argusApi.updateCustomField(field!.customFieldName, {
+          displayName: displayName.trim(),
+          isReadOnly,
+          synchronizationEnabled: sync,
+          eTag: field?.eTag ?? null,
+        });
+      }
+
+      const created = await argusApi.createCustomField({
+        customFieldName: name.trim(),
+        displayName: displayName.trim(),
+        customFieldType: type,
+        isReadOnly,
+        synchronizationEnabled: sync,
+      });
+
+      // A API não aceita seção no create: o vínculo é feito pelo PUT da seção,
+      // que substitui a lista de campos — por isso reenviamos os atuais + o novo.
+      const sec = sections.find((s) => s.sectionName === sectionName);
+      if (sec) {
+        const nextIdx = sec.fields.length ? Math.max(...sec.fields.map((f) => f.index)) + 1 : 0;
+        await argusApi.updateCustomFieldSection(sec.sectionName, {
+          displayName: sec.displayName,
+          index: sec.index,
+          identityCustomFields: [...sec.fields, { name: name.trim(), index: nextIdx }],
+          eTag: sec.eTag,
+        });
+      }
+      return created;
+    },
     onSuccess: () => {
       toast.success(mode === "create" ? t("customFields.created") : t("customFields.updated"));
       onSaved();
@@ -678,6 +704,25 @@ function CustomFieldDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {mode === "create" && (
+            <div className="space-y-2">
+              <Label>{t("customFields.sectionLabel")}</Label>
+              <Select value={sectionName} onValueChange={setSectionName}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SECTION}>{t("customFields.noSection")}</SelectItem>
+                  {sections.map((s) => (
+                    <SelectItem key={s.sectionName} value={s.sectionName}>
+                      {s.displayName || s.sectionName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <Checkbox checked={isReadOnly} onCheckedChange={(v) => setIsReadOnly(Boolean(v))} />
