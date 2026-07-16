@@ -250,7 +250,7 @@ export function IdentityPicturePanel({ identityId }: Props) {
   );
 }
 
-function WebcamDialog({
+export function WebcamDialog({
   open,
   onOpenChange,
   onCapture,

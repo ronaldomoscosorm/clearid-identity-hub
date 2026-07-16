@@ -203,7 +203,7 @@ function IdentityDetail() {
           mode="edit"
           initial={clearIdToFormValues(query.data)}
           submitting={update.isPending}
-          onSubmit={(data, siteFieldValues, companyId, workerTypeId) => {
+          onSubmit={(data, siteFieldValues, companyId, workerTypeId, _photo) => {
             const original = query.data!;
             // ClearID PUT é um replace completo. Preservamos os campos que
             // não estão no formulário para evitar 400 (Falha ao atualizar

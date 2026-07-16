@@ -4,6 +4,15 @@ import type { Lang } from "./i18n";
 // NÃO editar à mão em massa — regenerar via workflow se precisar.
 export const generated: Record<Lang, Record<string, string>> = {
   "pt-BR": {
+    "photoCapture.title": "Foto",
+    "photoCapture.optional": "Opcional. Tire com a webcam ou envie um arquivo.",
+    "photoCapture.ready": "Foto pronta para envio.",
+    "photoCapture.takePhoto": "Tirar foto",
+    "photoCapture.uploadFile": "Enviar arquivo",
+    "photoCapture.notImage": "Selecione um arquivo de imagem.",
+    "photoCapture.previewAlt": "Prévia da foto",
+    "identityNew.step.photo": "foto",
+    "identityNew.fail.photo": "foto ({error})",
     "visits.deleteVisit": "Excluir visita",
     "visits.deletedToast": "Visita excluída.",
     "visits.confirmDeleteTitle": "Excluir visita?",
@@ -626,6 +635,15 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "en-US": {
+    "photoCapture.title": "Photo",
+    "photoCapture.optional": "Optional. Take with the webcam or upload a file.",
+    "photoCapture.ready": "Photo ready to upload.",
+    "photoCapture.takePhoto": "Take photo",
+    "photoCapture.uploadFile": "Upload file",
+    "photoCapture.notImage": "Select an image file.",
+    "photoCapture.previewAlt": "Photo preview",
+    "identityNew.step.photo": "photo",
+    "identityNew.fail.photo": "photo ({error})",
     "visits.deleteVisit": "Delete visit",
     "visits.deletedToast": "Visit deleted.",
     "visits.confirmDeleteTitle": "Delete visit?",
@@ -1248,6 +1266,15 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "es-ES": {
+    "photoCapture.title": "Foto",
+    "photoCapture.optional": "Opcional. Tome con la webcam o suba un archivo.",
+    "photoCapture.ready": "Foto lista para enviar.",
+    "photoCapture.takePhoto": "Tomar foto",
+    "photoCapture.uploadFile": "Subir archivo",
+    "photoCapture.notImage": "Seleccione un archivo de imagen.",
+    "photoCapture.previewAlt": "Vista previa de la foto",
+    "identityNew.step.photo": "foto",
+    "identityNew.fail.photo": "foto ({error})",
     "visits.deleteVisit": "Eliminar visita",
     "visits.deletedToast": "Visita eliminada.",
     "visits.confirmDeleteTitle": "¿Eliminar visita?",

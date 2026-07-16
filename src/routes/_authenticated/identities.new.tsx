@@ -29,6 +29,7 @@ function NewIdentity() {
       siteFieldValues: SiteFieldValue[];
       companyId: string | null;
       workerTypeId: string | null;
+      photo: Blob | null;
     }) => {
       // Verifica e-mail duplicado antes de criar (o ClearID rejeita com 400).
       const dupes = await argusApi.findIdentitiesByEmail(vars.data.email);
@@ -65,7 +66,17 @@ function NewIdentity() {
         }
       }
 
-      // Etapa 3 — regra padrão (se não houver nenhuma).
+      // Etapa 3 — foto (o upload só é possível após a criação, já com o id).
+      if (vars.photo) {
+        try {
+          await argusApi.uploadIdentityPicture(data.identityId, vars.photo);
+          ok.push(t("identityNew.step.photo"));
+        } catch (e) {
+          fail.push(t("identityNew.fail.photo", { error: (e as Error).message }));
+        }
+      }
+
+      // Etapa 4 — regra padrão (se não houver nenhuma).
       try {
         const rule = await argusApi.ensureDefaultRule(data.identityId);
         if (rule.assigned)
@@ -124,8 +135,8 @@ function NewIdentity() {
       <IdentityForm
         mode="create"
         submitting={mut.isPending}
-        onSubmit={(data, siteFieldValues, companyId, workerTypeId) =>
-          mut.mutate({ data, siteFieldValues, companyId, workerTypeId })
+        onSubmit={(data, siteFieldValues, companyId, workerTypeId, photo) =>
+          mut.mutate({ data, siteFieldValues, companyId, workerTypeId, photo })
         }
         onCancel={() => navigate({ to: "/identities" })}
       />

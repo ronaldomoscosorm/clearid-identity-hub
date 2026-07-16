@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PhotoCapture } from "@/components/PhotoCapture";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -82,6 +83,7 @@ export type IdentityFormProps = {
     siteFieldValues: SiteFieldValue[],
     companyId: string | null,
     workerTypeId: string | null,
+    photo: Blob | null,
   ) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
@@ -107,6 +109,7 @@ export function IdentityForm({
   const [displayName, setDisplayName] = useState(initial?.displayName ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
   const [workerTypeId, setWorkerTypeId] = useState<string>("");
+  const [photo, setPhoto] = useState<Blob | null>(null);
   const [companyId, setCompanyId] = useState<string>("");
   const defaultSiteId = useDefaultSiteId();
   const [siteId, setSiteId] = useState<string>(initial?.siteId ?? defaultSiteId ?? "");
@@ -566,7 +569,7 @@ export function IdentityForm({
       siteId: siteId || undefined,
       workerTypeCode: effectiveWorkerTypeCode || undefined,
     };
-    onSubmit(payload as unknown as IdentityUpsert, siteFieldValues, companyId || null, workerTypeId || null);
+    onSubmit(payload as unknown as IdentityUpsert, siteFieldValues, companyId || null, workerTypeId || null, photo);
   };
 
   const dateDefs = defs.filter((f) => isDate(f.customFieldType));
@@ -577,6 +580,19 @@ export function IdentityForm({
 
   return (
     <form onSubmit={submit} className="space-y-6">
+      {/* Foto — só no cadastro novo (a edição tem o IdentityPicturePanel). O
+          upload é feito após a criação, quando já existe o identityId. */}
+      {mode === "create" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("photoCapture.title")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PhotoCapture value={photo} onChange={setPhoto} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tipo do trabalhador — primeira linha, isolado. Condiciona os campos
           do site e customizáveis exibidos abaixo. */}
       <Card>
