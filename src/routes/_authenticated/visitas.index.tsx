@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Plus, RefreshCw, LogIn, LogOut, Loader2 } from "lucide-react";
+import { Search, Plus, RefreshCw, LogIn, LogOut, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, type VisitEvent, type VisitVisitor } from "@/lib/argus-client";
 import { useT } from "@/lib/i18n";
@@ -12,6 +12,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/visitas/")({
   head: () => ({ meta: [{ title: "Visitas — Argus ClearID" }] }),
@@ -125,6 +135,17 @@ function VisitCard({ visit, onChanged }: { visit: VisitEvent; onChanged: () => v
   const { t } = useT();
   const qc = useQueryClient();
   const [sel, setSel] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const del = useMutation({
+    mutationFn: () => argusApi.deleteVisit(visit.visitEventId),
+    onSuccess: () => {
+      toast.success(t("visits.deletedToast"));
+      setConfirmDelete(false);
+      onChanged();
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message, { duration: 10000 }),
+  });
 
   const visitorsQuery = useQuery({
     queryKey: ["visit-visitors", visit.visitEventId],
@@ -183,9 +204,20 @@ function VisitCard({ visit, onChanged }: { visit: VisitEvent; onChanged: () => v
           </p>
           {visit.reason && <p className="mt-1 text-xs text-muted-foreground">{visit.reason}</p>}
         </div>
-        <Badge variant={(visit.status ?? "").toLowerCase() === "approved" ? "default" : "outline"}>
-          {visit.status || "—"}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={(visit.status ?? "").toLowerCase() === "approved" ? "default" : "outline"}>
+            {visit.status || "—"}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            title={t("visits.deleteVisit")}
+            className="text-destructive hover:text-destructive"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         {visitorsQuery.isLoading ? (
@@ -254,6 +286,30 @@ function VisitCard({ visit, onChanged }: { visit: VisitEvent; onChanged: () => v
           </>
         )}
       </CardContent>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("visits.confirmDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("visits.confirmDeleteDesc", { name: visit.visitEventName || "—" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={del.isPending}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={del.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                del.mutate();
+              }}
+            >
+              {del.isPending ? t("common.saving") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

@@ -1355,6 +1355,12 @@ export const argusApi = {
       }),
     ),
 
+  /** Exclui a visita. */
+  deleteVisit: (visitEventId: string) =>
+    unwrap<unknown>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}`, { method: "DELETE" }),
+    ),
+
   /** Decisão sobre a visita: approve | deny | cancel. */
   decideVisit: (visitEventId: string, decision: "approve" | "deny" | "cancel", comment?: string) =>
     unwrap<unknown>(

@@ -4,6 +4,10 @@ import type { Lang } from "./i18n";
 // NÃO editar à mão em massa — regenerar via workflow se precisar.
 export const generated: Record<Lang, Record<string, string>> = {
   "pt-BR": {
+    "visits.deleteVisit": "Excluir visita",
+    "visits.deletedToast": "Visita excluída.",
+    "visits.confirmDeleteTitle": "Excluir visita?",
+    "visits.confirmDeleteDesc": "A visita {name} será excluída permanentemente. Esta ação não pode ser desfeita.",
     "visits.endHint": "Padrão: 12h após o início.",
     "visits.credentialStep": "Visita criada — atribua a credencial",
     "visits.credentialStepHint": "O check-in já foi feito. Atribua o cartão de cada visitante.",
@@ -622,6 +626,10 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "en-US": {
+    "visits.deleteVisit": "Delete visit",
+    "visits.deletedToast": "Visit deleted.",
+    "visits.confirmDeleteTitle": "Delete visit?",
+    "visits.confirmDeleteDesc": "The visit {name} will be permanently deleted. This action cannot be undone.",
     "visits.endHint": "Default: 12h after the start.",
     "visits.credentialStep": "Visit created — assign the credential",
     "visits.credentialStepHint": "Check-in is done. Assign each visitor's card.",
@@ -1240,6 +1248,10 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "es-ES": {
+    "visits.deleteVisit": "Eliminar visita",
+    "visits.deletedToast": "Visita eliminada.",
+    "visits.confirmDeleteTitle": "¿Eliminar visita?",
+    "visits.confirmDeleteDesc": "La visita {name} se eliminará permanentemente. Esta acción no se puede deshacer.",
     "visits.endHint": "Predeterminado: 12h después del inicio.",
     "visits.credentialStep": "Visita creada — asigne la credencial",
     "visits.credentialStepHint": "El check-in ya se hizo. Asigne la tarjeta de cada visitante.",
