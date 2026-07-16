@@ -753,6 +753,7 @@ export interface CreateVisitPayload {
   }[];
   internalNotes?: string | null;
   visitProfileId?: string | null;
+  type?: string | null;
 }
 
 export interface CredentialUpsert {
