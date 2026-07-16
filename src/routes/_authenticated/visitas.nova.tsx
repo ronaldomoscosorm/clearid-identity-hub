@@ -57,8 +57,13 @@ function NovaVisitaPage() {
   const [name, setName] = useState("");
   const [reason, setReason] = useState("");
   const [siteId, setSiteId] = useState<string>(defaultSite ?? "");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  // Padrão: início = agora, término = agora + 12h (ambos editáveis).
+  const [start, setStart] = useState(() => toLocalInput(new Date()));
+  const [end, setEnd] = useState(() => {
+    const d = new Date();
+    d.setHours(d.getHours() + VISIT_HOURS);
+    return toLocalInput(d);
+  });
   const [requester, setRequester] = useState<Picked | null>(null);
   const [hosts, setHosts] = useState<Picked[]>([]);
   const [visitors, setVisitors] = useState<VisitorRow[]>([
