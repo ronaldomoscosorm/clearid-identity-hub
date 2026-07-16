@@ -116,8 +116,9 @@ function NovaVisitaPage() {
         siteId,
         requesterId: requester!.identityId,
         visitProfileId: profile?.visitProfileId ?? null,
-        // "Criar e receber agora" → type=Planned; "Apenas agendar" → sem type.
-        ...(mode === "now" ? { type: "Planned" } : {}),
+        // "Criar e receber agora" = walk-in → sem type (e faz check-in);
+        // "Apenas agendar" = planejada → type=Planned (sem check-in).
+        ...(mode === "schedule" ? { type: "Planned" } : {}),
         hosts: hosts.map((h) => ({ identityId: h.identityId })),
         visitors: visitors
           .filter((v) => v.firstName.trim())
