@@ -7,6 +7,11 @@ export interface ArgusEnvConfig {
   defaultSiteName?: string;
   defaultRuleId?: string;
   defaultRuleName?: string;
+  /**
+   * Quando true, o cadastro de visita pode vincular o visitante a uma
+   * identidade (habilita foto/credencial). Opcional — off por padrão.
+   */
+  linkVisitorToIdentity?: boolean;
 }
 
 const CFG_KEY = "argus.config";

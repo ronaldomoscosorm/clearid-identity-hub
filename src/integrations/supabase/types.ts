@@ -432,6 +432,7 @@ export type Database = {
           default_rule_name: string | null
           default_site_id: string | null
           default_site_name: string | null
+          link_visitor_to_identity: boolean
           preferences: Json
           primary_color: string
           system_object_id: string | null
@@ -450,6 +451,7 @@ export type Database = {
           default_rule_name?: string | null
           default_site_id?: string | null
           default_site_name?: string | null
+          link_visitor_to_identity?: boolean
           preferences?: Json
           primary_color?: string
           system_object_id?: string | null
@@ -468,6 +470,7 @@ export type Database = {
           default_rule_name?: string | null
           default_site_id?: string | null
           default_site_name?: string | null
+          link_visitor_to_identity?: boolean
           preferences?: Json
           primary_color?: string
           system_object_id?: string | null

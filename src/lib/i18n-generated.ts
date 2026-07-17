@@ -4,6 +4,10 @@ import type { Lang } from "./i18n";
 // NÃO editar à mão em massa — regenerar via workflow se precisar.
 export const generated: Record<Lang, Record<string, string>> = {
   "pt-BR": {
+    "settings.visits.title": "Visitas",
+    "settings.visits.description": "Comportamento do cadastro de visitas.",
+    "settings.visits.linkLabel": "Vincular visitante a uma identidade",
+    "settings.visits.linkHint": "Quando ligado, o cadastro de visita permite vincular o visitante a uma identidade (habilita foto e credencial). O visitante com foto é cadastrado como pessoa (Visitor). Opcional.",
     "visits.photoHint": "Com foto, o visitante é cadastrado como pessoa (Terceiros) para receber a imagem. Exige sobrenome e e-mail.",
     "visits.validation.photoNeedsIdentity": "Para foto, informe sobrenome e e-mail.",
     "visits.photoIssues": "Visita criada, mas houve falha na foto de algum visitante.",
@@ -638,6 +642,10 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "en-US": {
+    "settings.visits.title": "Visits",
+    "settings.visits.description": "Visit registration behavior.",
+    "settings.visits.linkLabel": "Link visitor to an identity",
+    "settings.visits.linkHint": "When on, the visit form lets you link the visitor to an identity (enables photo and credential). A visitor with a photo is registered as a person (Visitor). Optional.",
     "visits.photoHint": "With a photo, the visitor is registered as a person (Contractor) to receive the image. Requires last name and email.",
     "visits.validation.photoNeedsIdentity": "For a photo, provide last name and email.",
     "visits.photoIssues": "Visit created, but a visitor's photo failed.",
@@ -1272,6 +1280,10 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "es-ES": {
+    "settings.visits.title": "Visitas",
+    "settings.visits.description": "Comportamiento del registro de visitas.",
+    "settings.visits.linkLabel": "Vincular visitante a una identidad",
+    "settings.visits.linkHint": "Cuando está activado, el registro de visita permite vincular al visitante a una identidad (habilita foto y credencial). El visitante con foto se registra como persona (Visitor). Opcional.",
     "visits.photoHint": "Con foto, el visitante se registra como persona (Tercero) para recibir la imagen. Requiere apellido y correo.",
     "visits.validation.photoNeedsIdentity": "Para foto, indique apellido y correo.",
     "visits.photoIssues": "Visita creada, pero la foto de un visitante falló.",

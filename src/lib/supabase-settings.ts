@@ -40,6 +40,7 @@ export async function pushSettings(): Promise<void> {
     default_site_name: cfg.defaultSiteName ?? null,
     default_rule_id: cfg.defaultRuleId ?? null,
     default_rule_name: cfg.defaultRuleName ?? null,
+    link_visitor_to_identity: cfg.linkVisitorToIdentity ?? false,
     system_object_id: getSystemObjectId() ?? null,
     account_id: getAccountId() ?? null,
     client_name: branding.clientName,
@@ -84,6 +85,7 @@ export async function hydrateSettings(): Promise<void> {
     defaultSiteName: data.default_site_name ?? undefined,
     defaultRuleId: data.default_rule_id ?? undefined,
     defaultRuleName: data.default_rule_name ?? undefined,
+    linkVisitorToIdentity: (data as { link_visitor_to_identity?: boolean }).link_visitor_to_identity ?? false,
   });
   setDefaultSiteId(data.default_site_id ?? null);
   setSystemObjectId(data.system_object_id ?? null);

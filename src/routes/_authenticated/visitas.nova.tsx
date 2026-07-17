@@ -9,6 +9,7 @@ import {
   useDefaultSiteId,
   type VisitVisitor,
 } from "@/lib/argus-client";
+import { useArgusConfig } from "@/lib/argus-env";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { PhotoCapture } from "@/components/PhotoCapture";
 import { useT } from "@/lib/i18n";
@@ -52,6 +53,8 @@ function NovaVisitaPage() {
   const { t } = useT();
   const navigate = useNavigate();
   const defaultSite = useDefaultSiteId();
+  // Opção de Configurações: vincular o visitante a uma identidade (habilita foto).
+  const linkVisitor = Boolean(useArgusConfig().linkVisitorToIdentity);
 
   // "now" = Fluxo A (cria + check-in); "schedule" = Fluxo B (só agenda).
   const [mode, setMode] = useState<"now" | "schedule">("now");
@@ -130,6 +133,7 @@ function NovaVisitaPage() {
         lastName: v.lastName.trim(),
         email,
         status: "Active",
+        identityType: "Visitor", // identidade criada pela visita nasce como Visitor
         workerTypeCode: "Terceiros", // visitante
         siteId,
       });
@@ -459,13 +463,17 @@ function NovaVisitaPage() {
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
-              <PhotoCapture
-                value={v.photo}
-                onChange={(blob) =>
-                  setVisitors((p) => p.map((x, j) => (j === i ? { ...x, photo: blob } : x)))
-                }
-              />
-              <p className="text-xs text-muted-foreground">{t("visits.photoHint")}</p>
+              {linkVisitor && (
+                <>
+                  <PhotoCapture
+                    value={v.photo}
+                    onChange={(blob) =>
+                      setVisitors((p) => p.map((x, j) => (j === i ? { ...x, photo: blob } : x)))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">{t("visits.photoHint")}</p>
+                </>
+              )}
               {errors[`visitor_${i}`] && (
                 <p className="text-xs text-destructive">{errors[`visitor_${i}`]}</p>
               )}

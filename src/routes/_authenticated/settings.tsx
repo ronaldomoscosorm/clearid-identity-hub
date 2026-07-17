@@ -6,6 +6,7 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getConfig, saveConfig, type ArgusEnvConfig } from "@/lib/argus-env";
@@ -290,6 +291,29 @@ function Settings() {
               <p className="font-mono text-xs text-muted-foreground">{systemObjectId}</p>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("settings.visits.title")}</CardTitle>
+          <CardDescription>{t("settings.visits.description")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <label className="flex cursor-pointer items-start gap-3">
+            <Switch
+              checked={Boolean(cfg.linkVisitorToIdentity)}
+              onCheckedChange={(v) => setCfg((c) => ({ ...c, linkVisitorToIdentity: v }))}
+            />
+            <span className="space-y-1">
+              <span className="block text-sm font-medium text-foreground">
+                {t("settings.visits.linkLabel")}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t("settings.visits.linkHint")}
+              </span>
+            </span>
+          </label>
         </CardContent>
       </Card>
 
