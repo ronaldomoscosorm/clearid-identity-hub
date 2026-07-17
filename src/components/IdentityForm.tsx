@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { format, parse } from "date-fns";
@@ -6,7 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
-import { useIdentityFieldLabels } from "@/lib/identity-labels";
+import { useIdentityFieldLabels, STANDARD_IDENTITY_FIELDS } from "@/lib/identity-labels";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { typeOf as siteFieldKind, pickLang, optionsOf, isTruthy as cfTruthy } from "@/lib/custom-fields";
@@ -170,7 +170,7 @@ export function IdentityForm({
       );
     });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const { alias, isVisible } = useIdentityFieldLabels();
+  const { alias, isVisible, orderKeys } = useIdentityFieldLabels();
 
   // Tipos de trabalhador (Supabase) → mapeados para o workerTypeCode do Argus.
   const workerTypesQuery = useQuery({
@@ -390,20 +390,137 @@ export function IdentityForm({
     );
   };
 
-  const renderExtraFields = (section: ExtraField["section"]) =>
-    EXTRA_FIELDS.filter((f) => f.section === section && isVisible(f.key)).map((f) => (
-      <div key={f.key} className="space-y-2">
-        <Label htmlFor={`x-${f.key}`}>{alias(f.key, t(`identityForm.extra.${f.key}`))}</Label>
-        <Input
-          id={`x-${f.key}`}
-          type={f.type === "date" ? "date" : f.type === "email" ? "email" : "text"}
-          value={extra[f.key] ?? ""}
-          onChange={(e) => setExtraField(f.key, e.target.value)}
-        />
-      </div>
-    ));
-  const hasSection = (section: ExtraField["section"]) =>
-    EXTRA_FIELDS.some((f) => f.section === section && isVisible(f.key));
+  const renderExtraField = (f: ExtraField) => (
+    <div key={f.key} className="space-y-2">
+      <Label htmlFor={`x-${f.key}`}>{alias(f.key, t(`identityForm.extra.${f.key}`))}</Label>
+      <Input
+        id={`x-${f.key}`}
+        type={f.type === "date" ? "date" : f.type === "email" ? "email" : "text"}
+        value={extra[f.key] ?? ""}
+        onChange={(e) => setExtraField(f.key, e.target.value)}
+      />
+    </div>
+  );
+
+  // ---- Layout configurável dos campos padrão (designer de layout) ----
+  const extraByKey = new Map(EXTRA_FIELDS.map((f) => [f.key, f]));
+  const requiredStd = new Set(
+    STANDARD_IDENTITY_FIELDS.filter((f) => f.required).map((f) => f.key),
+  );
+
+  // Campos padrão visíveis, na ordem configurada. Obrigatórios sempre; extras
+  // (privateData/companyData) somem quando o tipo tem campos do site.
+  const orderedStandardKeys = orderKeys(STANDARD_IDENTITY_FIELDS.map((f) => f.key)).filter((k) => {
+    if (requiredStd.has(k)) return true;
+    if (extraByKey.has(k)) return isVisible(k) && !hasSiteFields;
+    return isVisible(k); // display_name, company_id
+  });
+
+  const renderStandardField = (k: string): ReactNode => {
+    const req = requiredStd.has(k);
+    const star = req ? <span className="ml-0.5 text-destructive">*</span> : null;
+    switch (k) {
+      case "company_worker_type_code":
+        return (
+          <div key={k} className="space-y-2 sm:col-span-2 sm:max-w-sm">
+            <Label>
+              {alias("company_worker_type_code", t("identityForm.workerType"))}
+              {star}
+            </Label>
+            <Select value={workerTypeId} onValueChange={(id) => setWorkerTypeId(id)}>
+              <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
+                <SelectValue placeholder={t("identityForm.selectWorkerTypePlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {workerTypes.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {pickLang(w.name_i18n, lang) || w.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.workerTypeCode && <p className="text-xs text-destructive">{errors.workerTypeCode}</p>}
+          </div>
+        );
+      case "first_name":
+        return (
+          <div key={k} className="space-y-2">
+            <Label htmlFor="firstName">{alias("first_name", t("common.name"))}{star}</Label>
+            <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+            {errors.firstName && <p className="text-xs text-destructive">{errors.firstName}</p>}
+          </div>
+        );
+      case "last_name":
+        return (
+          <div key={k} className="space-y-2">
+            <Label htmlFor="lastName">{alias("last_name", t("identityForm.lastName"))}{star}</Label>
+            <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
+          </div>
+        );
+      case "display_name":
+        return (
+          <div key={k} className="space-y-2 sm:col-span-2">
+            <Label htmlFor="displayName">{alias("display_name", t("identityForm.displayName"))}</Label>
+            <Input
+              id="displayName"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={t("identityForm.displayNamePlaceholder")}
+            />
+          </div>
+        );
+      case "email":
+        return (
+          <div key={k} className="space-y-2 sm:col-span-2">
+            <Label htmlFor="email">{alias("email", t("common.email"))}{star}</Label>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+          </div>
+        );
+      case "company_site_id":
+        return (
+          <div key={k} className="space-y-2">
+            <Label>{alias("company_site_id", t("identityForm.site"))}{star}</Label>
+            <Select value={siteId} onValueChange={setSiteId}>
+              <SelectTrigger className={cn(errors.siteId && "border-destructive")}>
+                <SelectValue placeholder={sitesQuery.isLoading ? t("common.loading") : t("identityForm.selectSitePlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {sites.map((s) => (
+                  <SelectItem key={s.siteId} value={s.siteId}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.siteId && <p className="text-xs text-destructive">{errors.siteId}</p>}
+          </div>
+        );
+      case "company_id":
+        return (
+          <div key={k} className="space-y-2">
+            <Label>{alias("company_id", t("identityForm.company"))}</Label>
+            <Select
+              value={companyId || "__NONE__"}
+              onValueChange={(v) => setCompanyId(v === "__NONE__" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t("identityForm.none")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__NONE__">{t("identityForm.none")}</SelectItem>
+                {companies.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        );
+      default: {
+        const f = extraByKey.get(k);
+        return f ? renderExtraField(f) : null;
+      }
+    }
+  };
 
   const setField = (name: string, value: string) =>
     setCustomFields((prev) => ({ ...prev, [name]: value }));
@@ -593,142 +710,18 @@ export function IdentityForm({
         </Card>
       )}
 
-      {/* Tipo do trabalhador — primeira linha, isolado. Condiciona os campos
-          do site e customizáveis exibidos abaixo. */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="text-base">
-            {alias("company_worker_type_code", t("identityForm.workerType"))}
-            <span className="ml-0.5 text-destructive">*</span>
-          </CardTitle>
-          {statusBadge}
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 sm:max-w-sm">
-            <Select
-              value={workerTypeId}
-              onValueChange={(id) => setWorkerTypeId(id)}
-            >
-              <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
-                <SelectValue placeholder={t("identityForm.selectWorkerTypePlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {workerTypes.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>
-                    {pickLang(w.name_i18n, lang) || w.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.workerTypeCode && (
-              <p className="text-xs text-destructive">{errors.workerTypeCode}</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {statusBadge && <div className="flex justify-end">{statusBadge}</div>}
 
+      {/* Campos padrão na ordem definida pelo designer de layout. O Tipo do
+          Trabalhador continua condicionando os campos do site abaixo. */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t("identityForm.identification")}</CardTitle>
+          <CardTitle className="text-base">{t("identityForm.formData")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          {/* Obrigatórios — sempre exibidos (apelido apenas renomeia). */}
-          <div className="space-y-2">
-            <Label htmlFor="firstName">
-              {alias("first_name", t("common.name"))}
-              <span className="ml-0.5 text-destructive">*</span>
-            </Label>
-            <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-            {errors.firstName && <p className="text-xs text-destructive">{errors.firstName}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="lastName">
-              {alias("last_name", t("identityForm.lastName"))}
-              <span className="ml-0.5 text-destructive">*</span>
-            </Label>
-            <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-            {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="displayName">{alias("display_name", t("identityForm.displayName"))}</Label>
-            <Input
-              id="displayName"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder={t("identityForm.displayNamePlaceholder")}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="email">
-              {alias("email", t("common.email"))}
-              <span className="ml-0.5 text-destructive">*</span>
-            </Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label>
-              {alias("company_site_id", t("identityForm.site"))}
-              <span className="ml-0.5 text-destructive">*</span>
-            </Label>
-            <Select value={siteId} onValueChange={setSiteId}>
-              <SelectTrigger className={cn(errors.siteId && "border-destructive")}>
-                <SelectValue placeholder={sitesQuery.isLoading ? t("common.loading") : t("identityForm.selectSitePlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {sites.map((s) => (
-                  <SelectItem key={s.siteId} value={s.siteId}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.siteId && <p className="text-xs text-destructive">{errors.siteId}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label>{t("identityForm.company")}</Label>
-            <Select
-              value={companyId || "__NONE__"}
-              onValueChange={(v) => setCompanyId(v === "__NONE__" ? "" : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={t("identityForm.none")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__NONE__">{t("identityForm.none")}</SelectItem>
-                {companies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {!hasSiteFields && renderExtraFields("ident")}
+          {orderedStandardKeys.map((k) => renderStandardField(k))}
         </CardContent>
       </Card>
-
-      {!hasSiteFields && hasSection("personal") && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("identityForm.personalData")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            {renderExtraFields("personal")}
-          </CardContent>
-        </Card>
-      )}
-
-      {!hasSiteFields && hasSection("company") && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("identityForm.corporateLink")}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            {renderExtraFields("company")}
-          </CardContent>
-        </Card>
-      )}
 
       {workerTypeId && siteFields.length > 0 && (
         <Card>

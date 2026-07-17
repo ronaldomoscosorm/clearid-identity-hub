@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as FotoTokenRouteImport } from './routes/foto.$token'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedRegrasRouteImport } from './routes/_authenticated/regras'
+import { Route as AuthenticatedLayoutFormularioRouteImport } from './routes/_authenticated/layout-formulario'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
 import { Route as AuthenticatedEmpresasRouteImport } from './routes/_authenticated/empresas'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
@@ -54,6 +55,12 @@ const AuthenticatedRegrasRoute = AuthenticatedRegrasRouteImport.update({
   path: '/regras',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedLayoutFormularioRoute =
+  AuthenticatedLayoutFormularioRouteImport.update({
+    id: '/layout-formulario',
+    path: '/layout-formulario',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedIdentitiesRoute = AuthenticatedIdentitiesRouteImport.update({
   id: '/identities',
   path: '/identities',
@@ -151,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/empresas': typeof AuthenticatedEmpresasRoute
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
+  '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/foto/$token': typeof FotoTokenRoute
@@ -171,6 +179,7 @@ export interface FileRoutesByTo {
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/empresas': typeof AuthenticatedEmpresasRoute
+  '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/foto/$token': typeof FotoTokenRoute
@@ -194,6 +203,7 @@ export interface FileRoutesById {
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/_authenticated/empresas': typeof AuthenticatedEmpresasRoute
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
+  '/_authenticated/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/foto/$token': typeof FotoTokenRoute
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/diagnostics'
     | '/empresas'
     | '/identities'
+    | '/layout-formulario'
     | '/regras'
     | '/settings'
     | '/foto/$token'
@@ -237,6 +248,7 @@ export interface FileRouteTypes {
     | '/campos-personalizados'
     | '/diagnostics'
     | '/empresas'
+    | '/layout-formulario'
     | '/regras'
     | '/settings'
     | '/foto/$token'
@@ -259,6 +271,7 @@ export interface FileRouteTypes {
     | '/_authenticated/diagnostics'
     | '/_authenticated/empresas'
     | '/_authenticated/identities'
+    | '/_authenticated/layout-formulario'
     | '/_authenticated/regras'
     | '/_authenticated/settings'
     | '/foto/$token'
@@ -312,6 +325,13 @@ declare module '@tanstack/react-router' {
       path: '/regras'
       fullPath: '/regras'
       preLoaderRoute: typeof AuthenticatedRegrasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/layout-formulario': {
+      id: '/_authenticated/layout-formulario'
+      path: '/layout-formulario'
+      fullPath: '/layout-formulario'
+      preLoaderRoute: typeof AuthenticatedLayoutFormularioRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/identities': {
@@ -449,6 +469,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
   AuthenticatedEmpresasRoute: typeof AuthenticatedEmpresasRoute
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
+  AuthenticatedLayoutFormularioRoute: typeof AuthenticatedLayoutFormularioRoute
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTerceirizadosIdRoute: typeof AuthenticatedTerceirizadosIdRoute
@@ -467,6 +488,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
   AuthenticatedEmpresasRoute: AuthenticatedEmpresasRoute,
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
+  AuthenticatedLayoutFormularioRoute: AuthenticatedLayoutFormularioRoute,
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTerceirizadosIdRoute: AuthenticatedTerceirizadosIdRoute,

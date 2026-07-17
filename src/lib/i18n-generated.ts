@@ -4,6 +4,14 @@ import type { Lang } from "./i18n";
 // NÃO editar à mão em massa — regenerar via workflow se precisar.
 export const generated: Record<Lang, Record<string, string>> = {
   "pt-BR": {
+    "formLayout.title": "Layout do formulário",
+    "formLayout.subtitle": "Arraste os campos entre as colunas para definir quais aparecem no cadastro de pessoas e em que ordem.",
+    "formLayout.available": "Disponíveis",
+    "formLayout.availableHint": "Campos fora do formulário. Arraste para 'No formulário'.",
+    "formLayout.inForm": "No formulário",
+    "formLayout.inFormHint": "Campos exibidos, na ordem. Os obrigatórios (cadeado) não podem sair.",
+    "formLayout.saved": "Layout salvo.",
+    "identityForm.formData": "Dados",
     "settings.visits.title": "Visitas",
     "settings.visits.description": "Comportamento do cadastro de visitas.",
     "settings.visits.linkLabel": "Vincular visitante a uma identidade",
@@ -642,6 +650,14 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "en-US": {
+    "formLayout.title": "Form layout",
+    "formLayout.subtitle": "Drag the fields between columns to set which appear in the person form and in what order.",
+    "formLayout.available": "Available",
+    "formLayout.availableHint": "Fields not in the form. Drag them to 'In the form'.",
+    "formLayout.inForm": "In the form",
+    "formLayout.inFormHint": "Shown fields, in order. Required ones (lock) can't be removed.",
+    "formLayout.saved": "Layout saved.",
+    "identityForm.formData": "Details",
     "settings.visits.title": "Visits",
     "settings.visits.description": "Visit registration behavior.",
     "settings.visits.linkLabel": "Link visitor to an identity",
@@ -1280,6 +1296,14 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "es-ES": {
+    "formLayout.title": "Diseño del formulario",
+    "formLayout.subtitle": "Arrastre los campos entre columnas para definir cuáles aparecen en el registro de personas y en qué orden.",
+    "formLayout.available": "Disponibles",
+    "formLayout.availableHint": "Campos fuera del formulario. Arrástrelos a 'En el formulario'.",
+    "formLayout.inForm": "En el formulario",
+    "formLayout.inFormHint": "Campos mostrados, en orden. Los obligatorios (candado) no se pueden quitar.",
+    "formLayout.saved": "Diseño guardado.",
+    "identityForm.formData": "Datos",
     "settings.visits.title": "Visitas",
     "settings.visits.description": "Comportamiento del registro de visitas.",
     "settings.visits.linkLabel": "Vincular visitante a una identidad",

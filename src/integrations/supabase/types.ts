@@ -394,6 +394,7 @@ export type Database = {
           alias: Json
           created_at: string
           display_index: number | null
+          display_order: number | null
           field_key: string
           id: string
           is_visible: boolean
@@ -403,6 +404,7 @@ export type Database = {
           alias?: Json
           created_at?: string
           display_index?: number | null
+          display_order?: number | null
           field_key: string
           id?: string
           is_visible?: boolean
@@ -412,6 +414,7 @@ export type Database = {
           alias?: Json
           created_at?: string
           display_index?: number | null
+          display_order?: number | null
           field_key?: string
           id?: string
           is_visible?: boolean

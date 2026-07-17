@@ -30,13 +30,47 @@ export const IDENTITY_FIELD_KEYS = [
   "system_external_id",
 ] as const;
 
+/**
+ * Catálogo dos campos padrão do formulário de identity, na ordem default.
+ * `required` = obrigatório (não pode ser removido do formulário no designer).
+ * As `key`s casam com identity_field_labels.field_key (apelido/visibilidade/ordem).
+ */
+export type StandardIdentityField = { key: string; required: boolean };
+export const STANDARD_IDENTITY_FIELDS: StandardIdentityField[] = [
+  { key: "company_worker_type_code", required: true },
+  { key: "first_name", required: true },
+  { key: "last_name", required: true },
+  { key: "display_name", required: false },
+  { key: "email", required: true },
+  { key: "company_site_id", required: true },
+  { key: "company_id", required: false },
+  { key: "middle_name", required: false },
+  { key: "description", required: false },
+  { key: "country_code", required: false },
+  { key: "culture", required: false },
+  { key: "private_birthday", required: false },
+  { key: "private_employee_number", required: false },
+  { key: "private_secondary_email", required: false },
+  { key: "private_city_of_residence", required: false },
+  { key: "private_state_of_residence", required: false },
+  { key: "private_zip_code", required: false },
+  { key: "private_phone_primary", required: false },
+  { key: "private_phone_secondary", required: false },
+  { key: "company_name", required: false },
+  { key: "company_job_title", required: false },
+  { key: "company_department_name", required: false },
+  { key: "company_supervisor_name", required: false },
+];
+
+const DEFAULT_INDEX = new Map(STANDARD_IDENTITY_FIELDS.map((f, i) => [f.key, i]));
+
 export function useIdentityFieldLabels(lang = "pt-BR") {
   const query = useQuery({
     queryKey: ["identity-field-labels"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("identity_field_labels")
-        .select("field_key, alias, is_visible");
+        .select("field_key, alias, is_visible, display_order");
       if (error) throw new Error(error.message);
       return data ?? [];
     },
@@ -61,5 +95,16 @@ export function useIdentityFieldLabels(lang = "pt-BR") {
     return row ? row.is_visible : true;
   };
 
-  return { alias, isVisible, labels: query.data ?? [] };
+  /** Posição do campo: display_order do banco, ou a ordem default do catálogo. */
+  const orderOf = (fieldKey: string): number => {
+    const row = map.get(fieldKey) as { display_order?: number | null } | undefined;
+    if (row && row.display_order != null) return row.display_order;
+    return DEFAULT_INDEX.get(fieldKey) ?? 999;
+  };
+
+  /** Ordena uma lista de field keys pela posição configurada. */
+  const orderKeys = (keys: string[]): string[] =>
+    [...keys].sort((a, b) => orderOf(a) - orderOf(b));
+
+  return { alias, isVisible, orderOf, orderKeys, labels: query.data ?? [], loaded: query.isSuccess };
 }
