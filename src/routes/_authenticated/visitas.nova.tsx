@@ -10,6 +10,7 @@ import {
   type VisitVisitor,
 } from "@/lib/argus-client";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
+import { PhotoCapture } from "@/components/PhotoCapture";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/_authenticated/visitas/nova")({
 });
 
 type Picked = { identityId: string; label: string };
-type VisitorRow = { firstName: string; lastName: string; email: string };
+type VisitorRow = { firstName: string; lastName: string; email: string; photo: Blob | null };
 
 /** datetime-local (hora local) → ISO UTC exigido pela API. */
 function toUtcIso(local: string): string {
@@ -67,7 +68,7 @@ function NovaVisitaPage() {
   const [requester, setRequester] = useState<Picked | null>(null);
   const [hosts, setHosts] = useState<Picked[]>([]);
   const [visitors, setVisitors] = useState<VisitorRow[]>([
-    { firstName: "", lastName: "", email: "" },
+    { firstName: "", lastName: "", email: "", photo: null },
   ]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   // Fluxo A concluído: visitantes com check-in, aguardando a credencial.
@@ -102,12 +103,67 @@ function NovaVisitaPage() {
     if (!requester) e.requester = t("visits.validation.required");
     if (hosts.length === 0) e.hosts = t("visits.validation.atLeastOneHost");
     if (!visitors.some((v) => v.firstName.trim())) e.visitors = t("visits.validation.atLeastOneVisitor");
+    // Para ter foto, o visitante vira uma identidade (2b) — exige sobrenome e e-mail.
+    visitors.forEach((v, i) => {
+      if (v.photo && (!v.firstName.trim() || !v.lastName.trim() || !v.email.trim())) {
+        e[`visitor_${i}`] = t("visits.validation.photoNeedsIdentity");
+      }
+    });
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
+  // 2b: como a API não tem foto de visitante, quando há foto criamos (ou
+  // reaproveitamos por e-mail) uma identidade e subimos a foto nela; o visitante
+  // fica vinculado a essa identidade (identityId). Devolve o id ou null.
+  const resolveVisitorIdentity = async (v: VisitorRow): Promise<string | null> => {
+    if (!v.photo) return null;
+    const email = v.email.trim();
+    const existing = email ? await argusApi.findIdentitiesByEmail(email) : [];
+    let id: string;
+    if (existing.length) {
+      id = existing[0].identityId;
+    } else {
+      const created = await argusApi.createIdentity({
+        externalId: "",
+        firstName: v.firstName.trim(),
+        lastName: v.lastName.trim(),
+        email,
+        status: "Active",
+        workerTypeCode: "Terceiros", // visitante
+        siteId,
+      });
+      id = created.identityId;
+    }
+    await argusApi.uploadIdentityPicture(id, v.photo);
+    return id;
+  };
+
   const create = useMutation({
     mutationFn: async () => {
+      const warnings: string[] = [];
+      const rows = visitors.filter((v) => v.firstName.trim());
+      const builtVisitors = await Promise.all(
+        rows.map(async (v) => {
+          let identityId: string | null = null;
+          if (v.photo) {
+            try {
+              identityId = await resolveVisitorIdentity(v);
+            } catch (e) {
+              // Falha ao criar identidade/subir foto não bloqueia a visita:
+              // o visitante entra como avulso (sem foto) e avisamos.
+              warnings.push(`${v.firstName.trim()}: ${(e as Error).message}`);
+            }
+          }
+          return {
+            firstName: v.firstName.trim(),
+            lastName: v.lastName.trim() || null,
+            email: v.email.trim() || null,
+            ...(identityId ? { identityId } : {}),
+          };
+        }),
+      );
+
       const visit = await argusApi.createVisit({
         visitEventName: name.trim(),
         startDateTimeUtc: toUtcIso(start),
@@ -120,14 +176,15 @@ function NovaVisitaPage() {
         // "Apenas agendar" → sem type: só cria (sem check-in, sem credencial).
         ...(mode === "now" ? { type: "Planned" } : {}),
         hosts: hosts.map((h) => ({ identityId: h.identityId })),
-        visitors: visitors
-          .filter((v) => v.firstName.trim())
-          .map((v) => ({
-            firstName: v.firstName.trim(),
-            lastName: v.lastName.trim() || null,
-            email: v.email.trim() || null,
-          })),
+        visitors: builtVisitors,
       });
+
+      if (warnings.length) {
+        toast.warning(t("visits.photoIssues"), {
+          description: warnings.join("; "),
+          duration: 12000,
+        });
+      }
 
       if (mode === "schedule") return { visit, visitors: [] as VisitVisitor[] };
 
@@ -359,45 +416,59 @@ function NovaVisitaPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setVisitors((p) => [...p, { firstName: "", lastName: "", email: "" }])}
+            onClick={() =>
+              setVisitors((p) => [...p, { firstName: "", lastName: "", email: "", photo: null }])
+            }
           >
             <Plus className="mr-1 h-4 w-4" /> {t("visits.addVisitor")}
           </Button>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {visitors.map((v, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_1.5fr_auto]">
-              <Input
-                placeholder={t("visits.firstName")}
-                value={v.firstName}
-                onChange={(e) =>
-                  setVisitors((p) => p.map((x, j) => (j === i ? { ...x, firstName: e.target.value } : x)))
+            <div key={i} className="space-y-2 rounded-md border p-3">
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1.5fr_auto]">
+                <Input
+                  placeholder={t("visits.firstName")}
+                  value={v.firstName}
+                  onChange={(e) =>
+                    setVisitors((p) => p.map((x, j) => (j === i ? { ...x, firstName: e.target.value } : x)))
+                  }
+                />
+                <Input
+                  placeholder={t("visits.lastName")}
+                  value={v.lastName}
+                  onChange={(e) =>
+                    setVisitors((p) => p.map((x, j) => (j === i ? { ...x, lastName: e.target.value } : x)))
+                  }
+                />
+                <Input
+                  type="email"
+                  placeholder={t("common.email")}
+                  value={v.email}
+                  onChange={(e) =>
+                    setVisitors((p) => p.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))
+                  }
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive"
+                  disabled={visitors.length === 1}
+                  onClick={() => setVisitors((p) => p.filter((_, j) => j !== i))}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <PhotoCapture
+                value={v.photo}
+                onChange={(blob) =>
+                  setVisitors((p) => p.map((x, j) => (j === i ? { ...x, photo: blob } : x)))
                 }
               />
-              <Input
-                placeholder={t("visits.lastName")}
-                value={v.lastName}
-                onChange={(e) =>
-                  setVisitors((p) => p.map((x, j) => (j === i ? { ...x, lastName: e.target.value } : x)))
-                }
-              />
-              <Input
-                type="email"
-                placeholder={t("common.email")}
-                value={v.email}
-                onChange={(e) =>
-                  setVisitors((p) => p.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))
-                }
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-destructive hover:text-destructive"
-                disabled={visitors.length === 1}
-                onClick={() => setVisitors((p) => p.filter((_, j) => j !== i))}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <p className="text-xs text-muted-foreground">{t("visits.photoHint")}</p>
+              {errors[`visitor_${i}`] && (
+                <p className="text-xs text-destructive">{errors[`visitor_${i}`]}</p>
+              )}
             </div>
           ))}
           {errors.visitors && <p className="text-xs text-destructive">{errors.visitors}</p>}

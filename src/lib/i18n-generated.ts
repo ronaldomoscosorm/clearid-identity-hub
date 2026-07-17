@@ -4,6 +4,9 @@ import type { Lang } from "./i18n";
 // NÃO editar à mão em massa — regenerar via workflow se precisar.
 export const generated: Record<Lang, Record<string, string>> = {
   "pt-BR": {
+    "visits.photoHint": "Com foto, o visitante é cadastrado como pessoa (Terceiros) para receber a imagem. Exige sobrenome e e-mail.",
+    "visits.validation.photoNeedsIdentity": "Para foto, informe sobrenome e e-mail.",
+    "visits.photoIssues": "Visita criada, mas houve falha na foto de algum visitante.",
     "photoCapture.title": "Foto",
     "photoCapture.optional": "Opcional. Tire com a webcam ou envie um arquivo.",
     "photoCapture.ready": "Foto pronta para envio.",
@@ -635,6 +638,9 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "en-US": {
+    "visits.photoHint": "With a photo, the visitor is registered as a person (Contractor) to receive the image. Requires last name and email.",
+    "visits.validation.photoNeedsIdentity": "For a photo, provide last name and email.",
+    "visits.photoIssues": "Visit created, but a visitor's photo failed.",
     "photoCapture.title": "Photo",
     "photoCapture.optional": "Optional. Take with the webcam or upload a file.",
     "photoCapture.ready": "Photo ready to upload.",
@@ -1266,6 +1272,9 @@ export const generated: Record<Lang, Record<string, string>> = {
     "identityForm.extra.company_supervisor_name": "Supervisor"
   },
   "es-ES": {
+    "visits.photoHint": "Con foto, el visitante se registra como persona (Tercero) para recibir la imagen. Requiere apellido y correo.",
+    "visits.validation.photoNeedsIdentity": "Para foto, indique apellido y correo.",
+    "visits.photoIssues": "Visita creada, pero la foto de un visitante falló.",
     "photoCapture.title": "Foto",
     "photoCapture.optional": "Opcional. Tome con la webcam o suba un archivo.",
     "photoCapture.ready": "Foto lista para enviar.",
