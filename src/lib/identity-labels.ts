@@ -39,7 +39,6 @@ export type StandardIdentityField = { key: string; required: boolean };
 export const STANDARD_IDENTITY_FIELDS: StandardIdentityField[] = [
   { key: "company_worker_type_code", required: true },
   { key: "first_name", required: true },
-  { key: "last_name", required: true },
   { key: "display_name", required: false },
   { key: "email", required: true },
   { key: "company_site_id", required: true },

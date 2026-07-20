@@ -3,10 +3,12 @@ import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useIdentityFieldLabels, STANDARD_IDENTITY_FIELDS } from "@/lib/identity-labels";
+import { useFormLayoutConfig, layoutForWorkerType } from "@/lib/form-layout";
+import { useSpecialFields, type DropdownOption } from "@/lib/special-fields";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { typeOf as siteFieldKind, pickLang, optionsOf, isTruthy as cfTruthy } from "@/lib/custom-fields";
@@ -26,20 +28,41 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import type { IdentityUpsert } from "@/lib/argus-client";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import type { SiteFieldValue } from "@/lib/supabase-mirror";
 
 type TFunc = (k: string, vars?: Record<string, string | number>) => string;
 
+// Formata um CNPJ (14 dígitos) como 00.000.000/0000-00; caso contrário, retorna o valor original.
+const formatCnpj = (raw: string): string => {
+  const d = raw.replace(/\D/g, "");
+  if (d.length !== 14) return raw;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+};
+
 const makeBaseSchema = (t: TFunc) =>
   z.object({
     externalId: z.string().trim().max(120).optional().default(""),
-    firstName: z.string().trim().min(1, t("identityForm.validation.required")).max(100),
-    lastName: z.string().trim().min(1, t("identityForm.validation.required")).max(100),
+    // Nome completo — o primeiro token vira firstName e o restante lastName.
+    name: z.string().trim().min(1, t("identityForm.validation.required")).max(200),
     email: z.string().trim().email(t("identityForm.validation.invalidEmail")).max(255),
     status: z.enum(["Active", "Inactive"]),
   });
+
+/** Divide o nome completo: primeiro token = firstName, restante = lastName. */
+function splitName(full: string): { firstName: string; lastName: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") };
+}
 
 // Campos adicionais do modelo ClearID, além dos fixos (nome/sobrenome/email/
 // site/tipo). Cada um é controlável por apelido (visibilidade + rótulo).
@@ -89,6 +112,10 @@ export type IdentityFormProps = {
   extraActions?: React.ReactNode;
   statusBadge?: React.ReactNode;
   showCustomFields?: boolean;
+  /** Tipo de trabalhador pré-selecionado (ex.: aberto pelo submenu de Pessoas). */
+  initialWorkerTypeId?: string;
+  /** Trava o seletor de tipo de trabalhador (quando aberto por um tipo específico). */
+  lockWorkerType?: boolean;
 };
 
 export function IdentityForm({
@@ -100,17 +127,22 @@ export function IdentityForm({
   extraActions,
   statusBadge,
   showCustomFields = false,
+  initialWorkerTypeId,
+  lockWorkerType = false,
 }: IdentityFormProps) {
   const { t, lang } = useT();
   const [externalId, setExternalId] = useState(initial?.externalId ?? "");
-  const [firstName, setFirstName] = useState(initial?.firstName ?? "");
-  const [lastName, setLastName] = useState(initial?.lastName ?? "");
+  // Nome completo (leitura: firstName + lastName concatenados).
+  const [fullName, setFullName] = useState(
+    [initial?.firstName, initial?.lastName].filter(Boolean).join(" ").trim(),
+  );
   const [email, setEmail] = useState(initial?.email ?? "");
   const [displayName, setDisplayName] = useState(initial?.displayName ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
-  const [workerTypeId, setWorkerTypeId] = useState<string>("");
+  const [workerTypeId, setWorkerTypeId] = useState<string>(initialWorkerTypeId ?? "");
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [companyId, setCompanyId] = useState<string>("");
+  const [companyOpen, setCompanyOpen] = useState(false);
   const defaultSiteId = useDefaultSiteId();
   const [siteId, setSiteId] = useState<string>(initial?.siteId ?? defaultSiteId ?? "");
   useEffect(() => {
@@ -170,7 +202,8 @@ export function IdentityForm({
       );
     });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const { alias, isVisible, orderKeys } = useIdentityFieldLabels();
+  const { alias } = useIdentityFieldLabels();
+  const { config: formLayoutConfig } = useFormLayoutConfig();
 
   // Tipos de trabalhador (Supabase) → mapeados para o workerTypeCode do Argus.
   const workerTypesQuery = useQuery({
@@ -224,8 +257,6 @@ export function IdentityForm({
     enabled: Boolean(siteId && workerTypeId),
   });
   const siteFields = siteFieldsQuery.data ?? [];
-  // Havendo campos do site para o tipo, exibe apenas os obrigatórios + esses.
-  const hasSiteFields = siteFields.length > 0;
   const siteFieldLabel = (sf: SiteFieldLite) =>
     pickLang(sf.display_name_override) || sf.definition?.custom_field_name || t("identityForm.fieldFallback");
 
@@ -235,7 +266,7 @@ export function IdentityForm({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("companies")
-        .select("id, name")
+        .select("id, name, tax_id")
         .eq("site_id", siteId)
         .order("name", { ascending: true });
       if (error) throw new Error(error.message);
@@ -244,6 +275,9 @@ export function IdentityForm({
     enabled: Boolean(siteId),
   });
   const companies = companiesQuery.data ?? [];
+  // Rótulo da empresa: "Nome - CNPJ" (ou só o nome quando não há CNPJ).
+  const companyLabel = (c: { name: string; tax_id?: string | null }) =>
+    c.tax_id ? `${c.name} - ${formatCnpj(c.tax_id)}` : c.name;
 
   // Na edição, carrega a empresa já vinculada (Supabase).
   const initialIdentityId = (initial as { identityId?: string } | undefined)?.identityId;
@@ -308,37 +342,17 @@ export function IdentityForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyRelatedQuery.data, siteFieldsQuery.data]);
 
-  // Seções dos campos personalizados (ClearID) → agrupa os campos do site.
-  const sectionsQuery = useQuery({
-    queryKey: ["custom-field-sections"],
-    queryFn: () => argusApi.listCustomFieldSections(),
-    staleTime: 5 * 60 * 1000,
-  });
-  const sectionByField = new Map<string, { display: string; sIdx: number; fIdx: number }>();
-  for (const sec of sectionsQuery.data ?? []) {
-    for (const f of sec.fields) {
-      sectionByField.set(f.name, {
-        display: sec.displayName || sec.sectionName,
-        sIdx: sec.index,
-        fIdx: f.index,
-      });
-    }
-  }
-  const OUTROS = t("identityForm.otherSection");
-  const groupedSiteFields = (() => {
-    const groups = new Map<string, { display: string; sIdx: number; items: { sf: SiteFieldLite; fIdx: number }[] }>();
-    for (const sf of siteFields) {
-      const name = sf.definition?.custom_field_name ?? "";
-      const info = sectionByField.get(name);
-      const key = info?.display ?? OUTROS;
-      const sIdx = info?.sIdx ?? 999;
-      if (!groups.has(key)) groups.set(key, { display: key, sIdx, items: [] });
-      groups.get(key)!.items.push({ sf, fIdx: info?.fIdx ?? 0 });
-    }
-    const arr = [...groups.values()].sort((a, b) => a.sIdx - b.sIdx);
-    for (const g of arr) g.items.sort((a, b) => a.fIdx - b.fIdx);
-    return arr;
-  })();
+  // Campo do site por nome de definição — para renderizar dentro dos grupos.
+  const siteFieldByName = new Map(
+    siteFields.filter((sf) => sf.definition).map((sf) => [sf.definition!.custom_field_name, sf]),
+  );
+  // Definições dos campos customizáveis (ClearID) por nome — permite renderizar
+  // no layout campos que não são campos do site do tipo, respeitando o tipo.
+  const cfDefByName = new Map(
+    (fieldsQuery.data ?? []).filter((f) => !f.isDeleted).map((f) => [f.customFieldName, f]),
+  );
+  // Dropdowns especiais (opções value/label vinculadas a campos do ClearID).
+  const { byName: specialByName, labelByName: specialLabelByName } = useSpecialFields();
 
   const renderSiteField = (sf: SiteFieldLite) => {
     const name = sf.definition?.custom_field_name ?? sf.id;
@@ -390,6 +404,77 @@ export function IdentityForm({
     );
   };
 
+  // Renderiza um campo customizável do layout a partir da sua definição (quando
+  // não é campo do site do tipo), obedecendo ao tipo: data, booleano, número, texto.
+  const renderDefField = (def: {
+    customFieldName: string;
+    displayName?: string | null;
+    customFieldType?: string | null;
+    isReadOnly?: boolean;
+  }) => {
+    const name = def.customFieldName;
+    const kind = siteFieldKind(def.customFieldType);
+    const value = customFields[name] ?? "";
+    const disabled = !!def.isReadOnly;
+    return (
+      <div key={`cf-${name}`} className="space-y-1.5">
+        <Label htmlFor={`cf-${name}`} className="text-xs text-muted-foreground">
+          {alias(name, def.displayName || name)}
+          {disabled && <span className="ml-1 text-muted-foreground">{t("identityForm.readOnly")}</span>}
+        </Label>
+        {kind === "boolean" ? (
+          <div className="flex h-9 items-center">
+            <Checkbox
+              id={`cf-${name}`}
+              checked={cfTruthy(value)}
+              onCheckedChange={(c) => setField(name, c ? "true" : "false")}
+              disabled={disabled}
+            />
+          </div>
+        ) : (
+          <Input
+            id={`cf-${name}`}
+            type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
+            value={value}
+            onChange={(e) => setField(name, e.target.value)}
+            disabled={disabled}
+          />
+        )}
+      </div>
+    );
+  };
+
+  // Campo customizável com dropdown especial: grava o `value` da opção no ClearID.
+  const renderSpecialDropdown = (name: string, options: DropdownOption[]) => {
+    const value = customFields[name] ?? "";
+    const label = specialLabelByName.get(name) || alias(name, cfDefByName.get(name)?.displayName || name);
+    // Obrigatoriedade vem do campo do site (quando o campo também é do site).
+    const sf = siteFieldByName.get(name);
+    const required = !!(sf && sf.is_required && sf.fillable);
+    const err = sf ? errors[`sf-${sf.id}`] : undefined;
+    return (
+      <div key={`cf-${name}`} className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">
+          {label}
+          {required && <span className="ml-0.5 text-destructive">*</span>}
+        </Label>
+        <Select value={value} onValueChange={(v) => setField(name, v)}>
+          <SelectTrigger id={`cf-${name}`} className={cn(err && "border-destructive")}>
+            <SelectValue placeholder={t("identityForm.selectPlaceholder")} />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </div>
+    );
+  };
+
   const renderExtraField = (f: ExtraField) => (
     <div key={f.key} className="space-y-2">
       <Label htmlFor={`x-${f.key}`}>{alias(f.key, t(`identityForm.extra.${f.key}`))}</Label>
@@ -408,15 +493,37 @@ export function IdentityForm({
     STANDARD_IDENTITY_FIELDS.filter((f) => f.required).map((f) => f.key),
   );
 
-  // Campos padrão visíveis, na ordem configurada. Obrigatórios sempre; extras
-  // (privateData/companyData) somem quando o tipo tem campos do site.
-  const orderedStandardKeys = orderKeys(STANDARD_IDENTITY_FIELDS.map((f) => f.key)).filter((k) => {
-    if (requiredStd.has(k)) return true;
-    if (extraByKey.has(k)) return isVisible(k) && !hasSiteFields;
-    return isVisible(k); // display_name, company_id
-  });
+  // Grupos (seções) do formulário, conforme o designer de layout. Obrigatórios
+  // sempre; extras (privateData/companyData) somem quando o tipo tem campos do
+  // site. Grupos que ficam sem campos visíveis não são exibidos.
+  // O formulário é 100% determinado pelo layout do tipo de trabalhador. Campos
+  // customizáveis (cf:) só entram quando estão no layout E existem para o tipo.
+  const includeKey = (k: string): boolean => {
+    if (k.startsWith("cf:")) {
+      const n = k.slice(3);
+      return siteFieldByName.has(n) || cfDefByName.has(n);
+    }
+    return true; // padrão/obrigatórios/extras seguem o layout
+  };
+  // Layout ativo conforme o tipo de trabalhador selecionado (ou o default).
+  const activeLayout = layoutForWorkerType(formLayoutConfig, workerTypeId);
+  const formGroups = activeLayout.groups
+    .map((g) => ({ name: g.name, keys: g.fields.filter(includeKey) }))
+    .filter((g) => g.keys.length > 0);
+  // Campos customizáveis (cf:) presentes no layout — só estes são validados/enviados.
+  const consumedCf = new Set<string>();
+  for (const g of formGroups) for (const k of g.keys) if (k.startsWith("cf:")) consumedCf.add(k.slice(3));
 
   const renderStandardField = (k: string): ReactNode => {
+    if (k.startsWith("cf:")) {
+      const n = k.slice(3);
+      const special = specialByName.get(n);
+      if (special && special.length) return renderSpecialDropdown(n, special);
+      const sf = siteFieldByName.get(n);
+      if (sf) return renderSiteField(sf);
+      const def = cfDefByName.get(n);
+      return def ? renderDefField(def) : null;
+    }
     const req = requiredStd.has(k);
     const star = req ? <span className="ml-0.5 text-destructive">*</span> : null;
     switch (k) {
@@ -427,7 +534,7 @@ export function IdentityForm({
               {alias("company_worker_type_code", t("identityForm.workerType"))}
               {star}
             </Label>
-            <Select value={workerTypeId} onValueChange={(id) => setWorkerTypeId(id)}>
+            <Select value={workerTypeId} onValueChange={(id) => setWorkerTypeId(id)} disabled={lockWorkerType}>
               <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
                 <SelectValue placeholder={t("identityForm.selectWorkerTypePlaceholder")} />
               </SelectTrigger>
@@ -444,20 +551,14 @@ export function IdentityForm({
         );
       case "first_name":
         return (
-          <div key={k} className="space-y-2">
-            <Label htmlFor="firstName">{alias("first_name", t("common.name"))}{star}</Label>
-            <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-            {errors.firstName && <p className="text-xs text-destructive">{errors.firstName}</p>}
+          <div key={k} className="space-y-2 sm:col-span-2">
+            <Label htmlFor="fullName">{alias("first_name", t("common.name"))}{star}</Label>
+            <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
         );
       case "last_name":
-        return (
-          <div key={k} className="space-y-2">
-            <Label htmlFor="lastName">{alias("last_name", t("identityForm.lastName"))}{star}</Label>
-            <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-            {errors.lastName && <p className="text-xs text-destructive">{errors.lastName}</p>}
-          </div>
-        );
+        return null; // Sobrenome deixou de ser campo separado (unificado em Nome).
       case "display_name":
         return (
           <div key={k} className="space-y-2 sm:col-span-2">
@@ -495,26 +596,70 @@ export function IdentityForm({
             {errors.siteId && <p className="text-xs text-destructive">{errors.siteId}</p>}
           </div>
         );
-      case "company_id":
+      case "company_id": {
+        const selected = companies.find((c) => c.id === companyId);
         return (
           <div key={k} className="space-y-2">
             <Label>{alias("company_id", t("identityForm.company"))}</Label>
-            <Select
-              value={companyId || "__NONE__"}
-              onValueChange={(v) => setCompanyId(v === "__NONE__" ? "" : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={t("identityForm.none")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__NONE__">{t("identityForm.none")}</SelectItem>
-                {companies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={companyOpen} onOpenChange={setCompanyOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={companyOpen}
+                  className="w-full justify-between font-normal"
+                >
+                  <span className={cn("truncate", !selected && "text-muted-foreground")}>
+                    {selected ? companyLabel(selected) : t("identityForm.none")}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder={t("identityForm.companySearch")} />
+                  <CommandList>
+                    <CommandEmpty>{t("identityForm.companyEmpty")}</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="__none__"
+                        onSelect={() => {
+                          setCompanyId("");
+                          setCompanyOpen(false);
+                        }}
+                      >
+                        <Check className={cn("mr-2 h-4 w-4", !companyId ? "opacity-100" : "opacity-0")} />
+                        {t("identityForm.none")}
+                      </CommandItem>
+                      {companies.map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={`${c.name} ${c.tax_id ?? ""}`}
+                          onSelect={() => {
+                            setCompanyId(c.id);
+                            setCompanyOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn("mr-2 h-4 w-4", companyId === c.id ? "opacity-100" : "opacity-0")}
+                          />
+                          <span className="flex-1 truncate">{c.name}</span>
+                          {c.tax_id && (
+                            <span className="ml-2 shrink-0 text-xs text-muted-foreground">
+                              {formatCnpj(c.tax_id)}
+                            </span>
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         );
+      }
       default: {
         const f = extraByKey.get(k);
         return f ? renderExtraField(f) : null;
@@ -587,7 +732,7 @@ export function IdentityForm({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = makeBaseSchema(t).safeParse({ externalId, firstName, lastName, email, status });
+    const parsed = makeBaseSchema(t).safeParse({ externalId, name: fullName, email, status });
     const out: Record<string, string> = {};
     if (!parsed.success) {
       for (const i of parsed.error.issues) out[i.path[0] as string] = i.message;
@@ -609,6 +754,7 @@ export function IdentityForm({
         sf.is_required &&
         sf.fillable &&
         sf.definition &&
+        consumedCf.has(sf.definition.custom_field_name) && // apenas os campos presentes no layout
         isBlank(customFields[sf.definition.custom_field_name])
       ) {
         out[`sf-${sf.id}`] = t("identityForm.validation.requiredField");
@@ -620,6 +766,8 @@ export function IdentityForm({
     }
     const parsedData = parsed.success ? parsed.data : null;
     if (!parsedData) return;
+    const { name: _fullName, ...baseData } = parsedData;
+    const { firstName, lastName } = splitName(_fullName);
     const cfErrors: Record<string, string> = {};
     const dateFieldNames = new Set(defs.filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName));
     const cf: Record<string, string> = {};
@@ -658,7 +806,7 @@ export function IdentityForm({
     }
     setErrors({});
     const siteFieldValues: SiteFieldValue[] = siteFields
-      .filter((sf) => sf.definition)
+      .filter((sf) => sf.definition && consumedCf.has(sf.definition.custom_field_name))
       .map((sf) => ({
         site_custom_field_id: sf.id,
         value: cf[sf.definition!.custom_field_name] ? cf[sf.definition!.custom_field_name] : null,
@@ -677,9 +825,11 @@ export function IdentityForm({
     }
 
     const payload: Record<string, unknown> = {
-      ...parsedData,
+      ...baseData,
+      firstName,
+      lastName,
       ...topExtra,
-      displayName: displayName.trim() || `${firstName} ${lastName}`.trim() || undefined,
+      displayName: displayName.trim() || fullName.trim() || undefined,
       privateData: Object.keys(privExtra).length ? privExtra : undefined,
       companyData: Object.keys(compExtra).length ? compExtra : undefined,
       customFields: cf,
@@ -712,34 +862,18 @@ export function IdentityForm({
 
       {statusBadge && <div className="flex justify-end">{statusBadge}</div>}
 
-      {/* Campos padrão na ordem definida pelo designer de layout. O Tipo do
-          Trabalhador continua condicionando os campos do site abaixo. */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("identityForm.formData")}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          {orderedStandardKeys.map((k) => renderStandardField(k))}
-        </CardContent>
-      </Card>
-
-      {workerTypeId && siteFields.length > 0 && (
-        <Card>
+      {/* Campos agrupados em seções, 100% conforme o layout do tipo de
+          trabalhador (inclui os campos customizáveis posicionados no layout). */}
+      {formGroups.map((g, i) => (
+        <Card key={i}>
           <CardHeader>
-            <CardTitle className="text-base">{t("identityForm.siteCustomFields")}</CardTitle>
+            <CardTitle className="text-base">{g.name.trim() || t("identityForm.formData")}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {groupedSiteFields.map((g) => (
-              <div key={g.display} className="space-y-3">
-                <p className="border-b pb-1 text-sm font-medium text-foreground">{g.display}</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {g.items.map(({ sf }) => renderSiteField(sf))}
-                </div>
-              </div>
-            ))}
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {g.keys.map((k) => renderStandardField(k))}
           </CardContent>
         </Card>
-      )}
+      ))}
 
       {showCustomFields && (
       <Card>

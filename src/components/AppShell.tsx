@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, HardHat, RefreshCw, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
@@ -38,9 +38,11 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { pickLang } from "@/lib/custom-fields";
 import { useQueryClient } from "@tanstack/react-query";
 
-type NavItem = { to: string; icon: typeof Users; key: string };
+type NavItem = { to: string; icon: typeof Users; key: string; dynamic?: "workerTypes" };
 type NavGroupDef = { key: string; icon: typeof Users; items: NavItem[] };
 type NavEntry = ({ kind: "item" } & NavItem) | ({ kind: "group" } & NavGroupDef);
 
@@ -51,12 +53,11 @@ const NAV: NavEntry[] = [
     key: "nav.cadastro",
     icon: ClipboardList,
     items: [
-      { to: "/identities", icon: Users, key: "nav.identities" },
+      { to: "/identities", icon: Users, key: "nav.identities", dynamic: "workerTypes" },
       { to: "/visitas", icon: DoorOpen, key: "nav.visitas" },
       { to: "/regras", icon: ShieldCheck, key: "nav.regras" },
     ],
   },
-  { kind: "item", to: "/terceirizados", icon: HardHat, key: "nav.terceirizados" },
   {
     kind: "group",
     key: "nav.utilities",
@@ -119,19 +120,82 @@ function NavGroup({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SidebarMenuSub>
-            {group.items.map((item) => (
-              <SidebarMenuSubItem key={item.to}>
-                <SidebarMenuSubButton asChild isActive={pathname.startsWith(item.to)}>
-                  <Link to={item.to}>
-                    <item.icon className="h-4 w-4" />
-                    <span>{t(item.key)}</span>
+            {group.items.map((item) =>
+              item.dynamic === "workerTypes" ? (
+                <IdentitiesSubNav key={item.to} item={item} pathname={pathname} />
+              ) : (
+                <SidebarMenuSubItem key={item.to}>
+                  <SidebarMenuSubButton asChild isActive={pathname.startsWith(item.to)}>
+                    <Link to={item.to}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{t(item.key)}</span>
+                    </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              ),
+            )}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuItem>
+    </Collapsible>
+  );
+}
+
+// Submenu de "Pessoas": link para a lista + um item por tipo de trabalhador,
+// cada um abrindo o novo cadastro já com o tipo definido.
+function IdentitiesSubNav({ item, pathname }: { item: NavItem; pathname: string }) {
+  const { t, lang } = useT();
+  const wtQuery = useQuery({
+    queryKey: ["worker-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("worker_types")
+        .select("*")
+        .eq("is_active", true)
+        .order("display_index", { ascending: true, nullsFirst: false });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const workerTypes = wtQuery.data ?? [];
+  const onSection = pathname.startsWith(item.to);
+  const [open, setOpen] = useState(onSection);
+  useEffect(() => {
+    if (onSection) setOpen(true);
+  }, [onSection]);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="group/sub">
+      <SidebarMenuSubItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuSubButton isActive={onSection} className="cursor-pointer">
+            <item.icon className="h-4 w-4" />
+            <span>{t(item.key)}</span>
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/sub:rotate-180" />
+          </SidebarMenuSubButton>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            <SidebarMenuSubItem>
+              <SidebarMenuSubButton asChild isActive={pathname === item.to}>
+                <Link to={item.to}>
+                  <span>{t("nav.identitiesAll")}</span>
+                </Link>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+            {workerTypes.map((w) => (
+              <SidebarMenuSubItem key={w.id}>
+                <SidebarMenuSubButton asChild>
+                  <Link to="/identities/new" search={{ type: w.id }}>
+                    <span>{pickLang(w.name_i18n, lang) || w.name}</span>
                   </Link>
                 </SidebarMenuSubButton>
               </SidebarMenuSubItem>
             ))}
           </SidebarMenuSub>
         </CollapsibleContent>
-      </SidebarMenuItem>
+      </SidebarMenuSubItem>
     </Collapsible>
   );
 }
@@ -175,6 +239,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   useApplyBranding();
   const { t, lang, setLang } = useT();
   const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   // Carrega o catálogo de campos personalizados (Argus) e espelha no Supabase
@@ -284,14 +349,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 font-normal"
+                className={cn("h-8 gap-1.5 font-normal", refreshing && "cursor-wait")}
                 title={t("shell.refreshTitle")}
+                disabled={refreshing}
                 onClick={async () => {
-                  await queryClient.invalidateQueries();
-                  toast.success(t("shell.refreshed"));
+                  setRefreshing(true);
+                  try {
+                    await queryClient.invalidateQueries();
+                    toast.success(t("shell.refreshed"));
+                  } finally {
+                    setRefreshing(false);
+                  }
                 }}
               >
-                <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+                {refreshing ? (
+                  <Hourglass className="h-3.5 w-3.5 animate-pulse text-muted-foreground" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
                 <span className="text-xs">{t("shell.refresh")}</span>
               </Button>
 
@@ -372,7 +447,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          <main className="flex-1 px-4 py-8 sm:px-6" data-route={pathname}>
+          <main
+            className={cn("flex-1 px-4 py-8 sm:px-6", refreshing && "cursor-wait")}
+            data-route={pathname}
+          >
             {children}
           </main>
         </SidebarInset>

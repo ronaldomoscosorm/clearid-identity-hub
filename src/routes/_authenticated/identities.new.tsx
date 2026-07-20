@@ -1,7 +1,9 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { pickLang } from "@/lib/custom-fields";
 import { argusApi, ArgusApiError, type IdentityUpsert } from "@/lib/argus-client";
 import {
   mirrorIdentities,
@@ -16,13 +18,36 @@ import { useT } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/identities/new")({
   head: () => ({ meta: [{ title: "Nova identity — Argus ClearID" }] }),
+  validateSearch: (search: Record<string, unknown>): { type?: string } => ({
+    type: typeof search.type === "string" ? search.type : undefined,
+  }),
   component: NewIdentity,
 });
 
 function NewIdentity() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { type: workerTypeId } = Route.useSearch();
+
+  // Nome do tipo de trabalhador para o título "Novo [Tipo]".
+  const workerTypesQuery = useQuery({
+    queryKey: ["worker-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("worker_types")
+        .select("id, name, name_i18n")
+        .eq("is_active", true);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const wt = workerTypesQuery.data?.find((w) => w.id === workerTypeId);
+  const heading =
+    workerTypeId && wt
+      ? t("identityNew.newOf", { type: pickLang(wt.name_i18n, lang) || wt.name })
+      : t("identityNew.title");
   const mut = useMutation({
     mutationFn: async (vars: {
       data: IdentityUpsert;
@@ -128,15 +153,18 @@ function NewIdentity() {
           </Link>
         </Button>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-          {t("identityNew.title")}
+          {heading}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("identityNew.subtitle")}</p>
       </div>
       <IdentityForm
+        key={workerTypeId ?? "novo"}
         mode="create"
         submitting={mut.isPending}
-        onSubmit={(data, siteFieldValues, companyId, workerTypeId, photo) =>
-          mut.mutate({ data, siteFieldValues, companyId, workerTypeId, photo })
+        initialWorkerTypeId={workerTypeId}
+        lockWorkerType={Boolean(workerTypeId)}
+        onSubmit={(data, siteFieldValues, companyId, wtId, photo) =>
+          mut.mutate({ data, siteFieldValues, companyId, workerTypeId: wtId, photo })
         }
         onCancel={() => navigate({ to: "/identities" })}
       />

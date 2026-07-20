@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClearIdCustomFieldDef, CustomFieldSectionSummary } from "@/lib/argus-client";
-import { RefreshCw, Plus, Pencil, Trash2, Search } from "lucide-react";
+import { RefreshCw, Plus, Pencil, Trash2, Search, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
+import { SpecialFieldsDialog } from "@/components/SpecialFieldsDialog";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,7 @@ function CustomFieldsPage() {
   const [deleting, setDeleting] = useState<ClearIdCustomFieldDef | null>(null);
   const [editingSection, setEditingSection] = useState<CustomFieldSectionSummary | null>(null);
   const [creatingSection, setCreatingSection] = useState(false);
+  const [specialOpen, setSpecialOpen] = useState(false);
   const [deletingSection, setDeletingSection] = useState<CustomFieldSectionSummary | null>(null);
 
   const [search, setSearch] = useState("");
@@ -279,6 +281,9 @@ function CustomFieldsPage() {
           <Button variant="outline" size="sm" onClick={() => setCreatingSection(true)}>
             <Plus className="mr-1 h-4 w-4" /> {t("customFields.newSection")}
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setSpecialOpen(true)}>
+            <ListChecks className="mr-1 h-4 w-4" /> {t("specialFields.button")}
+          </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="mr-1 h-4 w-4" /> {t("customFields.newField")}
           </Button>
@@ -401,6 +406,12 @@ function CustomFieldsPage() {
           setEditing(null);
           reload();
         }}
+      />
+
+      <SpecialFieldsDialog
+        open={specialOpen}
+        onOpenChange={setSpecialOpen}
+        fields={(query.data ?? []).filter((f) => !f.isDeleted)}
       />
 
       <SectionDialog

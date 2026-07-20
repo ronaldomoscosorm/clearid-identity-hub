@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
-import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Power, PowerOff, Camera, Loader2 } from "lucide-react";
+import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Camera } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -33,41 +33,22 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import type { ClearIdIdentity } from "@/lib/argus-client";
 
 export const Route = createFileRoute("/_authenticated/identities/")({
-  head: () => ({ meta: [{ title: "Identities — Argus ClearID" }] }),
+  head: () => ({ meta: [{ title: "Pessoas — Argus ClearID" }] }),
   component: IdentitiesList,
 });
 
 function IdentitiesList() {
   const { t } = useT();
-  const queryClient = useQueryClient();
   const siteId = useDefaultSiteId();
-  const [confirm, setConfirm] = useState<{ id: string; activate: boolean; name: string } | null>(
-    null,
-  );
   const [pictureFor, setPictureFor] = useState<{ id: string; name: string } | null>(null);
   // Campos do formulário (não disparam busca automaticamente)
   const [fFirstName, setFFirstName] = useState("");
   const [fEmail, setFEmail] = useState("");
   const [fCompany, setFCompany] = useState("");
-  const [fJobTitle, setFJobTitle] = useState("");
-  const [fDepartment, setFDepartment] = useState("");
   const [fStatus, setFStatus] = useState<string>("all");
   const [fWorkerType, setFWorkerType] = useState<string>("all");
   const [fAllSites, setFAllSites] = useState(false);
@@ -78,12 +59,10 @@ function IdentitiesList() {
     firstName: string;
     email: string;
     company: string;
-    jobTitle: string;
-    department: string;
     status: string;
     workerTypeCode: string;
     allSites: boolean;
-  }>({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", workerTypeCode: "all", allSites: false });
+  }>({ firstName: "", email: "", company: "", status: "all", workerTypeCode: "all", allSites: false });
 
   const query = useQuery({
     queryKey: ["identities", siteId, applied],
@@ -92,8 +71,6 @@ function IdentitiesList() {
         firstName: applied.firstName || undefined,
         email: applied.email || undefined,
         company: applied.company || undefined,
-        jobTitle: applied.jobTitle || undefined,
-        department: applied.department || undefined,
         status: applied.status === "all" ? undefined : applied.status,
         workerTypeCode: applied.workerTypeCode === "all" ? undefined : applied.workerTypeCode,
         allSites: applied.allSites,
@@ -107,30 +84,6 @@ function IdentitiesList() {
     if (query.data?.items?.length) void mirrorIdentities(query.data.items);
   }, [query.data]);
 
-  const toggleStatus = useMutation({
-    mutationFn: async ({ id, activate }: { id: string; activate: boolean }) => {
-      if (activate) await argusApi.activateIdentity(id);
-      else await argusApi.deactivateIdentity(id);
-      // Re-pesquisar essa identity após a operação
-      return await argusApi.getIdentity(id);
-    },
-    onSuccess: (updated, vars) => {
-      toast.success(vars.activate ? t("identities.toast.activated") : t("identities.toast.deactivated"));
-      // Atualiza o item dentro do cache da listagem atual
-      queryClient.setQueryData(
-        ["identities", applied],
-        (prev: { items: ClearIdIdentity[]; total: number } | undefined) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            items: prev.items.map((i) => (i.identityId === updated.identityId ? updated : i)),
-          };
-        },
-      );
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setHasSearched(true);
@@ -138,8 +91,6 @@ function IdentitiesList() {
       firstName: fFirstName.trim(),
       email: fEmail.trim(),
       company: fCompany.trim(),
-      jobTitle: fJobTitle.trim(),
-      department: fDepartment.trim(),
       status: fStatus,
       workerTypeCode: fWorkerType,
       allSites: fAllSites,
@@ -150,13 +101,11 @@ function IdentitiesList() {
     setFFirstName("");
     setFEmail("");
     setFCompany("");
-    setFJobTitle("");
-    setFDepartment("");
     setFStatus("all");
     setFWorkerType("all");
     setFAllSites(false);
     setHasSearched(false);
-    setApplied({ firstName: "", email: "", company: "", jobTitle: "", department: "", status: "all", workerTypeCode: "all", allSites: false });
+    setApplied({ firstName: "", email: "", company: "", status: "all", workerTypeCode: "all", allSites: false });
   };
 
   return (
@@ -203,24 +152,6 @@ function IdentitiesList() {
                 value={fCompany}
                 onChange={(e) => setFCompany(e.target.value)}
                 placeholder={t("identities.filter.company")}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="f-job-title">{t("identities.filter.jobTitle")}</Label>
-              <Input
-                id="f-job-title"
-                value={fJobTitle}
-                onChange={(e) => setFJobTitle(e.target.value)}
-                placeholder={t("identities.filter.jobTitle")}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="f-department">{t("identities.filter.department")}</Label>
-              <Input
-                id="f-department"
-                value={fDepartment}
-                onChange={(e) => setFDepartment(e.target.value)}
-                placeholder={t("identities.filter.department")}
               />
             </div>
             <div className="space-y-1.5">
@@ -381,36 +312,6 @@ function IdentitiesList() {
                           >
                             <Camera className="mr-2 h-4 w-4" /> {t("identities.action.updatePhoto")}
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          {isActive ? (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setConfirm({
-                                  id: it.identityId,
-                                  activate: false,
-                                  name: `${it.firstName ?? ""} ${it.lastName ?? ""}`.trim() ||
-                                    it.identityId,
-                                })
-                              }
-                              disabled={toggleStatus.isPending}
-                            >
-                              <PowerOff className="mr-2 h-4 w-4" /> {t("identities.action.deactivate")}
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setConfirm({
-                                  id: it.identityId,
-                                  activate: true,
-                                  name: `${it.firstName ?? ""} ${it.lastName ?? ""}`.trim() ||
-                                    it.identityId,
-                                })
-                              }
-                              disabled={toggleStatus.isPending}
-                            >
-                              <Power className="mr-2 h-4 w-4" /> {t("identities.action.activate")}
-                            </DropdownMenuItem>
-                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -421,42 +322,6 @@ function IdentitiesList() {
           </TableBody>
         </Table>
       </Card>
-
-      <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirm?.activate ? t("identities.confirm.activateTitle") : t("identities.confirm.deactivateTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirm?.activate ? t("identities.confirm.activatePrefix") : t("identities.confirm.deactivatePrefix")}{" "}
-              <strong>{confirm?.name}</strong>?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={toggleStatus.isPending}>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={toggleStatus.isPending}
-              onClick={(e) => {
-                e.preventDefault();
-                if (!confirm) return;
-                toggleStatus.mutate(
-                  { id: confirm.id, activate: confirm.activate },
-                  { onSettled: () => setConfirm(null) },
-                );
-              }}
-            >
-              {toggleStatus.isPending ? (
-                <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("identities.confirm.processing")}
-                </>
-              ) : (
-                t("identities.confirm.confirm")
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {pictureFor && (
         <IdentityPictureDialog

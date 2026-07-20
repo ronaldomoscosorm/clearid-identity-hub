@@ -422,6 +422,33 @@ export type Database = {
         }
         Relationships: []
       }
+      special_custom_fields: {
+        Row: {
+          created_at: string
+          custom_field_name: string
+          id: string
+          label: string | null
+          options: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          custom_field_name: string
+          id?: string
+          label?: string | null
+          options?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          custom_field_name?: string
+          id?: string
+          label?: string | null
+          options?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
           accent_color: string
