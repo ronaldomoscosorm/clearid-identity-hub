@@ -96,7 +96,24 @@ export function layoutForWorkerType(
   return config.layouts[0] ?? defaultLayout();
 }
 
-async function fetchConfig(): Promise<FormLayoutConfig> {
+/** Chave do mapa de layouts por site dentro de preferences. */
+const BY_SITE_KEY = "formLayoutsBySite";
+
+/** Extrai o raw de layout para um site: por-site → legado global → formato antigo. */
+function rawForSite(prefs: Record<string, unknown>, siteId: string | null | undefined): unknown {
+  const bySite = (prefs[BY_SITE_KEY] ?? {}) as Record<string, unknown>;
+  if (siteId && bySite[siteId]) return bySite[siteId];
+  // Compatibilidade: layout global antigo (formLayouts) vale como padrão para
+  // sites que ainda não têm layout próprio.
+  if (prefs.formLayouts) return prefs.formLayouts;
+  if (prefs.formLayout) {
+    const fl = prefs.formLayout as { groups?: FormLayoutGroup[] };
+    return { layouts: [{ id: DEFAULT_LAYOUT_ID, name: "Padrão", groups: fl.groups ?? [] }], links: {} };
+  }
+  return null;
+}
+
+async function fetchConfig(siteId: string | null | undefined): Promise<FormLayoutConfig> {
   const { data, error } = await supabase
     .from("settings")
     .select("preferences")
@@ -104,29 +121,23 @@ async function fetchConfig(): Promise<FormLayoutConfig> {
     .maybeSingle();
   if (error) throw new Error(error.message);
   const prefs = (data?.preferences ?? {}) as Record<string, unknown>;
-  let raw = prefs.formLayouts;
-  // Migração do formato antigo (documento único) para a coleção nomeada.
-  if (!raw && prefs.formLayout) {
-    const fl = prefs.formLayout as { groups?: FormLayoutGroup[] };
-    raw = { layouts: [{ id: DEFAULT_LAYOUT_ID, name: "Padrão", groups: fl.groups ?? [] }], links: {} };
-  }
-  return normalizeConfig(raw);
+  return normalizeConfig(rawForSite(prefs, siteId));
 }
 
-export function useFormLayoutConfig() {
+export function useFormLayoutConfig(siteId?: string | null) {
   // staleTime 0 + refetchOnMount garantem que o formulário sempre traga o layout
   // mais recente ao abrir, mesmo em navegação SPA logo após salvar no designer.
   const query = useQuery({
-    queryKey: ["form-layout"],
-    queryFn: fetchConfig,
+    queryKey: ["form-layout", siteId ?? null],
+    queryFn: () => fetchConfig(siteId),
     staleTime: 0,
     refetchOnMount: "always",
   });
   return { config: query.data ?? normalizeConfig(null), loaded: query.isSuccess };
 }
 
-/** Persiste a config de layouts preservando as demais preferences do usuário. */
-export async function saveFormLayoutConfig(config: FormLayoutConfig): Promise<void> {
+/** Lê as preferences atuais do usuário técnico (para gravação). */
+async function loadPrefs(): Promise<{ userId: string; prefs: Record<string, unknown> }> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id;
   if (!userId) throw new Error("Sem usuário autenticado.");
@@ -135,11 +146,40 @@ export async function saveFormLayoutConfig(config: FormLayoutConfig): Promise<vo
     .select("preferences")
     .eq("user_id", userId)
     .maybeSingle();
-  const prefs = { ...((cur?.preferences ?? {}) as Record<string, unknown>) };
-  prefs.formLayouts = config;
-  delete prefs.formLayout; // remove o formato legado
+  return { userId, prefs: { ...((cur?.preferences ?? {}) as Record<string, unknown>) } };
+}
+
+async function persistPrefs(userId: string, prefs: Record<string, unknown>): Promise<void> {
   const { error } = await supabase
     .from("settings")
     .upsert({ user_id: userId, preferences: prefs as unknown as Json }, { onConflict: "user_id" });
   if (error) throw new Error(error.message);
+}
+
+/** Persiste a config de layouts de UM SITE preservando as demais preferences. */
+export async function saveFormLayoutConfig(
+  siteId: string | null | undefined,
+  config: FormLayoutConfig,
+): Promise<void> {
+  if (!siteId) throw new Error("Selecione um site para salvar o layout.");
+  const { userId, prefs } = await loadPrefs();
+  const bySite = { ...((prefs[BY_SITE_KEY] ?? {}) as Record<string, unknown>) };
+  bySite[siteId] = config;
+  prefs[BY_SITE_KEY] = bySite;
+  delete prefs.formLayout; // remove o formato legado (documento único)
+  await persistPrefs(userId, prefs);
+}
+
+/** Copia a config de layouts para outros sites (exportação entre sites). */
+export async function exportFormLayoutToSites(
+  config: FormLayoutConfig,
+  targetSiteIds: string[],
+): Promise<void> {
+  const targets = targetSiteIds.filter(Boolean);
+  if (targets.length === 0) return;
+  const { userId, prefs } = await loadPrefs();
+  const bySite = { ...((prefs[BY_SITE_KEY] ?? {}) as Record<string, unknown>) };
+  for (const sid of targets) bySite[sid] = config;
+  prefs[BY_SITE_KEY] = bySite;
+  await persistPrefs(userId, prefs);
 }

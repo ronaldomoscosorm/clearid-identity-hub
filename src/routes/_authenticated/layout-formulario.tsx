@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -24,7 +24,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Lock, Hourglass, Plus, Trash2, Search } from "lucide-react";
+import { GripVertical, Lock, Hourglass, Plus, Trash2, Search, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -34,12 +34,23 @@ import {
 import {
   useFormLayoutConfig,
   saveFormLayoutConfig,
+  exportFormLayoutToSites,
   REQUIRED_KEYS,
   CF_PREFIX,
   type FormLayout,
   type FormLayoutConfig,
 } from "@/lib/form-layout";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useSpecialFields } from "@/lib/special-fields";
 import { pickLang } from "@/lib/custom-fields";
 import { useT } from "@/lib/i18n";
@@ -94,7 +105,23 @@ function LayoutFormularioPage() {
   const { t, lang } = useT();
   const qc = useQueryClient();
   const { alias } = useIdentityFieldLabels();
-  const { config, loaded } = useFormLayoutConfig();
+
+  // Layout é POR SITE e SEMPRE segue o site padrão (topbar). Ao trocar o site
+  // padrão, o editor recarrega o layout desse site.
+  const defaultSiteId = useDefaultSiteId();
+  const editSiteId = defaultSiteId ?? "";
+
+  const sitesQuery = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => argusApi.listSites(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const sites = (sitesQuery.data ?? [])
+    .slice()
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
+  const editSiteName = sites.find((s) => s.siteId === editSiteId)?.name ?? "";
+
+  const { config, loaded } = useFormLayoutConfig(editSiteId || null);
 
   // Campos customizáveis (definições ClearID Vylor_) — para rótulos.
   const customFieldsQuery = useQuery({
@@ -106,15 +133,14 @@ function LayoutFormularioPage() {
     (f) => !f.isDeleted && f.customFieldName.startsWith("Vylor_"),
   );
 
-  // Nomes dos campos customizáveis do SITE VIGENTE — restringem os disponíveis.
-  const siteId = useDefaultSiteId();
+  // Nomes dos campos customizáveis do SITE EDITADO — restringem os disponíveis.
   const siteFieldsQuery = useQuery({
-    queryKey: ["layout-site-field-names", siteId],
+    queryKey: ["layout-site-field-names", editSiteId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select("definition:custom_field_definitions(custom_field_name)")
-        .eq("site_id", siteId ?? "")
+        .eq("site_id", editSiteId ?? "")
         .eq("entity_type", "identity")
         .eq("is_active", true)
         .returns<{ definition: { custom_field_name: string } | null }[]>();
@@ -123,7 +149,7 @@ function LayoutFormularioPage() {
       for (const r of data ?? []) if (r.definition?.custom_field_name) names.add(r.definition.custom_field_name);
       return names;
     },
-    enabled: Boolean(siteId),
+    enabled: Boolean(editSiteId),
     staleTime: 5 * 60 * 1000,
   });
   const siteFieldNames = siteFieldsQuery.data;
@@ -131,7 +157,7 @@ function LayoutFormularioPage() {
   // Dropdowns especiais — ficam disponíveis independentemente do site.
   const { list: specialList, loaded: specialLoaded } = useSpecialFields();
 
-  // Disponíveis = campos do site vigente + dropdowns especiais (rótulos do catálogo/label especial).
+  // Disponíveis = campos do site editado + dropdowns especiais (rótulos do catálogo/label especial).
   const siteCustomDefs = siteFieldNames
     ? allCustomDefs.filter((d) => siteFieldNames.has(d.customFieldName))
     : allCustomDefs;
@@ -141,7 +167,7 @@ function LayoutFormularioPage() {
   const specialKeys = specialList.map((s) => CF_PREFIX + s.custom_field_name);
   const customKeys = [...new Set([...siteKeys, ...specialKeys])];
   const pool = [...ALL_KEYS, ...customKeys];
-  const siteReady = !siteId || siteFieldsQuery.isSuccess;
+  const siteReady = !editSiteId || siteFieldsQuery.isSuccess;
   const ready = loaded && customFieldsQuery.isSuccess && siteReady && specialLoaded;
 
   const labelOf = (key: string) => {
@@ -155,15 +181,19 @@ function LayoutFormularioPage() {
   const [model, setModel] = useState<Model>({ available: [], groups: [] });
   const [search, setSearch] = useState("");
 
+  // Reinicializa o editor a cada troca de site (layout é por site).
+  const initedSite = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
+    if (initedSite.current === editSiteId) return;
+    initedSite.current = editSiteId;
     setLayouts(config.layouts.map((l) => ({ ...l, groups: l.groups.map((g) => ({ ...g })) })));
     setLinks({ ...config.links });
     const first = config.layouts[0];
     setSelId(first.id);
     setModel(layoutToModel(first, pool));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  }, [ready, editSiteId]);
 
   const workerTypesQuery = useQuery({
     queryKey: ["worker-types"],
@@ -324,11 +354,35 @@ function LayoutFormularioPage() {
   const save = useMutation({
     mutationFn: async () => {
       const payload: FormLayoutConfig = { layouts: commit(layouts), links };
-      await saveFormLayoutConfig(payload);
+      await saveFormLayoutConfig(editSiteId, payload);
     },
     onSuccess: () => {
       toast.success(t("formLayout.saved"));
       qc.invalidateQueries({ queryKey: ["form-layout"] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  // Exportação do layout do site atual para outros sites.
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportTargets, setExportTargets] = useState<Record<string, boolean>>({});
+  const toggleTarget = (id: string) =>
+    setExportTargets((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const exportMut = useMutation({
+    mutationFn: async () => {
+      const targets = Object.keys(exportTargets).filter((id) => exportTargets[id] && id !== editSiteId);
+      if (targets.length === 0) throw new Error(t("formLayout.export.none"));
+      // Exporta exatamente o que está na tela (inclui edições não salvas).
+      const payload: FormLayoutConfig = { layouts: commit(layouts), links };
+      await exportFormLayoutToSites(payload, targets);
+      return targets.length;
+    },
+    onSuccess: (count) => {
+      toast.success(t("formLayout.export.done", { count }));
+      qc.invalidateQueries({ queryKey: ["form-layout"] });
+      setExportOpen(false);
+      setExportTargets({});
     },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -356,15 +410,66 @@ function LayoutFormularioPage() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("formLayout.subtitle")}</p>
         </div>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
-          {save.isPending && <Hourglass className="mr-1 h-4 w-4 animate-pulse" />}
-          {t("common.save")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" disabled={!editSiteId}>
+                <Share2 className="mr-1 h-4 w-4" />
+                {t("formLayout.export.button")}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[460px]">
+              <DialogHeader>
+                <DialogTitle>{t("formLayout.export.title")}</DialogTitle>
+                <DialogDescription>{t("formLayout.export.hint")}</DialogDescription>
+              </DialogHeader>
+              <div className="max-h-[50vh] space-y-2 overflow-y-auto py-2">
+                {sites
+                  .filter((s) => s.siteId !== editSiteId)
+                  .map((s) => (
+                    <label
+                      key={s.siteId}
+                      className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                    >
+                      <Checkbox
+                        checked={Boolean(exportTargets[s.siteId])}
+                        onCheckedChange={() => toggleTarget(s.siteId)}
+                      />
+                      {s.name}
+                    </label>
+                  ))}
+                {sites.filter((s) => s.siteId !== editSiteId).length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    {t("formLayout.export.noOthers")}
+                  </p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setExportOpen(false)}>
+                  {t("common.cancel")}
+                </Button>
+                <Button onClick={() => exportMut.mutate()} disabled={exportMut.isPending}>
+                  {exportMut.isPending ? t("common.saving") : t("formLayout.export.confirm")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Button onClick={() => save.mutate()} disabled={save.isPending}>
+            {save.isPending && <Hourglass className="mr-1 h-4 w-4 animate-pulse" />}
+            {t("common.save")}
+          </Button>
+        </div>
       </div>
 
       {/* Seletor de layout + nome */}
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t("formLayout.site")}</Label>
+            <div className="flex h-9 w-56 items-center rounded-md border bg-muted/40 px-3 text-sm">
+              {editSiteName || t("formLayout.sitePlaceholder")}
+            </div>
+          </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">{t("formLayout.selectLayout")}</Label>
             <Select value={selId} onValueChange={switchTo}>

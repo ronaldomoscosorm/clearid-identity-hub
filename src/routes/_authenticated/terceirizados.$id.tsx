@@ -50,13 +50,15 @@ function IdentityDetail() {
     queryFn: () => argusApi.listCredentials(id),
   });
 
+  // Site conforme o ClearID (sem cair no site padrão): se não houver, indefinido.
   const identitySiteId = query.data
     ? ((query.data as unknown as { siteId?: string }).siteId ??
         (query.data.companyData as { siteId?: string } | null | undefined)?.siteId ??
         (query.data.systemData as { siteId?: string } | null | undefined)?.siteId ??
-        siteId ??
         undefined)
     : undefined;
+  // Escopo para sincronização: site do registro ou, na falta, o padrão.
+  const scopeSiteId = identitySiteId ?? siteId ?? undefined;
   const siteName = identitySiteId
     ? sitesQuery.data?.find((s) => s.siteId === identitySiteId)?.name
     : undefined;
@@ -81,8 +83,16 @@ function IdentityDetail() {
         }
       }
     },
-    onSuccess: () => {
-      toast.success(t("contractorDetail.toast.updated"));
+    onSuccess: async () => {
+      // Sincroniza a identidade com os sistemas integrados (best-effort).
+      try {
+        await argusApi.synchronizeIdentities([id], scopeSiteId);
+        toast.success(t("contractorDetail.toast.updated"));
+      } catch (e) {
+        toast.warning(t("contractorDetail.toast.updatedNoSync"), {
+          description: (e as Error).message,
+        });
+      }
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },

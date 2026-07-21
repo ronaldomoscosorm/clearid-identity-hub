@@ -60,13 +60,16 @@ function IdentityDetail() {
     if (query.data) void mirrorIdentities([query.data]);
   }, [query.data]);
 
+  // Site conforme o ClearID (sem cair no site padrão): se a identidade não tiver
+  // site, fica indefinido e o cabeçalho não exibe um site "falso".
   const identitySiteId = query.data
     ? ((query.data as unknown as { siteId?: string }).siteId ??
         (query.data.companyData as { siteId?: string } | null | undefined)?.siteId ??
         (query.data.systemData as { siteId?: string } | null | undefined)?.siteId ??
-        siteId ??
         undefined)
     : undefined;
+  // Escopo para sincronização/times: site do registro ou, na falta, o padrão.
+  const scopeSiteId = identitySiteId ?? siteId ?? undefined;
   const siteName = identitySiteId
     ? sitesQuery.data?.find((s) => s.siteId === identitySiteId)?.name
     : undefined;
@@ -110,6 +113,14 @@ function IdentityDetail() {
           );
       } catch (e) {
         fail.push(t("identityDetail.defaultRuleFail", { error: (e as Error).message }));
+      }
+
+      // Etapa — sincroniza a identidade com os sistemas integrados.
+      try {
+        await argusApi.synchronizeIdentities([id], scopeSiteId);
+        ok.push(t("identityDetail.syncShort"));
+      } catch (e) {
+        fail.push(t("identityDetail.syncFail", { error: (e as Error).message }));
       }
 
       if (fail.length) {
@@ -244,7 +255,7 @@ function IdentityDetail() {
           }
           extraActions={
             <>
-              <TeamsDialog identityId={id} siteId={identitySiteId} />
+              <TeamsDialog identityId={id} siteId={scopeSiteId} />
               <CredentialsDialog identityId={id} />
               <AlertDialog>
               <AlertDialogTrigger asChild>

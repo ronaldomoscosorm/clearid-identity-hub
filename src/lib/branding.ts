@@ -12,8 +12,9 @@ const KEY = "argus.branding";
 export const DEFAULT_BRANDING: BrandingConfig = {
   clientName: "",
   clientLogo: "",
-  primaryColor: "#1e3a5f",
-  accentColor: "#3b6fa0",
+  // Cor da marca R&M (Tropical Mango) — controla o destaque do console.
+  primaryColor: "#FD5300",
+  accentColor: "#102943",
 };
 
 function isBrowser() {
@@ -25,7 +26,12 @@ export function getBranding(): BrandingConfig {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return DEFAULT_BRANDING;
-    return { ...DEFAULT_BRANDING, ...(JSON.parse(raw) as Partial<BrandingConfig>) };
+    const parsed = JSON.parse(raw) as Partial<BrandingConfig>;
+    // Migração das cores legadas (padrão antigo, nunca escolhidas de propósito)
+    // para a identidade R&M atual.
+    if (parsed.primaryColor === "#1e3a5f") parsed.primaryColor = DEFAULT_BRANDING.primaryColor;
+    if (parsed.accentColor === "#3b6fa0") parsed.accentColor = DEFAULT_BRANDING.accentColor;
+    return { ...DEFAULT_BRANDING, ...parsed };
   } catch {
     return DEFAULT_BRANDING;
   }
@@ -72,19 +78,13 @@ export function useBranding() {
 export function applyBranding(cfg: BrandingConfig) {
   if (!isBrowser()) return;
   const root = document.documentElement;
+  // A cor da marca dirige o destaque do console (--rm-brand) e os tokens
+  // shadcn correspondentes (botão primário, foco).
+  const props = ["--primary", "--sidebar-primary", "--ring", "--rm-brand", "--rm-brand-ink"];
   if (cfg.primaryColor) {
-    root.style.setProperty("--primary", cfg.primaryColor);
-    root.style.setProperty("--sidebar-primary", cfg.primaryColor);
+    for (const p of props) root.style.setProperty(p, cfg.primaryColor);
   } else {
-    root.style.removeProperty("--primary");
-    root.style.removeProperty("--sidebar-primary");
-  }
-  if (cfg.accentColor) {
-    root.style.setProperty("--accent", cfg.accentColor);
-    root.style.setProperty("--ring", cfg.accentColor);
-  } else {
-    root.style.removeProperty("--accent");
-    root.style.removeProperty("--ring");
+    for (const p of props) root.style.removeProperty(p);
   }
 }
 

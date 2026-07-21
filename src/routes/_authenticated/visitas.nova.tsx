@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Search, Trash2, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -61,6 +61,10 @@ function NovaVisitaPage() {
   const [name, setName] = useState("");
   const [reason, setReason] = useState("");
   const [siteId, setSiteId] = useState<string>(defaultSite ?? "");
+  // Nova visita acompanha o site padrão, inclusive quando trocado na topbar.
+  useEffect(() => {
+    if (defaultSite) setSiteId(defaultSite);
+  }, [defaultSite]);
   // Padrão: início = agora, término = agora + 12h (ambos editáveis).
   const [start, setStart] = useState(() => toLocalInput(new Date()));
   const [end, setEnd] = useState(() => {
@@ -140,6 +144,12 @@ function NovaVisitaPage() {
       id = created.identityId;
     }
     await argusApi.uploadIdentityPicture(id, v.photo);
+    // Sincroniza a identidade do visitante (best-effort; não bloqueia a visita).
+    try {
+      await argusApi.synchronizeIdentities([id], siteId);
+    } catch {
+      /* falha de sincronização não impede o visitante de entrar */
+    }
     return id;
   };
 

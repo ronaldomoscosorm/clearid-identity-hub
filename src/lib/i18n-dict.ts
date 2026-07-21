@@ -10,6 +10,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.visitas": "Visitas",
     "nav.cadastro": "Cadastro",
     "nav.empresas": "Empresas",
+    "nav.tipos-trabalhador": "Tipos de trabalhador",
     "nav.regras": "Regras",
     "nav.terceirizados": "Terceirizados",
     "nav.campos-personalizados": "Campos personalizados",
@@ -34,6 +35,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "shell.selectSite": "Selecionar site",
     "shell.noSites": "Nenhum site disponível",
     "shell.language": "Idioma",
+    "shell.themeDark": "Modo escuro",
+    "shell.themeLight": "Modo claro",
 
     // Comuns
     "common.save": "Salvar",
@@ -78,6 +81,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.visitas": "Visits",
     "nav.cadastro": "Registration",
     "nav.empresas": "Companies",
+    "nav.tipos-trabalhador": "Worker types",
     "nav.regras": "Rules",
     "nav.terceirizados": "Contractors",
     "nav.campos-personalizados": "Custom fields",
@@ -101,6 +105,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "shell.selectSite": "Select site",
     "shell.noSites": "No sites available",
     "shell.language": "Language",
+    "shell.themeDark": "Dark mode",
+    "shell.themeLight": "Light mode",
 
     "common.save": "Save",
     "common.saving": "Saving...",
@@ -143,6 +149,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.visitas": "Visitas",
     "nav.cadastro": "Registro",
     "nav.empresas": "Empresas",
+    "nav.tipos-trabalhador": "Tipos de trabajador",
     "nav.regras": "Reglas",
     "nav.terceirizados": "Contratistas",
     "nav.campos-personalizados": "Campos personalizados",
@@ -166,6 +173,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "shell.selectSite": "Seleccionar sitio",
     "shell.noSites": "Ningún sitio disponible",
     "shell.language": "Idioma",
+    "shell.themeDark": "Modo oscuro",
+    "shell.themeLight": "Modo claro",
 
     "common.save": "Guardar",
     "common.saving": "Guardando...",

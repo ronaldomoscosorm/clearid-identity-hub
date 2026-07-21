@@ -1220,13 +1220,29 @@ export const argusApi = {
     skip?: number;
     take?: number;
     allSites?: boolean;
+    /** Escopa a busca a um site específico (ignora o site padrão). */
+    siteId?: string | null;
     workerTypeCode?: string;
   }) => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
     q.set("skip", String(params?.skip ?? 0));
     q.set("take", String(params?.take ?? 50));
-    if (params?.query) q.set("query", params.query);
+    // Em "todos os sites" não há siteId; a API exige ao menos um critério de
+    // busca. Sem filtros, usamos um coringa para trazer os primeiros registros.
+    const hasCriterion = Boolean(
+      params?.query ||
+        params?.firstName ||
+        params?.lastName ||
+        params?.email ||
+        params?.company ||
+        params?.jobTitle ||
+        params?.department ||
+        params?.status,
+    );
+    const effectiveQuery =
+      params?.query ?? (params?.allSites && !hasCriterion ? "*" : undefined);
+    if (effectiveQuery) q.set("query", effectiveQuery);
     if (params?.firstName) q.set("firstName", params.firstName);
     if (params?.lastName) q.set("lastName", params.lastName);
     if (params?.email) q.set("email", params.email);
@@ -1239,7 +1255,7 @@ export const argusApi = {
       argusFetch(
         `/api/identities/search?${q.toString()}`,
         {},
-        { allSites: params?.allSites },
+        { allSites: params?.allSites, siteId: params?.siteId },
       ),
     );
     return { items: data.results ?? [], total: data.totalItems ?? data.results?.length ?? 0 };
@@ -1284,6 +1300,20 @@ export const argusApi = {
 
   activateIdentity: (id: string) =>
     argusFetch<void>(`/api/identities/${encodeURIComponent(id)}/activate`, { method: "POST" }),
+
+  /**
+   * Solicita a sincronização das identidades com os sistemas integrados.
+   * Deve ser chamado após incluir/alterar uma identity (e seus dados
+   * complementares). `siteId` escopa a chamada; por padrão usa o site padrão.
+   */
+  synchronizeIdentities: (ids: string[], siteId?: string | null) =>
+    unwrap<{ totalOfSynchronizedIdentities: number; failedIdentities: string[] }>(
+      argusFetch(
+        `/api/identities/synchronize`,
+        { method: "POST", body: JSON.stringify({ IdentityIds: ids }) },
+        { siteId: siteId ?? undefined },
+      ),
+    ),
 
   // ---- Credentials ----
   // ---- Visitas ----
@@ -1562,9 +1592,13 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     email: i.email ?? "",
     status: (i.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
     customFields: customFieldsToRecord(i.systemData?.customFields),
+    // Site conforme o ClearID: companyData.siteId (onde é gravado) → topo →
+    // systemData.siteId. Se nenhum existir, fica indefinido (o form pede escolha).
     siteId:
       siteIdFromCompany ??
-      ((i as unknown as { siteId?: string }).siteId ?? undefined),
+      ((i as unknown as { siteId?: string }).siteId ??
+        (i.systemData as { siteId?: string } | null | undefined)?.siteId ??
+        undefined),
     workerTypeCode: workerTypeFromCompany ?? i.workerTypeCode ?? undefined,
     // Dados aninhados/adicionais preservados para o formulário completo.
     middleName: i.middleName ?? undefined,

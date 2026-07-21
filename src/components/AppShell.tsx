@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness } from "lucide-react";
+import { getTheme, applyTheme } from "@/lib/theme";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
@@ -68,7 +69,10 @@ const NAV: NavEntry[] = [
     kind: "group",
     key: "nav.tables",
     icon: Database,
-    items: [{ to: "/empresas", icon: Building2, key: "nav.empresas" }],
+    items: [
+      { to: "/empresas", icon: Building2, key: "nav.empresas" },
+      { to: "/tipos-trabalhador", icon: BriefcaseBusiness, key: "nav.tipos-trabalhador" },
+    ],
   },
   {
     kind: "group",
@@ -240,6 +244,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useT();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  // Aplica o tema salvo (o controle fica na página Identidade).
+  useEffect(() => {
+    applyTheme(getTheme());
+  }, []);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   // Carrega o catálogo de campos personalizados (Argus) e espelha no Supabase

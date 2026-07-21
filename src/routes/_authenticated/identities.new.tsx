@@ -114,6 +114,15 @@ function NewIdentity() {
         fail.push(t("identityNew.fail.defaultRule", { error: (e as Error).message }));
       }
 
+      // Etapa 5 — sincroniza a identidade com os sistemas integrados (após os
+      // dados complementares já terem sido gravados).
+      try {
+        await argusApi.synchronizeIdentities([data.identityId], vars.data.siteId);
+        ok.push(t("identityNew.step.sync"));
+      } catch (e) {
+        fail.push(t("identityNew.fail.sync", { error: (e as Error).message }));
+      }
+
       if (fail.length) {
         toast.warning(t("identityNew.createdWithIssues", { ok: ok.join(", ") }), {
           description: t("identityNew.failedList", { fail: fail.join("; ") }),

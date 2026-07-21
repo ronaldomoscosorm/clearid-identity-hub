@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Upload, Trash2, RotateCcw } from "lucide-react";
+import { Upload, Trash2, RotateCcw, Sun, Moon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getTheme, setTheme, type Theme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +34,13 @@ export const Route = createFileRoute("/_authenticated/branding")({
 function BrandingPage() {
   const { t } = useT();
   const [cfg, setCfg] = useState<BrandingConfig>(() => getBranding());
+  const [theme, setThemeState] = useState<Theme>(() => getTheme());
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const changeTheme = (v: Theme) => {
+    setThemeState(v);
+    setTheme(v); // aplica e persiste imediatamente
+  };
 
   const update = (patch: Partial<BrandingConfig>) => setCfg((c) => ({ ...c, ...patch }));
 
@@ -157,6 +165,31 @@ function BrandingPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <Label>{t("branding.theme.label")}</Label>
+              <div className="inline-flex rounded-lg border p-1">
+                <button
+                  type="button"
+                  onClick={() => changeTheme("light")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    theme === "light" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Sun className="h-4 w-4" /> {t("branding.theme.light")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeTheme("dark")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    theme === "dark" ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Moon className="h-4 w-4" /> {t("branding.theme.dark")}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="primary">{t("branding.colors.primaryLabel")}</Label>
               <div className="flex items-center gap-3">
                 <input
@@ -173,24 +206,6 @@ function BrandingPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="accent">{t("branding.colors.accentLabel")}</Label>
-              <div className="flex items-center gap-3">
-                <input
-                  id="accent"
-                  type="color"
-                  value={cfg.accentColor}
-                  onChange={(e) => update({ accentColor: e.target.value })}
-                  className="h-10 w-14 cursor-pointer rounded border bg-card"
-                />
-                <Input
-                  value={cfg.accentColor}
-                  onChange={(e) => update({ accentColor: e.target.value })}
-                  placeholder="#3b6fa0"
-                />
-              </div>
-            </div>
-
             <div className="rounded-md border p-3">
               <div className="mb-2 text-xs font-medium text-muted-foreground">{t("branding.preview.label")}</div>
               <div className="flex items-center gap-2">
@@ -199,12 +214,6 @@ function BrandingPage() {
                   style={{ background: cfg.primaryColor }}
                 >
                   {t("branding.preview.primaryButton")}
-                </span>
-                <span
-                  className="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-white"
-                  style={{ background: cfg.accentColor }}
-                >
-                  {t("branding.preview.accent")}
                 </span>
               </div>
             </div>

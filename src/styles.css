@@ -137,6 +137,59 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
+/* ---------------------------------------------------------------------------
+ * Identidade visual R&M Techo — tokens do "console" (navy + mango + gold).
+ * Usados nas telas re-desenhadas (a começar por Pessoas). Trocam com .dark.
+ * Fonte oficial: Neue Einstellung (embutir via @font-face quando houver os
+ * arquivos; enquanto isso, fallback geométrico).
+ * ------------------------------------------------------------------------- */
+:root {
+  --rm-navy: #102943;   /* Thunderstorm Gray */
+  --rm-mango: #FD5300;  /* Tropical Mango    */
+  --rm-gold: #FAAF50;   /* Sunset Gold       */
+  --rm-blaze: #BF2C0B;  /* Autumn Blaze      */
+  --rm-icy: #F0F2F2;    /* Icy Breeze        */
+
+  --rm-bg: #EDF0F1;
+  --rm-panel: #FFFFFF;
+  --rm-panel-2: #F5F8F9;
+  --rm-line: #DBE3E7;
+  --rm-line-soft: #E9EEF0;
+  --rm-ink: #102943;
+  --rm-dim: #566878;
+  --rm-faint: #8B9CA8;
+  --rm-brand: #FD5300;
+  --rm-brand-ink: #DA4600;
+  /* Status: ativo = verde, inativo = vermelho (sempre). */
+  --rm-active: #16A34A;
+  --rm-active-ink: #15803D;
+  --rm-inactive: #DC2626;
+  --rm-inactive-ink: #C0271F;
+
+  --font-rm: "Neue Einstellung", "Avenir Next", "Futura", "Century Gothic", system-ui, -apple-system, sans-serif;
+}
+
+.dark {
+  --rm-bg: #0A1826;
+  --rm-panel: #0F2235;
+  --rm-panel-2: #14283D;
+  --rm-line: #213A52;
+  --rm-line-soft: #17293A;
+  --rm-ink: #DCE6EE;
+  --rm-dim: #8398AC;
+  --rm-faint: #57718A;
+  --rm-brand: #FD5300;
+  --rm-brand-ink: #FF7A3C;
+  --rm-active: #2ECC71;
+  --rm-active-ink: #43D882;
+  --rm-inactive: #FF6A5D;
+  --rm-inactive-ink: #FF7E72;
+}
+
+/* Escopo tipográfico da marca (aplicar na raiz das telas R&M). */
+.rm { font-family: var(--font-rm); }
+.rm .tnum { font-variant-numeric: tabular-nums; }
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -145,5 +198,7 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    /* Fonte da marca R&M em todo o app (portais/dropdowns inclusos). */
+    font-family: var(--font-rm);
   }
 }

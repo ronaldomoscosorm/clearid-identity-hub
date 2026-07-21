@@ -144,9 +144,16 @@ export function IdentityForm({
   const [companyId, setCompanyId] = useState<string>("");
   const [companyOpen, setCompanyOpen] = useState(false);
   const defaultSiteId = useDefaultSiteId();
-  const [siteId, setSiteId] = useState<string>(initial?.siteId ?? defaultSiteId ?? "");
+  const isEdit = mode === "edit";
+  // Edição: apresenta o site conforme o ClearID (site do próprio registro). Se a
+  // identidade não tiver site, fica vazio para o usuário escolher — sem assumir o
+  // padrão. Criação: acompanha o site padrão, inclusive ao trocá-lo na topbar.
+  const [siteId, setSiteId] = useState<string>(
+    isEdit ? (initial?.siteId ?? "") : (initial?.siteId ?? defaultSiteId ?? ""),
+  );
   useEffect(() => {
-    if (!siteId && defaultSiteId) setSiteId(defaultSiteId);
+    if (isEdit || !defaultSiteId) return;
+    setSiteId(defaultSiteId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultSiteId]);
   const sitesQuery = useQuery({
@@ -203,7 +210,7 @@ export function IdentityForm({
     });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { alias } = useIdentityFieldLabels();
-  const { config: formLayoutConfig } = useFormLayoutConfig();
+  const { config: formLayoutConfig } = useFormLayoutConfig(siteId);
 
   // Tipos de trabalhador (Supabase) → mapeados para o workerTypeCode do Argus.
   const workerTypesQuery = useQuery({
@@ -262,17 +269,16 @@ export function IdentityForm({
 
   // Empresas do site (para vincular a identidade e herdar valores).
   const companiesQuery = useQuery({
-    queryKey: ["companies", siteId],
+    queryKey: ["companies"],
     queryFn: async () => {
+      // Empresas são por sistema (não filtra por site).
       const { data, error } = await supabase
         .from("companies")
         .select("id, name, tax_id")
-        .eq("site_id", siteId)
         .order("name", { ascending: true });
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    enabled: Boolean(siteId),
   });
   const companies = companiesQuery.data ?? [];
   // Rótulo da empresa: "Nome - CNPJ" (ou só o nome quando não há CNPJ).

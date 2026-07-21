@@ -111,15 +111,16 @@ function EmpresasPage() {
   const [toDelete, setToDelete] = useState<Company | null>(null);
 
   const query = useQuery({
-    queryKey: ["companies", siteId],
+    queryKey: ["companies"],
     queryFn: async (): Promise<Company[]> => {
-      let q = supabase.from("companies").select("*").order("name", { ascending: true });
-      q = siteId ? q.eq("site_id", siteId) : q;
-      const { data, error } = await q;
+      // Empresas são por SISTEMA (não filtra por site).
+      const { data, error } = await supabase
+        .from("companies")
+        .select("*")
+        .order("name", { ascending: true });
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    enabled: Boolean(siteId),
   });
 
   const siteFieldsQuery = useQuery({
@@ -160,7 +161,7 @@ function EmpresasPage() {
       } else {
         const { data, error } = await supabase
           .from("companies")
-          .insert({ ...payload, site_id: siteId as string })
+          .insert(payload)
           .select("id")
           .single();
         if (error) throw new Error(error.message);
@@ -182,7 +183,7 @@ function EmpresasPage() {
     },
     onSuccess: () => {
       toast.success(editing ? t("companies.toast.updated") : t("companies.toast.created"));
-      qc.invalidateQueries({ queryKey: ["companies", siteId] });
+      qc.invalidateQueries({ queryKey: ["companies"] });
       setDialogOpen(false);
     },
     onError: (e) => toast.error((e as Error).message),
@@ -195,7 +196,7 @@ function EmpresasPage() {
     },
     onSuccess: () => {
       toast.success(t("companies.toast.deleted"));
-      qc.invalidateQueries({ queryKey: ["companies", siteId] });
+      qc.invalidateQueries({ queryKey: ["companies"] });
       setToDelete(null);
     },
     onError: (e) => toast.error((e as Error).message),
@@ -252,26 +253,18 @@ function EmpresasPage() {
             variant="outline"
             size="sm"
             onClick={() => query.refetch()}
-            disabled={query.isFetching || !siteId}
+            disabled={query.isFetching}
           >
             <RefreshCw className={`mr-1 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
             {t("companies.refreshButton")}
           </Button>
-          <Button size="sm" onClick={openCreate} disabled={!siteId}>
+          <Button size="sm" onClick={openCreate}>
             <Plus className="mr-1 h-4 w-4" /> {t("companies.newButton")}
           </Button>
         </div>
       </div>
 
-      {!siteId ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            {t("companies.noSite.before")}
-            <span className="font-medium">{t("companies.noSite.settings")}</span>
-            {t("companies.noSite.after")}
-          </CardContent>
-        </Card>
-      ) : (
+      {(
         <Card>
           <CardHeader>
             <CardTitle className="text-base">

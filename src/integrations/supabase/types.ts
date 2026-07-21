@@ -46,7 +46,7 @@ export type Database = {
           id: string
           legal_name: string | null
           name: string
-          site_id: string
+          site_id: string | null
           status: string
           tax_id: string | null
           updated_at: string
@@ -57,7 +57,7 @@ export type Database = {
           id?: string
           legal_name?: string | null
           name: string
-          site_id: string
+          site_id?: string | null
           status?: string
           tax_id?: string | null
           updated_at?: string
@@ -68,7 +68,7 @@ export type Database = {
           id?: string
           legal_name?: string | null
           name?: string
-          site_id?: string
+          site_id?: string | null
           status?: string
           tax_id?: string | null
           updated_at?: string
