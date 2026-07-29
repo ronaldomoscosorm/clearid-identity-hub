@@ -11,13 +11,20 @@ import { useFormLayoutConfig, layoutForWorkerType } from "@/lib/form-layout";
 import { useSpecialFields, type DropdownOption } from "@/lib/special-fields";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
-import { typeOf as siteFieldKind, pickLang, optionsOf, isTruthy as cfTruthy } from "@/lib/custom-fields";
+import {
+  typeOf as siteFieldKind,
+  pickLang,
+  optionsOf,
+  isTruthy as cfTruthy,
+} from "@/lib/custom-fields";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PhotoCapture } from "@/components/PhotoCapture";
+import { AttachmentField } from "@/components/AttachmentField";
+import type { PendingAttachment } from "@/lib/attachments";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -77,24 +84,110 @@ type ExtraField = {
 
 const EXTRA_FIELDS: ExtraField[] = [
   // Identificação (top-level)
-  { key: "middle_name", label: "Nome do meio", section: "ident", target: "top", argusKey: "middleName" },
-  { key: "description", label: "Descrição", section: "ident", target: "top", argusKey: "description" },
+  {
+    key: "middle_name",
+    label: "Nome do meio",
+    section: "ident",
+    target: "top",
+    argusKey: "middleName",
+  },
+  {
+    key: "description",
+    label: "Descrição",
+    section: "ident",
+    target: "top",
+    argusKey: "description",
+  },
   { key: "country_code", label: "País", section: "ident", target: "top", argusKey: "countryCode" },
   { key: "culture", label: "Idioma/Cultura", section: "ident", target: "top", argusKey: "culture" },
   // Dados pessoais (privateData)
-  { key: "private_birthday", label: "Data de nascimento", section: "personal", target: "private", argusKey: "birthday", type: "date" },
-  { key: "private_employee_number", label: "Matrícula", section: "personal", target: "private", argusKey: "employeeNumber" },
-  { key: "private_secondary_email", label: "E-mail secundário", section: "personal", target: "private", argusKey: "secondaryEmail", type: "email" },
-  { key: "private_city_of_residence", label: "Cidade", section: "personal", target: "private", argusKey: "cityOfResidence" },
-  { key: "private_state_of_residence", label: "Estado", section: "personal", target: "private", argusKey: "stateOfResidence" },
-  { key: "private_zip_code", label: "CEP", section: "personal", target: "private", argusKey: "zipCode" },
-  { key: "private_phone_primary", label: "Telefone principal", section: "personal", target: "private", argusKey: "phoneNumberPrimary" },
-  { key: "private_phone_secondary", label: "Telefone secundário", section: "personal", target: "private", argusKey: "phoneNumberSecondary" },
+  {
+    key: "private_birthday",
+    label: "Data de nascimento",
+    section: "personal",
+    target: "private",
+    argusKey: "birthday",
+    type: "date",
+  },
+  {
+    key: "private_employee_number",
+    label: "Matrícula",
+    section: "personal",
+    target: "private",
+    argusKey: "employeeNumber",
+  },
+  {
+    key: "private_secondary_email",
+    label: "E-mail secundário",
+    section: "personal",
+    target: "private",
+    argusKey: "secondaryEmail",
+    type: "email",
+  },
+  {
+    key: "private_city_of_residence",
+    label: "Cidade",
+    section: "personal",
+    target: "private",
+    argusKey: "cityOfResidence",
+  },
+  {
+    key: "private_state_of_residence",
+    label: "Estado",
+    section: "personal",
+    target: "private",
+    argusKey: "stateOfResidence",
+  },
+  {
+    key: "private_zip_code",
+    label: "CEP",
+    section: "personal",
+    target: "private",
+    argusKey: "zipCode",
+  },
+  {
+    key: "private_phone_primary",
+    label: "Telefone principal",
+    section: "personal",
+    target: "private",
+    argusKey: "phoneNumberPrimary",
+  },
+  {
+    key: "private_phone_secondary",
+    label: "Telefone secundário",
+    section: "personal",
+    target: "private",
+    argusKey: "phoneNumberSecondary",
+  },
   // Vínculo corporativo (companyData)
-  { key: "company_name", label: "Empresa", section: "company", target: "company", argusKey: "companyName" },
-  { key: "company_job_title", label: "Cargo", section: "company", target: "company", argusKey: "jobTitle" },
-  { key: "company_department_name", label: "Departamento", section: "company", target: "company", argusKey: "departmentName" },
-  { key: "company_supervisor_name", label: "Supervisor", section: "company", target: "company", argusKey: "supervisorName" },
+  {
+    key: "company_name",
+    label: "Empresa",
+    section: "company",
+    target: "company",
+    argusKey: "companyName",
+  },
+  {
+    key: "company_job_title",
+    label: "Cargo",
+    section: "company",
+    target: "company",
+    argusKey: "jobTitle",
+  },
+  {
+    key: "company_department_name",
+    label: "Departamento",
+    section: "company",
+    target: "company",
+    argusKey: "departmentName",
+  },
+  {
+    key: "company_supervisor_name",
+    label: "Supervisor",
+    section: "company",
+    target: "company",
+    argusKey: "supervisorName",
+  },
 ];
 
 export type IdentityFormProps = {
@@ -107,6 +200,7 @@ export type IdentityFormProps = {
     companyId: string | null,
     workerTypeId: string | null,
     photo: Blob | null,
+    attachments: PendingAttachment[],
   ) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
@@ -161,12 +255,20 @@ export function IdentityForm({
     queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60 * 1000,
   });
-  const sites = (sitesQuery.data ?? []).slice().sort((a, b) =>
-    (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"),
-  );
-  const [customFields, setCustomFields] = useState<Record<string, string>>(
-    { ...(initial?.customFields ?? {}) },
-  );
+  const sites = (sitesQuery.data ?? [])
+    .slice()
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
+  const [customFields, setCustomFields] = useState<Record<string, string>>({
+    ...(initial?.customFields ?? {}),
+  });
+  // Anexos preparados para envio (por site_custom_field_id). O upload ocorre ao
+  // salvar o formulário, quando a identidade já existe no Supabase.
+  const [attachments, setAttachments] = useState<Record<string, File | null>>({});
+  const setAttachment = (siteFieldId: string, file: File | null) =>
+    setAttachments((prev) => ({ ...prev, [siteFieldId]: file }));
+  // identities.id (uuid) da identidade em edição — necessário para listar as
+  // versões já existentes dos anexos.
+  const [identityDbId, setIdentityDbId] = useState<string | null>(null);
   const [extra, setExtra] = useState<Record<string, string>>(() => {
     const priv = (initial?.privateData ?? {}) as Record<string, unknown>;
     const comp = (initial?.companyData ?? {}) as Record<string, unknown>;
@@ -242,7 +344,11 @@ export function IdentityForm({
     fillable: boolean;
     value_range: Json | null;
     display_name_override: Json | null;
-    definition: { custom_field_name: string; custom_field_type: string | null } | null;
+    definition: {
+      custom_field_name: string;
+      custom_field_type: string | null;
+      attachment_accept: string | null;
+    } | null;
   };
   const siteFieldsQuery = useQuery({
     queryKey: ["identity-site-fields", siteId, workerTypeId],
@@ -250,7 +356,7 @@ export function IdentityForm({
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
-          "id, is_required, fillable, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type)",
+          "id, is_required, fillable, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type, attachment_accept)",
         )
         .eq("site_id", siteId)
         .eq("entity_type", "identity")
@@ -265,7 +371,30 @@ export function IdentityForm({
   });
   const siteFields = siteFieldsQuery.data ?? [];
   const siteFieldLabel = (sf: SiteFieldLite) =>
-    pickLang(sf.display_name_override) || sf.definition?.custom_field_name || t("identityForm.fieldFallback");
+    pickLang(sf.display_name_override) ||
+    sf.definition?.custom_field_name ||
+    t("identityForm.fieldFallback");
+
+  // Quais campos de anexo já possuem uma versão atual (edição) — usado para
+  // validar obrigatoriedade sem exigir novo upload em toda edição.
+  const attachmentFieldIds = siteFields
+    .filter((sf) => siteFieldKind(sf.definition?.custom_field_type) === "attachment")
+    .map((sf) => sf.id);
+  const existingAttachmentsQuery = useQuery({
+    queryKey: ["identity-attachment-presence", identityDbId, attachmentFieldIds.join(",")],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from("identity_attachments")
+        .select("site_custom_field_id")
+        .eq("identity_id", identityDbId as string)
+        .eq("is_current", true)
+        .in("site_custom_field_id", attachmentFieldIds);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => r.site_custom_field_id);
+    },
+    enabled: Boolean(identityDbId && attachmentFieldIds.length),
+  });
+  const existingAttachmentIds = new Set(existingAttachmentsQuery.data ?? []);
 
   // Empresas do site (para vincular a identidade e herdar valores).
   const companiesQuery = useQuery({
@@ -292,11 +421,12 @@ export function IdentityForm({
     let cancelled = false;
     void supabase
       .from("identities")
-      .select("company_id, worker_type_id")
+      .select("id, company_id, worker_type_id")
       .eq("identity_id", initialIdentityId)
       .maybeSingle()
       .then(({ data }) => {
         if (cancelled || !data) return;
+        setIdentityDbId(data.id ?? null);
         if (data.company_id) setCompanyId(data.company_id);
         // Tipo do trabalhador exato vindo do Supabase tem prioridade sobre o
         // reverse-lookup ambíguo do workerTypeCode do Argus.
@@ -317,7 +447,10 @@ export function IdentityForm({
         .select("value, site_custom_field:site_custom_fields(related_identity_field_id)")
         .eq("company_id", companyId)
         .returns<
-          { value: string | null; site_custom_field: { related_identity_field_id: string | null } | null }[]
+          {
+            value: string | null;
+            site_custom_field: { related_identity_field_id: string | null } | null;
+          }[]
         >();
       if (error) throw new Error(error.message);
       const out: { rel: string; value: string }[] = [];
@@ -335,7 +468,9 @@ export function IdentityForm({
     const rows = companyRelatedQuery.data;
     if (!rows?.length || !siteFields.length) return;
     const nameById = new Map(
-      siteFields.filter((sf) => sf.definition).map((sf) => [sf.id, sf.definition!.custom_field_name]),
+      siteFields
+        .filter((sf) => sf.definition)
+        .map((sf) => [sf.id, sf.definition!.custom_field_name]),
     );
     setCustomFields((prev) => {
       const next = { ...prev };
@@ -366,12 +501,31 @@ export function IdentityForm({
     const value = customFields[name] ?? "";
     const err = errors[`sf-${sf.id}`];
     const disabled = !sf.fillable; // não preenchível → somente leitura
+    // Anexo: campo só do sistema (arquivo no Storage, versionado). Não vai ao Argus.
+    if (kind === "attachment") {
+      return (
+        <AttachmentField
+          key={sf.id}
+          siteFieldId={sf.id}
+          identityDbId={identityDbId}
+          label={siteFieldLabel(sf)}
+          required={sf.is_required && sf.fillable}
+          disabled={disabled}
+          accept={sf.definition?.attachment_accept ?? null}
+          staged={attachments[sf.id] ?? null}
+          onStage={(file) => setAttachment(sf.id, file)}
+          error={err}
+        />
+      );
+    }
     return (
       <div key={sf.id} className="space-y-1.5">
         <Label htmlFor={`sf-${sf.id}`} className="text-xs text-muted-foreground">
           {siteFieldLabel(sf)}
           {sf.is_required && <span className="ml-0.5 text-destructive">*</span>}
-          {disabled && <span className="ml-1 text-muted-foreground">{t("identityForm.readOnly")}</span>}
+          {disabled && (
+            <span className="ml-1 text-muted-foreground">{t("identityForm.readOnly")}</span>
+          )}
         </Label>
         {kind === "boolean" ? (
           <div className="flex h-9 items-center">
@@ -426,7 +580,9 @@ export function IdentityForm({
       <div key={`cf-${name}`} className="space-y-1.5">
         <Label htmlFor={`cf-${name}`} className="text-xs text-muted-foreground">
           {alias(name, def.displayName || name)}
-          {disabled && <span className="ml-1 text-muted-foreground">{t("identityForm.readOnly")}</span>}
+          {disabled && (
+            <span className="ml-1 text-muted-foreground">{t("identityForm.readOnly")}</span>
+          )}
         </Label>
         {kind === "boolean" ? (
           <div className="flex h-9 items-center">
@@ -453,7 +609,8 @@ export function IdentityForm({
   // Campo customizável com dropdown especial: grava o `value` da opção no ClearID.
   const renderSpecialDropdown = (name: string, options: DropdownOption[]) => {
     const value = customFields[name] ?? "";
-    const label = specialLabelByName.get(name) || alias(name, cfDefByName.get(name)?.displayName || name);
+    const label =
+      specialLabelByName.get(name) || alias(name, cfDefByName.get(name)?.displayName || name);
     // Obrigatoriedade vem do campo do site (quando o campo também é do site).
     const sf = siteFieldByName.get(name);
     const required = !!(sf && sf.is_required && sf.fillable);
@@ -495,9 +652,7 @@ export function IdentityForm({
 
   // ---- Layout configurável dos campos padrão (designer de layout) ----
   const extraByKey = new Map(EXTRA_FIELDS.map((f) => [f.key, f]));
-  const requiredStd = new Set(
-    STANDARD_IDENTITY_FIELDS.filter((f) => f.required).map((f) => f.key),
-  );
+  const requiredStd = new Set(STANDARD_IDENTITY_FIELDS.filter((f) => f.required).map((f) => f.key));
 
   // Grupos (seções) do formulário, conforme o designer de layout. Obrigatórios
   // sempre; extras (privateData/companyData) somem quando o tipo tem campos do
@@ -518,7 +673,8 @@ export function IdentityForm({
     .filter((g) => g.keys.length > 0);
   // Campos customizáveis (cf:) presentes no layout — só estes são validados/enviados.
   const consumedCf = new Set<string>();
-  for (const g of formGroups) for (const k of g.keys) if (k.startsWith("cf:")) consumedCf.add(k.slice(3));
+  for (const g of formGroups)
+    for (const k of g.keys) if (k.startsWith("cf:")) consumedCf.add(k.slice(3));
 
   const renderStandardField = (k: string): ReactNode => {
     if (k.startsWith("cf:")) {
@@ -540,7 +696,11 @@ export function IdentityForm({
               {alias("company_worker_type_code", t("identityForm.workerType"))}
               {star}
             </Label>
-            <Select value={workerTypeId} onValueChange={(id) => setWorkerTypeId(id)} disabled={lockWorkerType}>
+            <Select
+              value={workerTypeId}
+              onValueChange={(id) => setWorkerTypeId(id)}
+              disabled={lockWorkerType}
+            >
               <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
                 <SelectValue placeholder={t("identityForm.selectWorkerTypePlaceholder")} />
               </SelectTrigger>
@@ -552,13 +712,18 @@ export function IdentityForm({
                 ))}
               </SelectContent>
             </Select>
-            {errors.workerTypeCode && <p className="text-xs text-destructive">{errors.workerTypeCode}</p>}
+            {errors.workerTypeCode && (
+              <p className="text-xs text-destructive">{errors.workerTypeCode}</p>
+            )}
           </div>
         );
       case "first_name":
         return (
           <div key={k} className="space-y-2 sm:col-span-2">
-            <Label htmlFor="fullName">{alias("first_name", t("common.name"))}{star}</Label>
+            <Label htmlFor="fullName">
+              {alias("first_name", t("common.name"))}
+              {star}
+            </Label>
             <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
@@ -568,7 +733,9 @@ export function IdentityForm({
       case "display_name":
         return (
           <div key={k} className="space-y-2 sm:col-span-2">
-            <Label htmlFor="displayName">{alias("display_name", t("identityForm.displayName"))}</Label>
+            <Label htmlFor="displayName">
+              {alias("display_name", t("identityForm.displayName"))}
+            </Label>
             <Input
               id="displayName"
               value={displayName}
@@ -580,22 +747,41 @@ export function IdentityForm({
       case "email":
         return (
           <div key={k} className="space-y-2 sm:col-span-2">
-            <Label htmlFor="email">{alias("email", t("common.email"))}{star}</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Label htmlFor="email">
+              {alias("email", t("common.email"))}
+              {star}
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
           </div>
         );
       case "company_site_id":
         return (
           <div key={k} className="space-y-2">
-            <Label>{alias("company_site_id", t("identityForm.site"))}{star}</Label>
+            <Label>
+              {alias("company_site_id", t("identityForm.site"))}
+              {star}
+            </Label>
             <Select value={siteId} onValueChange={setSiteId}>
               <SelectTrigger className={cn(errors.siteId && "border-destructive")}>
-                <SelectValue placeholder={sitesQuery.isLoading ? t("common.loading") : t("identityForm.selectSitePlaceholder")} />
+                <SelectValue
+                  placeholder={
+                    sitesQuery.isLoading
+                      ? t("common.loading")
+                      : t("identityForm.selectSitePlaceholder")
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {sites.map((s) => (
-                  <SelectItem key={s.siteId} value={s.siteId}>{s.name}</SelectItem>
+                  <SelectItem key={s.siteId} value={s.siteId}>
+                    {s.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -635,7 +821,9 @@ export function IdentityForm({
                           setCompanyOpen(false);
                         }}
                       >
-                        <Check className={cn("mr-2 h-4 w-4", !companyId ? "opacity-100" : "opacity-0")} />
+                        <Check
+                          className={cn("mr-2 h-4 w-4", !companyId ? "opacity-100" : "opacity-0")}
+                        />
                         {t("identityForm.none")}
                       </CommandItem>
                       {companies.map((c) => (
@@ -648,7 +836,10 @@ export function IdentityForm({
                           }}
                         >
                           <Check
-                            className={cn("mr-2 h-4 w-4", companyId === c.id ? "opacity-100" : "opacity-0")}
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              companyId === c.id ? "opacity-100" : "opacity-0",
+                            )}
                           />
                           <span className="flex-1 truncate">{c.name}</span>
                           {c.tax_id && (
@@ -678,8 +869,7 @@ export function IdentityForm({
 
   const typeOf = (t?: string | null) => (t ?? "").toLowerCase();
   const isDate = (t?: string | null) => typeOf(t) === "date" || typeOf(t) === "datetime";
-  const isBool = (t?: string | null) =>
-    ["bool", "boolean", "switch", "toggle"].includes(typeOf(t));
+  const isBool = (t?: string | null) => ["bool", "boolean", "switch", "toggle"].includes(typeOf(t));
 
   const isBlank = (v: string | null | undefined) => {
     if (v == null) return true;
@@ -718,7 +908,9 @@ export function IdentityForm({
     const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
     if (!m) return null;
     const [, dd, mm, yyyy] = m;
-    const d = Number(dd), mo = Number(mm), y = Number(yyyy);
+    const d = Number(dd),
+      mo = Number(mm),
+      y = Number(yyyy);
     if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 1900 || y > 2999) return null;
     const dt = new Date(y, mo - 1, d);
     if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
@@ -734,7 +926,8 @@ export function IdentityForm({
     if (digits.length <= 4) return `${p1}/${p2}`;
     return `${p1}/${p2}/${p3}`;
   };
-  const isTruthy = (v: string) => !isBlank(v) && ["true", "1", "yes", "sim"].includes(v.toLowerCase());
+  const isTruthy = (v: string) =>
+    !isBlank(v) && ["true", "1", "yes", "sim"].includes(v.toLowerCase());
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -757,12 +950,20 @@ export function IdentityForm({
     }
     for (const sf of siteFields) {
       if (
-        sf.is_required &&
-        sf.fillable &&
-        sf.definition &&
-        consumedCf.has(sf.definition.custom_field_name) && // apenas os campos presentes no layout
-        isBlank(customFields[sf.definition.custom_field_name])
+        !sf.is_required ||
+        !sf.fillable ||
+        !sf.definition ||
+        !consumedCf.has(sf.definition.custom_field_name) // apenas os campos presentes no layout
       ) {
+        continue;
+      }
+      if (siteFieldKind(sf.definition.custom_field_type) === "attachment") {
+        // Anexo obrigatório: atendido por um arquivo preparado OU por uma versão
+        // já existente (edição).
+        if (!attachments[sf.id] && !existingAttachmentIds.has(sf.id)) {
+          out[`sf-${sf.id}`] = t("identityForm.validation.requiredField");
+        }
+      } else if (isBlank(customFields[sf.definition.custom_field_name])) {
         out[`sf-${sf.id}`] = t("identityForm.validation.requiredField");
       }
     }
@@ -775,7 +976,9 @@ export function IdentityForm({
     const { name: _fullName, ...baseData } = parsedData;
     const { firstName, lastName } = splitName(_fullName);
     const cfErrors: Record<string, string> = {};
-    const dateFieldNames = new Set(defs.filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName));
+    const dateFieldNames = new Set(
+      defs.filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName),
+    );
     const cf: Record<string, string> = {};
     for (const [k, v] of Object.entries(customFields)) {
       const key = k.trim();
@@ -812,11 +1015,27 @@ export function IdentityForm({
     }
     setErrors({});
     const siteFieldValues: SiteFieldValue[] = siteFields
-      .filter((sf) => sf.definition && consumedCf.has(sf.definition.custom_field_name))
+      .filter(
+        (sf) =>
+          sf.definition &&
+          consumedCf.has(sf.definition.custom_field_name) &&
+          siteFieldKind(sf.definition.custom_field_type) !== "attachment", // anexo não é valor de texto
+      )
       .map((sf) => ({
         site_custom_field_id: sf.id,
         value: cf[sf.definition!.custom_field_name] ? cf[sf.definition!.custom_field_name] : null,
       }));
+
+    // Anexos preparados (upload feito após a identidade existir).
+    const pendingAttachments: PendingAttachment[] = siteFields
+      .filter(
+        (sf) =>
+          sf.definition &&
+          consumedCf.has(sf.definition.custom_field_name) &&
+          siteFieldKind(sf.definition.custom_field_type) === "attachment" &&
+          attachments[sf.id],
+      )
+      .map((sf) => ({ site_custom_field_id: sf.id, file: attachments[sf.id]! }));
 
     // Monta os campos adicionais (top-level, privateData, companyData),
     // preservando o que veio do initial (edit) e sobrescrevendo com o form.
@@ -825,7 +1044,8 @@ export function IdentityForm({
     const compExtra: Record<string, unknown> = { ...((initial?.companyData ?? {}) as object) };
     for (const f of EXTRA_FIELDS) {
       const val = (extra[f.key] ?? "").trim();
-      const bag = f.target === "private" ? privExtra : f.target === "company" ? compExtra : topExtra;
+      const bag =
+        f.target === "private" ? privExtra : f.target === "company" ? compExtra : topExtra;
       if (val) bag[f.argusKey] = val;
       else if (f.argusKey in bag) bag[f.argusKey] = null; // limpa valor existente (edição)
     }
@@ -842,14 +1062,19 @@ export function IdentityForm({
       siteId: siteId || undefined,
       workerTypeCode: effectiveWorkerTypeCode || undefined,
     };
-    onSubmit(payload as unknown as IdentityUpsert, siteFieldValues, companyId || null, workerTypeId || null, photo);
+    onSubmit(
+      payload as unknown as IdentityUpsert,
+      siteFieldValues,
+      companyId || null,
+      workerTypeId || null,
+      photo,
+      pendingAttachments,
+    );
   };
 
   const dateDefs = defs.filter((f) => isDate(f.customFieldType));
   const boolDefs = defs.filter((f) => isBool(f.customFieldType));
-  const textDefs = defs.filter(
-    (f) => !isDate(f.customFieldType) && !isBool(f.customFieldType),
-  );
+  const textDefs = defs.filter((f) => !isDate(f.customFieldType) && !isBool(f.customFieldType));
 
   return (
     <form onSubmit={submit} className="space-y-6">
@@ -873,7 +1098,9 @@ export function IdentityForm({
       {formGroups.map((g, i) => (
         <Card key={i}>
           <CardHeader>
-            <CardTitle className="text-base">{g.name.trim() || t("identityForm.formData")}</CardTitle>
+            <CardTitle className="text-base">
+              {g.name.trim() || t("identityForm.formData")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             {g.keys.map((k) => renderStandardField(k))}
@@ -882,145 +1109,150 @@ export function IdentityForm({
       ))}
 
       {showCustomFields && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("identityForm.customAttributes")}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {fieldsQuery.isLoading ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : defs.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {t("identityForm.noCustomFields")}
-            </p>
-          ) : (
-            <div className="space-y-6">
-              {(dateDefs.length > 0 || textDefs.length > 0) && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  {[...dateDefs, ...textDefs].map((f) => {
-                    const name = f.customFieldName;
-                    const label = alias(name, f.displayName || name);
-                    const value = customFields[name] ?? "";
-                    return (
-                      <div key={name} className="space-y-1.5">
-                        <Label htmlFor={`cf-${name}`} className="text-xs text-muted-foreground">
-                          {label}
-                        </Label>
-                        {isDate(f.customFieldType) ? (
-                          <>
-                            {(() => {
-                              const iso = toDateInputValue(value);
-                              const selected = iso ? parse(iso, "yyyy-MM-dd", new Date()) : undefined;
-                              const today = new Date();
-                              today.setHours(0, 0, 0, 0);
-                              const isExpired = !!selected && selected < today;
-                              return (
-                                <>
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      id={`cf-${name}`}
-                                      type="button"
-                                      variant="outline"
-                                      disabled={f.isReadOnly}
-                                      className={cn(
-                                        "w-full justify-start rounded-full text-left font-normal",
-                                        !selected && "text-muted-foreground",
-                                        isExpired &&
-                                          "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
-                                      )}
-                                    >
-                                      <CalendarIcon className="mr-2 h-4 w-4" />
-                                      {selected ? format(selected, "dd/MM/yyyy", { locale: ptBR }) : t("identityForm.datePlaceholder")}
-                                      {isExpired && (
-                                        <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
-                                          {t("identityForm.expiredBadge")}
-                                        </span>
-                                      )}
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                      mode="single"
-                                      locale={ptBR}
-                                      selected={selected}
-                                      onSelect={(d) =>
-                                        setField(name, d ? format(d, "yyyy-MM-dd") : "")
-                                      }
-                                      initialFocus
-                                      className={cn("p-3 pointer-events-auto")}
-                                    />
-                                    {selected && !f.isReadOnly && (
-                                      <div className="border-t p-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("identityForm.customAttributes")}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {fieldsQuery.isLoading ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : defs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{t("identityForm.noCustomFields")}</p>
+            ) : (
+              <div className="space-y-6">
+                {(dateDefs.length > 0 || textDefs.length > 0) && (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {[...dateDefs, ...textDefs].map((f) => {
+                      const name = f.customFieldName;
+                      const label = alias(name, f.displayName || name);
+                      const value = customFields[name] ?? "";
+                      return (
+                        <div key={name} className="space-y-1.5">
+                          <Label htmlFor={`cf-${name}`} className="text-xs text-muted-foreground">
+                            {label}
+                          </Label>
+                          {isDate(f.customFieldType) ? (
+                            <>
+                              {(() => {
+                                const iso = toDateInputValue(value);
+                                const selected = iso
+                                  ? parse(iso, "yyyy-MM-dd", new Date())
+                                  : undefined;
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                const isExpired = !!selected && selected < today;
+                                return (
+                                  <>
+                                    <Popover>
+                                      <PopoverTrigger asChild>
                                         <Button
+                                          id={`cf-${name}`}
                                           type="button"
-                                          variant="ghost"
-                                          size="sm"
-                                          className="w-full"
-                                          onClick={() => setField(name, "")}
+                                          variant="outline"
+                                          disabled={f.isReadOnly}
+                                          className={cn(
+                                            "w-full justify-start rounded-full text-left font-normal",
+                                            !selected && "text-muted-foreground",
+                                            isExpired &&
+                                              "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
+                                          )}
                                         >
-                                          {t("identityForm.clear")}
+                                          <CalendarIcon className="mr-2 h-4 w-4" />
+                                          {selected
+                                            ? format(selected, "dd/MM/yyyy", { locale: ptBR })
+                                            : t("identityForm.datePlaceholder")}
+                                          {isExpired && (
+                                            <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
+                                              {t("identityForm.expiredBadge")}
+                                            </span>
+                                          )}
                                         </Button>
-                                      </div>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                          mode="single"
+                                          locale={ptBR}
+                                          selected={selected}
+                                          onSelect={(d) =>
+                                            setField(name, d ? format(d, "yyyy-MM-dd") : "")
+                                          }
+                                          initialFocus
+                                          className={cn("p-3 pointer-events-auto")}
+                                        />
+                                        {selected && !f.isReadOnly && (
+                                          <div className="border-t p-2">
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              className="w-full"
+                                              onClick={() => setField(name, "")}
+                                            >
+                                              {t("identityForm.clear")}
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </PopoverContent>
+                                    </Popover>
+                                    {isExpired && (
+                                      <p className="text-xs font-medium text-destructive">
+                                        {t("identityForm.expiredDate")}
+                                      </p>
                                     )}
-                                  </PopoverContent>
-                                </Popover>
-                                {isExpired && (
-                                  <p className="text-xs font-medium text-destructive">
-                                    {t("identityForm.expiredDate")}
-                                  </p>
-                                )}
-                                </>
-                              );
-                            })()}
-                            {errors[`cf-${name}`] && (
-                              <p className="text-xs text-destructive">{errors[`cf-${name}`]}</p>
-                            )}
-                          </>
-                        ) : (
-                          <Input
+                                  </>
+                                );
+                              })()}
+                              {errors[`cf-${name}`] && (
+                                <p className="text-xs text-destructive">{errors[`cf-${name}`]}</p>
+                              )}
+                            </>
+                          ) : (
+                            <Input
+                              id={`cf-${name}`}
+                              value={toTextValue(value)}
+                              onChange={(e) => setField(name, e.target.value)}
+                              disabled={f.isReadOnly}
+                              className="rounded-full"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {boolDefs.length > 0 && (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {boolDefs.map((f) => {
+                      const name = f.customFieldName;
+                      const label = alias(name, f.displayName || name);
+                      const value = customFields[name] ?? "";
+                      return (
+                        <div key={name} className="flex items-center gap-2">
+                          <Checkbox
                             id={`cf-${name}`}
-                            value={toTextValue(value)}
-                            onChange={(e) => setField(name, e.target.value)}
+                            checked={isTruthy(value)}
+                            onCheckedChange={(v) => setField(name, v ? "true" : "false")}
                             disabled={f.isReadOnly}
-                            className="rounded-full"
                           />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {boolDefs.length > 0 && (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {boolDefs.map((f) => {
-                    const name = f.customFieldName;
-                    const label = alias(name, f.displayName || name);
-                    const value = customFields[name] ?? "";
-                    return (
-                      <div key={name} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`cf-${name}`}
-                          checked={isTruthy(value)}
-                          onCheckedChange={(v) => setField(name, v ? "true" : "false")}
-                          disabled={f.isReadOnly}
-                        />
-                        <Label htmlFor={`cf-${name}`} className="cursor-pointer text-sm font-normal">
-                          {label}
-                        </Label>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                          <Label
+                            htmlFor={`cf-${name}`}
+                            className="cursor-pointer text-sm font-normal"
+                          >
+                            {label}
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <div className="flex items-center justify-end gap-2">
@@ -1031,7 +1263,11 @@ export function IdentityForm({
           </Button>
         )}
         <Button type="submit" disabled={submitting}>
-          {submitting ? t("common.saving") : mode === "create" ? t("identityForm.create") : t("common.save")}
+          {submitting
+            ? t("common.saving")
+            : mode === "create"
+              ? t("identityForm.create")
+              : t("common.save")}
         </Button>
       </div>
     </form>

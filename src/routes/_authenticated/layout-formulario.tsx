@@ -27,10 +27,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Lock, Hourglass, Plus, Trash2, Search, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  STANDARD_IDENTITY_FIELDS,
-  useIdentityFieldLabels,
-} from "@/lib/identity-labels";
+import { STANDARD_IDENTITY_FIELDS, useIdentityFieldLabels } from "@/lib/identity-labels";
 import {
   useFormLayoutConfig,
   saveFormLayoutConfig,
@@ -53,6 +50,7 @@ import {
 } from "@/components/ui/dialog";
 import { useSpecialFields } from "@/lib/special-fields";
 import { pickLang } from "@/lib/custom-fields";
+import type { Json } from "@/integrations/supabase/types";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,21 +83,28 @@ const REQUIRED = new Set(REQUIRED_KEYS);
 const ALL_KEYS = STANDARD_IDENTITY_FIELDS.map((f) => f.key);
 const AVAILABLE = "available";
 const uid = () =>
-  typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `id-${Math.round(performance.now() * 1000)}`;
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `id-${Math.round(performance.now() * 1000)}`;
 
 type EditGroup = { gid: string; name: string; fields: string[] };
 type Model = { available: string[]; groups: EditGroup[] };
 
 // Monta o model de edição; `pool` são todas as chaves disponíveis (padrão + cf).
 function layoutToModel(layout: FormLayout, pool: string[]): Model {
-  const groups: EditGroup[] = layout.groups.map((g) => ({ gid: uid(), name: g.name, fields: [...g.fields] }));
+  const groups: EditGroup[] = layout.groups.map((g) => ({
+    gid: uid(),
+    name: g.name,
+    fields: [...g.fields],
+  }));
   if (groups.length === 0) groups.push({ gid: uid(), name: "", fields: [] });
   const used = new Set(groups.flatMap((g) => g.fields));
   const available = pool.filter((k) => !used.has(k));
   return { available, groups };
 }
 
-const modelToGroups = (m: Model) => m.groups.map((g) => ({ name: g.name.trim(), fields: g.fields }));
+const modelToGroups = (m: Model) =>
+  m.groups.map((g) => ({ name: g.name.trim(), fields: g.fields }));
 
 function LayoutFormularioPage() {
   const { t, lang } = useT();
@@ -133,26 +138,29 @@ function LayoutFormularioPage() {
     (f) => !f.isDeleted && f.customFieldName.startsWith("Vylor_"),
   );
 
-  // Nomes dos campos customizáveis do SITE EDITADO — restringem os disponíveis.
+  // Campos customizáveis do SITE EDITADO — restringem os disponíveis. Inclui os
+  // campos LOCAIS (ex.: Anexo), que não vêm do catálogo Argus.
+  type SiteDef = { custom_field_name: string; display_name: Json; is_local: boolean };
   const siteFieldsQuery = useQuery({
     queryKey: ["layout-site-field-names", editSiteId],
-    queryFn: async () => {
+    queryFn: async (): Promise<SiteDef[]> => {
       const { data, error } = await supabase
         .from("site_custom_fields")
-        .select("definition:custom_field_definitions(custom_field_name)")
+        .select("definition:custom_field_definitions(custom_field_name, display_name, is_local)")
         .eq("site_id", editSiteId ?? "")
         .eq("entity_type", "identity")
         .eq("is_active", true)
-        .returns<{ definition: { custom_field_name: string } | null }[]>();
+        .returns<{ definition: SiteDef | null }[]>();
       if (error) throw new Error(error.message);
-      const names = new Set<string>();
-      for (const r of data ?? []) if (r.definition?.custom_field_name) names.add(r.definition.custom_field_name);
-      return names;
+      return (data ?? []).map((r) => r.definition).filter((d): d is SiteDef => Boolean(d));
     },
     enabled: Boolean(editSiteId),
     staleTime: 5 * 60 * 1000,
   });
-  const siteFieldNames = siteFieldsQuery.data;
+  const siteDefs = siteFieldsQuery.data ?? [];
+  const siteFieldNames = siteFieldsQuery.data
+    ? new Set(siteDefs.map((d) => d.custom_field_name))
+    : undefined;
 
   // Dropdowns especiais — ficam disponíveis independentemente do site.
   const { list: specialList, loaded: specialLoaded } = useSpecialFields();
@@ -161,17 +169,26 @@ function LayoutFormularioPage() {
   const siteCustomDefs = siteFieldNames
     ? allCustomDefs.filter((d) => siteFieldNames.has(d.customFieldName))
     : allCustomDefs;
-  const cfLabel = new Map(allCustomDefs.map((d) => [CF_PREFIX + d.customFieldName, d.displayName || d.customFieldName]));
+  const cfLabel = new Map(
+    allCustomDefs.map((d) => [CF_PREFIX + d.customFieldName, d.displayName || d.customFieldName]),
+  );
   for (const s of specialList) if (s.label) cfLabel.set(CF_PREFIX + s.custom_field_name, s.label);
+  // Campos locais (ex.: Anexo) do site — rótulo pelo display_name multilíngue.
+  const localSiteDefs = siteDefs.filter((d) => d.is_local);
+  for (const d of localSiteDefs) {
+    cfLabel.set(CF_PREFIX + d.custom_field_name, pickLang(d.display_name) || d.custom_field_name);
+  }
   const siteKeys = siteCustomDefs.map((d) => CF_PREFIX + d.customFieldName);
   const specialKeys = specialList.map((s) => CF_PREFIX + s.custom_field_name);
-  const customKeys = [...new Set([...siteKeys, ...specialKeys])];
+  const localKeys = localSiteDefs.map((d) => CF_PREFIX + d.custom_field_name);
+  const customKeys = [...new Set([...siteKeys, ...specialKeys, ...localKeys])];
   const pool = [...ALL_KEYS, ...customKeys];
   const siteReady = !editSiteId || siteFieldsQuery.isSuccess;
   const ready = loaded && customFieldsQuery.isSuccess && siteReady && specialLoaded;
 
   const labelOf = (key: string) => {
-    if (key.startsWith(CF_PREFIX)) return alias(key.slice(CF_PREFIX.length), cfLabel.get(key) ?? key.slice(CF_PREFIX.length));
+    if (key.startsWith(CF_PREFIX))
+      return alias(key.slice(CF_PREFIX.length), cfLabel.get(key) ?? key.slice(CF_PREFIX.length));
     return alias(key, t(LABEL_KEY[key] ?? `identityForm.extra.${key}`));
   };
 
@@ -366,12 +383,13 @@ function LayoutFormularioPage() {
   // Exportação do layout do site atual para outros sites.
   const [exportOpen, setExportOpen] = useState(false);
   const [exportTargets, setExportTargets] = useState<Record<string, boolean>>({});
-  const toggleTarget = (id: string) =>
-    setExportTargets((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleTarget = (id: string) => setExportTargets((prev) => ({ ...prev, [id]: !prev[id] }));
 
   const exportMut = useMutation({
     mutationFn: async () => {
-      const targets = Object.keys(exportTargets).filter((id) => exportTargets[id] && id !== editSiteId);
+      const targets = Object.keys(exportTargets).filter(
+        (id) => exportTargets[id] && id !== editSiteId,
+      );
       if (targets.length === 0) throw new Error(t("formLayout.export.none"));
       // Exporta exatamente o que está na tela (inclui edições não salvas).
       const payload: FormLayoutConfig = { layouts: commit(layouts), links };
@@ -560,7 +578,12 @@ function LayoutFormularioPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Droppable id={g.gid} items={g.fields} strategy="grid" emptyHint={t("formLayout.emptyGroup")}>
+                  <Droppable
+                    id={g.gid}
+                    items={g.fields}
+                    strategy="grid"
+                    emptyHint={t("formLayout.emptyGroup")}
+                  >
                     {g.fields.map((k) => (
                       <FieldItem key={k} id={k} label={labelOf(k)} />
                     ))}
@@ -584,7 +607,10 @@ function LayoutFormularioPage() {
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           {workerTypes.map((w) => (
-            <div key={w.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+            <div
+              key={w.id}
+              className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+            >
               <span className="text-sm">{pickLang(w.name_i18n, lang) || w.name}</span>
               <Select value={links[w.id] ?? "__default__"} onValueChange={(v) => setLink(w.id, v)}>
                 <SelectTrigger className="w-48">
@@ -639,7 +665,12 @@ function Droppable({
       >
         {children}
         {items.length === 0 && (
-          <p className={cn("py-4 text-center text-xs text-muted-foreground", strategy === "grid" && "sm:col-span-2")}>
+          <p
+            className={cn(
+              "py-4 text-center text-xs text-muted-foreground",
+              strategy === "grid" && "sm:col-span-2",
+            )}
+          >
             {emptyHint || " "}
           </p>
         )}
@@ -650,7 +681,9 @@ function Droppable({
 
 function FieldItem({ id, label }: { id: string; label: string }) {
   const required = REQUIRED.has(id);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
   return (
     <div
       ref={setNodeRef}

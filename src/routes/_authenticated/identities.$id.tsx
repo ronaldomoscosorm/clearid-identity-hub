@@ -11,6 +11,7 @@ import {
   saveIdentityWorkerType,
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
+import { saveIdentityAttachments, type PendingAttachment } from "@/lib/attachments";
 import { clearIdToFormValues } from "@/lib/argus-client";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -64,9 +65,9 @@ function IdentityDetail() {
   // site, fica indefinido e o cabeçalho não exibe um site "falso".
   const identitySiteId = query.data
     ? ((query.data as unknown as { siteId?: string }).siteId ??
-        (query.data.companyData as { siteId?: string } | null | undefined)?.siteId ??
-        (query.data.systemData as { siteId?: string } | null | undefined)?.siteId ??
-        undefined)
+      (query.data.companyData as { siteId?: string } | null | undefined)?.siteId ??
+      (query.data.systemData as { siteId?: string } | null | undefined)?.siteId ??
+      undefined)
     : undefined;
   // Escopo para sincronização/times: site do registro ou, na falta, o padrão.
   const scopeSiteId = identitySiteId ?? siteId ?? undefined;
@@ -80,6 +81,7 @@ function IdentityDetail() {
       siteFieldValues: SiteFieldValue[];
       companyId: string | null;
       workerTypeId: string | null;
+      attachments: PendingAttachment[];
     }) => argusApi.updateIdentity(id, vars.data),
     onSuccess: async (updated, vars) => {
       const ok: string[] = [t("identityDetail.mainData")];
@@ -135,12 +137,21 @@ function IdentityDetail() {
       await saveIdentityCompany(id, vars.companyId);
       await saveIdentityWorkerType(id, vars.workerTypeId);
       await saveIdentityCustomFields(id, vars.siteFieldValues);
+      // Anexos (Storage + versionamento).
+      if (vars.attachments.length) {
+        const { failed } = await saveIdentityAttachments(id, vars.attachments);
+        if (failed.length) toast.warning(t("attachment.uploadPartial", { n: failed.length }));
+        qc.invalidateQueries({ queryKey: ["identity-attachments"] });
+        qc.invalidateQueries({ queryKey: ["identity-attachment-presence"] });
+      }
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
     },
     onError: (e) => {
       const err = e as ArgusApiError;
-      toast.error(err.message, { description: err.traceId ? `TraceId: ${err.traceId}` : undefined });
+      toast.error(err.message, {
+        description: err.traceId ? `TraceId: ${err.traceId}` : undefined,
+      });
     },
   });
 
@@ -153,7 +164,9 @@ function IdentityDetail() {
     },
     onError: (e) => {
       const err = e as ArgusApiError;
-      toast.error(err.message, { description: err.traceId ? `TraceId: ${err.traceId}` : undefined });
+      toast.error(err.message, {
+        description: err.traceId ? `TraceId: ${err.traceId}` : undefined,
+      });
     },
   });
 
@@ -166,7 +179,9 @@ function IdentityDetail() {
     },
     onError: (e) => {
       const err = e as ArgusApiError;
-      toast.error(err.message, { description: err.traceId ? `TraceId: ${err.traceId}` : undefined });
+      toast.error(err.message, {
+        description: err.traceId ? `TraceId: ${err.traceId}` : undefined,
+      });
     },
   });
 
@@ -182,7 +197,9 @@ function IdentityDetail() {
           </Link>
         </Button>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-          {query.data ? `${query.data.firstName} ${query.data.lastName}` : t("identityDetail.fallbackTitle")}
+          {query.data
+            ? `${query.data.firstName} ${query.data.lastName}`
+            : t("identityDetail.fallbackTitle")}
         </h1>
         <p className="mt-1 font-mono text-xs text-muted-foreground">{id}</p>
         {identitySiteId && (
@@ -211,99 +228,102 @@ function IdentityDetail() {
             </CardContent>
           </Card>
           <IdentityForm
-          mode="edit"
-          initial={clearIdToFormValues(query.data)}
-          submitting={update.isPending}
-          onSubmit={(data, siteFieldValues, companyId, workerTypeId, _photo) => {
-            const original = query.data!;
-            // ClearID PUT é um replace completo. Preservamos os campos que
-            // não estão no formulário para evitar 400 (Falha ao atualizar
-            // identidade no ClearID).
-            update.mutate({
-              data: {
-                ...data,
-                // ClearID v4 exige eTag e identityType no PUT. systemData é
-                // preservado (contém customFields). Os demais campos (incl.
-                // privateData/companyData) vêm do formulário.
-                identityType: (original.identityType ?? "employee").toLowerCase(),
-                eTag: original.eTag,
-                systemData: original.systemData ?? undefined,
-              },
-              siteFieldValues,
-              companyId,
-              workerTypeId,
-            });
-          }}
-          onCancel={() => navigate({ to: "/identities" })}
-          statusBadge={
-            <span
-              aria-label={isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
-              title={isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
-              className={`inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-bold uppercase tracking-wide shadow-sm sm:gap-2 sm:px-3.5 sm:py-1.5 sm:text-sm ${
-                isActive
-                  ? "border-green-700 bg-green-600 text-white dark:border-green-400 dark:bg-green-500"
-                  : "border-red-700 bg-red-600 text-white dark:border-red-400 dark:bg-red-500"
-              }`}
-            >
+            mode="edit"
+            initial={clearIdToFormValues(query.data)}
+            submitting={update.isPending}
+            onSubmit={(data, siteFieldValues, companyId, workerTypeId, _photo, attachments) => {
+              const original = query.data!;
+              // ClearID PUT é um replace completo. Preservamos os campos que
+              // não estão no formulário para evitar 400 (Falha ao atualizar
+              // identidade no ClearID).
+              update.mutate({
+                data: {
+                  ...data,
+                  // ClearID v4 exige eTag e identityType no PUT. systemData é
+                  // preservado (contém customFields). Os demais campos (incl.
+                  // privateData/companyData) vêm do formulário.
+                  identityType: (original.identityType ?? "employee").toLowerCase(),
+                  eTag: original.eTag,
+                  systemData: original.systemData ?? undefined,
+                },
+                siteFieldValues,
+                companyId,
+                workerTypeId,
+                attachments,
+              });
+            }}
+            onCancel={() => navigate({ to: "/identities" })}
+            statusBadge={
               <span
-                className={`inline-block h-2 w-2 rounded-full bg-white ring-2 ring-white/40 sm:h-2.5 sm:w-2.5 ${
-                  isActive ? "animate-pulse" : ""
+                aria-label={isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
+                title={isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
+                className={`inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-1 text-xs font-bold uppercase tracking-wide shadow-sm sm:gap-2 sm:px-3.5 sm:py-1.5 sm:text-sm ${
+                  isActive
+                    ? "border-green-700 bg-green-600 text-white dark:border-green-400 dark:bg-green-500"
+                    : "border-red-700 bg-red-600 text-white dark:border-red-400 dark:bg-red-500"
                 }`}
-              />
-              {isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
-            </span>
-          }
-          extraActions={
-            <>
-              <TeamsDialog identityId={id} siteId={scopeSiteId} />
-              <CredentialsDialog identityId={id} />
-              <AlertDialog>
-              <AlertDialogTrigger asChild>
-                {isActive ? (
-                  <Button type="button" variant="destructive" disabled={isToggling}>
-                    {isToggling ? (
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              >
+                <span
+                  className={`inline-block h-2 w-2 rounded-full bg-white ring-2 ring-white/40 sm:h-2.5 sm:w-2.5 ${
+                    isActive ? "animate-pulse" : ""
+                  }`}
+                />
+                {isActive ? t("identityDetail.active") : t("identityDetail.inactive")}
+              </span>
+            }
+            extraActions={
+              <>
+                <TeamsDialog identityId={id} siteId={scopeSiteId} />
+                <CredentialsDialog identityId={id} />
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    {isActive ? (
+                      <Button type="button" variant="destructive" disabled={isToggling}>
+                        {isToggling ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                          <PowerOff className="mr-1 h-4 w-4" />
+                        )}
+                        {isToggling
+                          ? t("identityDetail.processing")
+                          : t("identityDetail.deactivate")}
+                      </Button>
                     ) : (
-                      <PowerOff className="mr-1 h-4 w-4" />
+                      <Button type="button" variant="secondary" disabled={isToggling}>
+                        {isToggling ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Power className="mr-1 h-4 w-4" />
+                        )}
+                        {isToggling ? t("identityDetail.processing") : t("identityDetail.activate")}
+                      </Button>
                     )}
-                    {isToggling ? t("identityDetail.processing") : t("identityDetail.deactivate")}
-                  </Button>
-                ) : (
-                  <Button type="button" variant="secondary" disabled={isToggling}>
-                    {isToggling ? (
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Power className="mr-1 h-4 w-4" />
-                    )}
-                    {isToggling ? t("identityDetail.processing") : t("identityDetail.activate")}
-                  </Button>
-                )}
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {isActive
-                      ? t("identityDetail.confirmDeactivateTitle")
-                      : t("identityDetail.confirmActivateTitle")}
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {isActive
-                      ? t("identityDetail.confirmDeactivateDesc")
-                      : t("identityDetail.confirmActivateDesc")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => (isActive ? deactivate.mutate() : activate.mutate())}
-                  >
-                    {isActive ? t("identityDetail.deactivate") : t("identityDetail.activate")}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-              </AlertDialog>
-            </>
-          }
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {isActive
+                          ? t("identityDetail.confirmDeactivateTitle")
+                          : t("identityDetail.confirmActivateTitle")}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {isActive
+                          ? t("identityDetail.confirmDeactivateDesc")
+                          : t("identityDetail.confirmActivateDesc")}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => (isActive ? deactivate.mutate() : activate.mutate())}
+                      >
+                        {isActive ? t("identityDetail.deactivate") : t("identityDetail.activate")}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            }
           />
         </>
       ) : null}

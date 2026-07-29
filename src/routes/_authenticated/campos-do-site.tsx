@@ -273,9 +273,11 @@ function CamposDoSitePage() {
         (d) =>
           editing?.definition_id === d.id ||
           (!usedIdsForScope.has(d.id) &&
-            (!sectionFieldNames || sectionFieldNames.has(d.custom_field_name))),
+            (!sectionFieldNames || sectionFieldNames.has(d.custom_field_name)) &&
+            // Anexo só se aplica a identidade (não há upload por empresa).
+            !(form.entity_type === "company" && typeOf(d.custom_field_type) === "attachment")),
       ),
-    [defsQuery.data, usedIdsForScope, editing, sectionFieldNames],
+    [defsQuery.data, usedIdsForScope, editing, sectionFieldNames, form.entity_type],
   );
 
   const defsById = useMemo(
@@ -443,7 +445,8 @@ function CamposDoSitePage() {
   const groupedItems = useMemo(() => {
     const groups = new Map<string, SiteFieldRow[]>();
     for (const row of items) {
-      const key = sectionByField.get(row.definition?.custom_field_name ?? "") ?? t("siteFields.otherSection");
+      const key =
+        sectionByField.get(row.definition?.custom_field_name ?? "") ?? t("siteFields.otherSection");
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(row);
     }
@@ -467,7 +470,9 @@ function CamposDoSitePage() {
       <TableCell className="font-medium">{row.definition?.custom_field_name ?? "—"}</TableCell>
       <TableCell>
         <Badge variant={row.entity_type === "company" ? "default" : "secondary"}>
-          {row.entity_type === "company" ? t("siteFields.entity.company") : t("siteFields.entity.identity")}
+          {row.entity_type === "company"
+            ? t("siteFields.entity.company")
+            : t("siteFields.entity.identity")}
         </Badge>
       </TableCell>
       <TableCell>
@@ -586,7 +591,9 @@ function CamposDoSitePage() {
                           <TableHead>{t("siteFields.col.display")}</TableHead>
                           <TableHead>{t("siteFields.col.required")}</TableHead>
                           <TableHead>{t("siteFields.col.active")}</TableHead>
-                          <TableHead className="w-[100px] text-right">{t("common.actions")}</TableHead>
+                          <TableHead className="w-[100px] text-right">
+                            {t("common.actions")}
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>{rows.map(renderRow)}</TableBody>
@@ -643,7 +650,9 @@ function CamposDoSitePage() {
                     <SelectValue placeholder={t("siteFields.form.workerTypePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL_WORKER_TYPES}>{t("siteFields.form.allWorkerTypes")}</SelectItem>
+                    <SelectItem value={ALL_WORKER_TYPES}>
+                      {t("siteFields.form.allWorkerTypes")}
+                    </SelectItem>
                     {workerTypes.map((w) => (
                       <SelectItem key={w.id} value={w.id}>
                         {pickLang(w.name_i18n, lang) || w.name}
@@ -758,93 +767,102 @@ function CamposDoSitePage() {
             )}
 
             {editing && (
-            <>
-            <div className="space-y-2">
-              <Label>{t("siteFields.form.displayName")}</Label>
-              <div className="grid grid-cols-3 gap-3">
-                <Input
-                  value={form.override["pt-BR"]}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, override: { ...f.override, "pt-BR": e.target.value } }))
-                  }
-                  placeholder={t("siteFields.form.ptDefault")}
-                />
-                <Input
-                  value={form.override["en-US"]}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, override: { ...f.override, "en-US": e.target.value } }))
-                  }
-                  placeholder="en-US"
-                />
-                <Input
-                  value={form.override["es-ES"]}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, override: { ...f.override, "es-ES": e.target.value } }))
-                  }
-                  placeholder="es-ES"
-                />
-              </div>
-            </div>
+              <>
+                <div className="space-y-2">
+                  <Label>{t("siteFields.form.displayName")}</Label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <Input
+                      value={form.override["pt-BR"]}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          override: { ...f.override, "pt-BR": e.target.value },
+                        }))
+                      }
+                      placeholder={t("siteFields.form.ptDefault")}
+                    />
+                    <Input
+                      value={form.override["en-US"]}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          override: { ...f.override, "en-US": e.target.value },
+                        }))
+                      }
+                      placeholder="en-US"
+                    />
+                    <Input
+                      value={form.override["es-ES"]}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          override: { ...f.override, "es-ES": e.target.value },
+                        }))
+                      }
+                      placeholder="es-ES"
+                    />
+                  </div>
+                </div>
 
-            {/* Faixa de valores conforme o tipo */}
-            {kind === "number" || kind === "date" ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>{t("siteFields.form.minValue")}</Label>
-                  <Input
-                    type={kind === "date" ? "text" : "number"}
-                    inputMode={kind === "date" ? "numeric" : undefined}
-                    placeholder={kind === "date" ? "dd/MM/yyyy" : undefined}
-                    value={form.rangeMin}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        rangeMin: kind === "date" ? maskDate(e.target.value) : e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("siteFields.form.maxValue")}</Label>
-                  <Input
-                    type={kind === "date" ? "text" : "number"}
-                    inputMode={kind === "date" ? "numeric" : undefined}
-                    placeholder={kind === "date" ? "dd/MM/yyyy" : undefined}
-                    value={form.rangeMax}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        rangeMax: kind === "date" ? maskDate(e.target.value) : e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            ) : kind === "list" ? (
-              <div className="space-y-2">
-                <Label>{t("siteFields.form.options")}</Label>
-                <Textarea
-                  value={form.options}
-                  onChange={(e) => setForm((f) => ({ ...f, options: e.target.value }))}
-                  rows={4}
-                  placeholder={t("siteFields.form.optionsPlaceholder")}
-                />
-              </div>
-            ) : kind === "text" ? (
-              <div className="space-y-2">
-                <Label>{t("siteFields.form.defaultValue")}</Label>
-                <Input
-                  value={form.rangeMin}
-                  onChange={(e) => setForm((f) => ({ ...f, rangeMin: e.target.value }))}
-                  placeholder={t("siteFields.form.defaultValuePlaceholder")}
-                />
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {t("siteFields.form.rangeNotApplicable")}
-              </p>
-            )}
-            </>
+                {/* Faixa de valores conforme o tipo */}
+                {kind === "number" || kind === "date" ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>{t("siteFields.form.minValue")}</Label>
+                      <Input
+                        type={kind === "date" ? "text" : "number"}
+                        inputMode={kind === "date" ? "numeric" : undefined}
+                        placeholder={kind === "date" ? "dd/MM/yyyy" : undefined}
+                        value={form.rangeMin}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            rangeMin: kind === "date" ? maskDate(e.target.value) : e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t("siteFields.form.maxValue")}</Label>
+                      <Input
+                        type={kind === "date" ? "text" : "number"}
+                        inputMode={kind === "date" ? "numeric" : undefined}
+                        placeholder={kind === "date" ? "dd/MM/yyyy" : undefined}
+                        value={form.rangeMax}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            rangeMax: kind === "date" ? maskDate(e.target.value) : e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                ) : kind === "list" ? (
+                  <div className="space-y-2">
+                    <Label>{t("siteFields.form.options")}</Label>
+                    <Textarea
+                      value={form.options}
+                      onChange={(e) => setForm((f) => ({ ...f, options: e.target.value }))}
+                      rows={4}
+                      placeholder={t("siteFields.form.optionsPlaceholder")}
+                    />
+                  </div>
+                ) : kind === "text" ? (
+                  <div className="space-y-2">
+                    <Label>{t("siteFields.form.defaultValue")}</Label>
+                    <Input
+                      value={form.rangeMin}
+                      onChange={(e) => setForm((f) => ({ ...f, rangeMin: e.target.value }))}
+                      placeholder={t("siteFields.form.defaultValuePlaceholder")}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("siteFields.form.rangeNotApplicable")}
+                  </p>
+                )}
+              </>
             )}
 
             <div className="grid grid-cols-3 items-end gap-3">
@@ -888,9 +906,7 @@ function CamposDoSitePage() {
                 <Label>{t("siteFields.form.relatedField")}</Label>
                 <Select
                   value={form.related_identity_field_id}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, related_identity_field_id: v }))
-                  }
+                  onValueChange={(v) => setForm((f) => ({ ...f, related_identity_field_id: v }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t("siteFields.form.none")} />

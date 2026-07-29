@@ -12,6 +12,7 @@ import {
   saveIdentityWorkerType,
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
+import { saveIdentityAttachments, type PendingAttachment } from "@/lib/attachments";
 import { Button } from "@/components/ui/button";
 import { IdentityForm } from "@/components/IdentityForm";
 import { useT } from "@/lib/i18n";
@@ -55,6 +56,7 @@ function NewIdentity() {
       companyId: string | null;
       workerTypeId: string | null;
       photo: Blob | null;
+      attachments: PendingAttachment[];
     }) => {
       // Verifica e-mail duplicado antes de criar (o ClearID rejeita com 400).
       const dupes = await argusApi.findIdentitiesByEmail(vars.data.email);
@@ -137,15 +139,19 @@ function NewIdentity() {
       await saveIdentityCompany(data.identityId, vars.companyId);
       await saveIdentityWorkerType(data.identityId, vars.workerTypeId);
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
+      // Anexos (Storage + versionamento) — após a identidade existir no Supabase.
+      if (vars.attachments.length) {
+        const { failed } = await saveIdentityAttachments(data.identityId, vars.attachments);
+        if (failed.length) {
+          toast.warning(t("attachment.uploadPartial", { n: failed.length }));
+        }
+      }
       qc.invalidateQueries({ queryKey: ["identities"] });
       navigate({ to: "/identities/$id", params: { id: data.identityId } });
     },
     onError: (e) => {
       const err = e as ArgusApiError;
-      const hint =
-        err.status === 400
-          ? t("identityNew.error.duplicateHint")
-          : undefined;
+      const hint = err.status === 400 ? t("identityNew.error.duplicateHint") : undefined;
       const description = [hint, err.traceId ? `TraceId: ${err.traceId}` : undefined]
         .filter(Boolean)
         .join(" · ");
@@ -161,9 +167,7 @@ function NewIdentity() {
             <ArrowLeft className="mr-1 h-4 w-4" /> {t("identityNew.back")}
           </Link>
         </Button>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-          {heading}
-        </h1>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{heading}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t("identityNew.subtitle")}</p>
       </div>
       <IdentityForm
@@ -172,8 +176,8 @@ function NewIdentity() {
         submitting={mut.isPending}
         initialWorkerTypeId={workerTypeId}
         lockWorkerType={Boolean(workerTypeId)}
-        onSubmit={(data, siteFieldValues, companyId, wtId, photo) =>
-          mut.mutate({ data, siteFieldValues, companyId, workerTypeId: wtId, photo })
+        onSubmit={(data, siteFieldValues, companyId, wtId, photo, attachments) =>
+          mut.mutate({ data, siteFieldValues, companyId, workerTypeId: wtId, photo, attachments })
         }
         onCancel={() => navigate({ to: "/identities" })}
       />

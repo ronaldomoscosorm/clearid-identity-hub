@@ -1,11 +1,15 @@
 // Helpers compartilhados para campos personalizados (tipo, multilíngue, opções).
 import type { Json } from "@/integrations/supabase/types";
 
-export type FieldKind = "number" | "date" | "list" | "boolean" | "text";
+export type FieldKind = "number" | "date" | "list" | "boolean" | "text" | "attachment";
+
+/** Tipo (custom_field_type) usado para os campos de anexo — só do sistema. */
+export const ATTACHMENT_FIELD_TYPE = "Attachment";
 
 /** Classifica o tipo do campo (ClearID) em uma categoria de UI. */
 export function typeOf(t?: string | null): FieldKind {
   const s = (t ?? "").toLowerCase();
+  if (/(attach|anexo|file|upload)/.test(s)) return "attachment";
   if (/(bool|boolean|switch|toggle|checkbox)/.test(s)) return "boolean";
   if (/(number|numeric|int|decimal|float)/.test(s)) return "number";
   if (/date|time/.test(s)) return "date";

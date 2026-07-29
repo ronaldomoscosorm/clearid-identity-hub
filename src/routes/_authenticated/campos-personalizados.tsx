@@ -2,11 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClearIdCustomFieldDef, CustomFieldSectionSummary } from "@/lib/argus-client";
-import { RefreshCw, Plus, Pencil, Trash2, Search, ListChecks } from "lucide-react";
+import { RefreshCw, Plus, Pencil, Trash2, Search, ListChecks, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { SpecialFieldsDialog } from "@/components/SpecialFieldsDialog";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database, Json } from "@/integrations/supabase/types";
+import { ATTACHMENT_FIELD_TYPE, pickLang } from "@/lib/custom-fields";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -63,6 +66,19 @@ const SECTION_NAME_MAX = 30;
 const FIELD_NAME_MAX = 50;
 const DISPLAY_NAME_MAX = 100;
 
+// Definição local de um campo de Anexo (existe só no sistema, nunca no Argus).
+type LocalAttachmentDef = Pick<
+  Database["public"]["Tables"]["custom_field_definitions"]["Row"],
+  "id" | "custom_field_name" | "display_name" | "attachment_accept"
+>;
+
+// Opções de restrição de tipo de arquivo do anexo.
+const ACCEPT_OPTIONS = [
+  { value: "image/*,application/pdf", key: "attachmentDef.acceptBoth" },
+  { value: "image/*", key: "attachmentDef.acceptImage" },
+  { value: "application/pdf", key: "attachmentDef.acceptPdf" },
+] as const;
+
 export const Route = createFileRoute("/_authenticated/campos-personalizados")({
   head: () => ({ meta: [{ title: "Campos personalizados — Argus ClearID" }] }),
   component: CustomFieldsPage,
@@ -96,6 +112,11 @@ function CustomFieldsPage() {
   const [creatingSection, setCreatingSection] = useState(false);
   const [specialOpen, setSpecialOpen] = useState(false);
   const [deletingSection, setDeletingSection] = useState<CustomFieldSectionSummary | null>(null);
+  const [attachmentDialog, setAttachmentDialog] = useState<{
+    mode: "create" | "edit";
+    def?: LocalAttachmentDef;
+  } | null>(null);
+  const [deletingAttachment, setDeletingAttachment] = useState<LocalAttachmentDef | null>(null);
 
   const [search, setSearch] = useState("");
 
@@ -107,6 +128,38 @@ function CustomFieldsPage() {
 
   const reload = () => qc.invalidateQueries({ queryKey: ["custom-fields"] });
   const reloadSections = () => qc.invalidateQueries({ queryKey: ["custom-field-sections"] });
+
+  // Campos de Anexo (locais — só do sistema).
+  const attachmentsQuery = useQuery({
+    queryKey: ["local-attachment-fields"],
+    queryFn: async (): Promise<LocalAttachmentDef[]> => {
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .select("id, custom_field_name, display_name, attachment_accept")
+        .eq("is_local", true)
+        .eq("is_deleted", false)
+        .order("custom_field_name", { ascending: true });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+  });
+  const reloadAttachments = () => qc.invalidateQueries({ queryKey: ["local-attachment-fields"] });
+  const attachmentDefs = attachmentsQuery.data ?? [];
+
+  const delAttachment = useMutation({
+    mutationFn: async (def: LocalAttachmentDef) => {
+      // Cascata remove os vínculos por site (site_custom_fields) e os anexos
+      // já enviados (identity_attachments) via FK on delete cascade.
+      const { error } = await supabase.from("custom_field_definitions").delete().eq("id", def.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success(t("attachmentDef.deleted"));
+      setDeletingAttachment(null);
+      reloadAttachments();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
   const delSection = useMutation({
     mutationFn: (name: string) => argusApi.deleteCustomFieldSection(name),
@@ -150,8 +203,7 @@ function CustomFieldsPage() {
     () =>
       q
         ? allItems.filter(
-            (f) =>
-              normalize(f.displayName).includes(q) || normalize(f.customFieldName).includes(q),
+            (f) => normalize(f.displayName).includes(q) || normalize(f.customFieldName).includes(q),
           )
         : allItems,
     [allItems, q],
@@ -195,9 +247,7 @@ function CustomFieldsPage() {
     }
     if (groups.get(OTHER_SECTION)?.length === 0) groups.delete(OTHER_SECTION);
     const name = (k: string) =>
-      k === OTHER_SECTION
-        ? t("customFields.sectionOther")
-        : sectionByName.get(k)?.displayName || k;
+      k === OTHER_SECTION ? t("customFields.sectionOther") : sectionByName.get(k)?.displayName || k;
     const arr = [...groups.entries()].sort((a, b) =>
       name(a[0]).localeCompare(name(b[0]), "pt-BR", { sensitivity: "base" }),
     );
@@ -240,7 +290,12 @@ function CustomFieldsPage() {
       </TableCell>
       <TableCell className="text-right">
         <div className="flex justify-end gap-1">
-          <Button variant="ghost" size="icon" title={t("common.edit")} onClick={() => setEditing(f)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            title={t("common.edit")}
+            onClick={() => setEditing(f)}
+          >
             <Pencil className="h-4 w-4" />
           </Button>
           <Button
@@ -264,9 +319,7 @@ function CustomFieldsPage() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {t("customFields.title")}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("customFields.subtitle")}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("customFields.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -283,6 +336,13 @@ function CustomFieldsPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => setSpecialOpen(true)}>
             <ListChecks className="mr-1 h-4 w-4" /> {t("specialFields.button")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAttachmentDialog({ mode: "create" })}
+          >
+            <Paperclip className="mr-1 h-4 w-4" /> {t("attachmentDef.newButton")}
           </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="mr-1 h-4 w-4" /> {t("customFields.newField")}
@@ -322,65 +382,141 @@ function CustomFieldsPage() {
             </div>
           ) : items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {q ? t("customFields.noSearchResults", { query: search.trim() }) : t("customFields.emptyState")}
+              {q
+                ? t("customFields.noSearchResults", { query: search.trim() })
+                : t("customFields.emptyState")}
             </p>
           ) : (
             <div className="space-y-6">
               {groupedItems.map(([sectionKey, fields]) => {
                 const sec = sectionKey === OTHER_SECTION ? null : sectionByName.get(sectionKey);
                 return (
-                <div key={sectionKey} className="space-y-2">
-                  <div className="flex items-center gap-1">
-                    <p className="text-sm font-medium text-foreground">{labelOf(sectionKey)}</p>
-                    {sec && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          title={t("customFields.editSection")}
-                          onClick={() => setEditingSection(sec)}
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-destructive hover:text-destructive"
-                          title={t("customFields.deleteSection")}
-                          onClick={() => setDeletingSection(sec)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </>
+                  <div key={sectionKey} className="space-y-2">
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm font-medium text-foreground">{labelOf(sectionKey)}</p>
+                      {sec && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            title={t("customFields.editSection")}
+                            onClick={() => setEditingSection(sec)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive hover:text-destructive"
+                            title={t("customFields.deleteSection")}
+                            onClick={() => setDeletingSection(sec)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    {fields.length === 0 ? (
+                      <p className="py-2 text-xs text-muted-foreground">
+                        {t("customFields.sectionEmpty")}
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>{t("customFields.col.displayName")}</TableHead>
+                            <TableHead>{t("customFields.col.identifier")}</TableHead>
+                            <TableHead>{t("customFields.col.type")}</TableHead>
+                            <TableHead>{t("customFields.col.synchronization")}</TableHead>
+                            <TableHead>{t("customFields.col.readOnly")}</TableHead>
+                            <TableHead>{t("customFields.col.lastModified")}</TableHead>
+                            <TableHead className="w-[100px] text-right">
+                              {t("common.actions")}
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>{fields.map(renderRow)}</TableBody>
+                      </Table>
                     )}
                   </div>
-                  {fields.length === 0 ? (
-                    <p className="py-2 text-xs text-muted-foreground">
-                      {t("customFields.sectionEmpty")}
-                    </p>
-                  ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t("customFields.col.displayName")}</TableHead>
-                        <TableHead>{t("customFields.col.identifier")}</TableHead>
-                        <TableHead>{t("customFields.col.type")}</TableHead>
-                        <TableHead>{t("customFields.col.synchronization")}</TableHead>
-                        <TableHead>{t("customFields.col.readOnly")}</TableHead>
-                        <TableHead>{t("customFields.col.lastModified")}</TableHead>
-                        <TableHead className="w-[100px] text-right">
-                          {t("common.actions")}
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>{fields.map(renderRow)}</TableBody>
-                  </Table>
-                  )}
-                </div>
                 );
               })}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Campos de Anexo (só do sistema) */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Paperclip className="h-4 w-4" /> {t("attachmentDef.sectionTitle")}
+            </CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">{t("attachmentDef.sectionHint")}</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {attachmentsQuery.isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : attachmentDefs.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {t("attachmentDef.emptyState")}
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("customFields.col.displayName")}</TableHead>
+                  <TableHead>{t("customFields.col.identifier")}</TableHead>
+                  <TableHead>{t("attachmentDef.acceptCol")}</TableHead>
+                  <TableHead className="w-[100px] text-right">{t("common.actions")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {attachmentDefs.map((def) => (
+                  <TableRow key={def.id}>
+                    <TableCell className="font-medium">
+                      {pickLang(def.display_name) || def.custom_field_name}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {def.custom_field_name}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        {t(
+                          ACCEPT_OPTIONS.find(
+                            (o) => o.value === (def.attachment_accept ?? "image/*,application/pdf"),
+                          )?.key ?? "attachmentDef.acceptBoth",
+                        )}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={t("common.edit")}
+                          onClick={() => setAttachmentDialog({ mode: "edit", def })}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={t("common.delete")}
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeletingAttachment(def)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -492,7 +628,195 @@ function CustomFieldsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AttachmentDefDialog
+        open={Boolean(attachmentDialog)}
+        mode={attachmentDialog?.mode ?? "create"}
+        def={attachmentDialog?.def}
+        existingNames={attachmentDefs.map((d) => d.custom_field_name)}
+        onClose={() => setAttachmentDialog(null)}
+        onSaved={() => {
+          setAttachmentDialog(null);
+          reloadAttachments();
+        }}
+      />
+
+      <AlertDialog
+        open={Boolean(deletingAttachment)}
+        onOpenChange={(v) => !v && setDeletingAttachment(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("attachmentDef.confirmDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("attachmentDef.confirmDeleteDesc", {
+                name:
+                  (deletingAttachment && pickLang(deletingAttachment.display_name)) ||
+                  deletingAttachment?.custom_field_name ||
+                  "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={delAttachment.isPending}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={delAttachment.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deletingAttachment) delAttachment.mutate(deletingAttachment);
+              }}
+            >
+              {delAttachment.isPending ? t("common.saving") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+/** Criação/edição de um campo de Anexo (local — só do sistema). */
+function AttachmentDefDialog({
+  open,
+  mode,
+  def,
+  existingNames,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  mode: "create" | "edit";
+  def?: LocalAttachmentDef;
+  existingNames: string[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useT();
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [accept, setAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(def?.custom_field_name ?? "");
+    setDisplayName(pickLang(def?.display_name) || "");
+    setAccept(def?.attachment_accept ?? ACCEPT_OPTIONS[0].value);
+  }, [open, def]);
+
+  // Sanitiza o identificador (letras, números e _), como os campos do ClearID.
+  const cleanName = name
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "");
+  const nameTaken =
+    mode === "create" && existingNames.some((n) => n.toLowerCase() === cleanName.toLowerCase());
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const display_name = { default: displayName.trim() } as Json;
+      if (mode === "edit") {
+        const { error } = await supabase
+          .from("custom_field_definitions")
+          .update({ display_name, attachment_accept: accept })
+          .eq("id", def!.id);
+        if (error) throw new Error(error.message);
+        return;
+      }
+      const { error } = await supabase.from("custom_field_definitions").insert({
+        custom_field_name: cleanName,
+        display_name,
+        custom_field_type: ATTACHMENT_FIELD_TYPE,
+        is_local: true,
+        synchronization_enabled: false,
+        attachment_accept: accept,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success(mode === "create" ? t("attachmentDef.created") : t("attachmentDef.updated"));
+      onSaved();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const canSave =
+    displayName.trim().length > 0 &&
+    (mode === "edit" || (cleanName.length > 0 && !nameTaken)) &&
+    !save.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "create" ? t("attachmentDef.newTitle") : t("attachmentDef.editTitle")}
+          </DialogTitle>
+          <DialogDescription>{t("attachmentDef.dialogHint")}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="att-name">{t("customFields.col.identifier")}</Label>
+            <Input
+              id="att-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={mode === "edit"}
+              maxLength={FIELD_NAME_MAX}
+              placeholder="ex.: contrato_assinado"
+              className={cn(nameTaken && "border-destructive")}
+            />
+            {mode === "create" && (
+              <p className="text-xs text-muted-foreground">
+                {nameTaken
+                  ? t("attachmentDef.nameTaken")
+                  : cleanName
+                    ? `${t("attachmentDef.identifierPreview")}: ${cleanName}`
+                    : `${name.length}/${FIELD_NAME_MAX}`}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="att-display">{t("customFields.col.displayName")}</Label>
+            <Input
+              id="att-display"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={DISPLAY_NAME_MAX}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t("attachmentDef.acceptCol")}</Label>
+            <Select value={accept} onValueChange={setAccept}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACCEPT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {t(o.key)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => save.mutate()} disabled={!canSave}>
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -713,9 +1037,7 @@ function CustomFieldDialog({
             {mode === "create" ? t("customFields.newField") : t("customFields.editField")}
           </DialogTitle>
           <DialogDescription>
-            {mode === "create"
-              ? t("customFields.createHint")
-              : t("customFields.editHint")}
+            {mode === "create" ? t("customFields.createHint") : t("customFields.editHint")}
           </DialogDescription>
         </DialogHeader>
 
