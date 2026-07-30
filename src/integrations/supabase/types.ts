@@ -114,6 +114,8 @@ export type Database = {
       custom_field_definitions: {
         Row: {
           attachment_accept: string | null;
+          attachment_enabled: boolean;
+          attachment_required: boolean;
           created_at: string;
           custom_field_name: string;
           custom_field_type: string | null;
@@ -128,6 +130,8 @@ export type Database = {
         };
         Insert: {
           attachment_accept?: string | null;
+          attachment_enabled?: boolean;
+          attachment_required?: boolean;
           created_at?: string;
           custom_field_name: string;
           custom_field_type?: string | null;
@@ -142,6 +146,8 @@ export type Database = {
         };
         Update: {
           attachment_accept?: string | null;
+          attachment_enabled?: boolean;
+          attachment_required?: boolean;
           created_at?: string;
           custom_field_name?: string;
           custom_field_type?: string | null;
@@ -159,36 +165,39 @@ export type Database = {
       identity_attachments: {
         Row: {
           created_at: string;
+          custom_field_definition_id: string;
           file_name: string;
           id: string;
           identity_id: string;
           is_current: boolean;
           mime_type: string;
-          site_custom_field_id: string;
+          site_custom_field_id: string | null;
           size_bytes: number;
           storage_path: string;
           version: number;
         };
         Insert: {
           created_at?: string;
+          custom_field_definition_id: string;
           file_name: string;
           id?: string;
           identity_id: string;
           is_current?: boolean;
           mime_type: string;
-          site_custom_field_id: string;
+          site_custom_field_id?: string | null;
           size_bytes: number;
           storage_path: string;
           version: number;
         };
         Update: {
           created_at?: string;
+          custom_field_definition_id?: string;
           file_name?: string;
           id?: string;
           identity_id?: string;
           is_current?: boolean;
           mime_type?: string;
-          site_custom_field_id?: string;
+          site_custom_field_id?: string | null;
           size_bytes?: number;
           storage_path?: string;
           version?: number;
@@ -199,6 +208,13 @@ export type Database = {
             columns: ["identity_id"];
             isOneToOne: false;
             referencedRelation: "identities";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "identity_attachments_custom_field_definition_id_fkey";
+            columns: ["custom_field_definition_id"];
+            isOneToOne: false;
+            referencedRelation: "custom_field_definitions";
             referencedColumns: ["id"];
           },
           {

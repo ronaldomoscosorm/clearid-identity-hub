@@ -117,6 +117,8 @@ function CustomFieldsPage() {
     def?: LocalAttachmentDef;
   } | null>(null);
   const [deletingAttachment, setDeletingAttachment] = useState<LocalAttachmentDef | null>(null);
+  // Configuração do anexo comprobatório de um campo (complemento).
+  const [attSettings, setAttSettings] = useState<ClearIdCustomFieldDef | null>(null);
 
   const [search, setSearch] = useState("");
 
@@ -293,6 +295,14 @@ function CustomFieldsPage() {
           <Button
             variant="ghost"
             size="icon"
+            title={t("attachmentField.settingsTitle")}
+            onClick={() => setAttSettings(f)}
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             title={t("common.edit")}
             onClick={() => setEditing(f)}
           >
@@ -336,13 +346,6 @@ function CustomFieldsPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => setSpecialOpen(true)}>
             <ListChecks className="mr-1 h-4 w-4" /> {t("specialFields.button")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAttachmentDialog({ mode: "create" })}
-          >
-            <Paperclip className="mr-1 h-4 w-4" /> {t("attachmentDef.newButton")}
           </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="mr-1 h-4 w-4" /> {t("customFields.newField")}
@@ -447,7 +450,9 @@ function CustomFieldsPage() {
         </CardContent>
       </Card>
 
-      {/* Campos de Anexo (só do sistema) */}
+      {/* Campos de Anexo LEGADOS (standalone) — o modelo atual é anexo como
+          complemento de um campo. Só aparece se ainda houver algum legado. */}
+      {attachmentDefs.length > 0 && (
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
           <div>
@@ -520,6 +525,7 @@ function CustomFieldsPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       <CustomFieldDialog
         mode="create"
@@ -542,6 +548,12 @@ function CustomFieldsPage() {
           setEditing(null);
           reload();
         }}
+      />
+
+      <FieldAttachmentDialog
+        field={attSettings}
+        onClose={() => setAttSettings(null)}
+        onSaved={() => setAttSettings(null)}
       />
 
       <SpecialFieldsDialog
@@ -679,6 +691,136 @@ function CustomFieldsPage() {
 }
 
 /** Criação/edição de um campo de Anexo (local — só do sistema). */
+/**
+ * Configura o ANEXO COMPROBATÓRIO de um campo (complemento): permitir, exigir e
+ * o tipo de arquivo aceito. Grava os flags na definição (por custom_field_name),
+ * funcionando para campos do Argus (mirrados) e locais.
+ */
+function FieldAttachmentDialog({
+  field,
+  onClose,
+  onSaved,
+}: {
+  field: ClearIdCustomFieldDef | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useT();
+  const open = Boolean(field);
+  const [enabled, setEnabled] = useState(false);
+  const [required, setRequired] = useState(false);
+  const [accept, setAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
+
+  const current = useQuery({
+    queryKey: ["cfd-attachment", field?.customFieldName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .select("id, attachment_enabled, attachment_required, attachment_accept")
+        .eq("custom_field_name", field!.customFieldName)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    enabled: open && Boolean(field?.customFieldName),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const d = current.data;
+    setEnabled(d?.attachment_enabled ?? false);
+    setRequired(d?.attachment_required ?? false);
+    setAccept(d?.attachment_accept ?? ACCEPT_OPTIONS[0].value);
+  }, [open, current.data]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const patch = {
+        attachment_enabled: enabled,
+        attachment_required: enabled ? required : false,
+        attachment_accept: enabled ? accept : null,
+      };
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .update(patch)
+        .eq("custom_field_name", field!.customFieldName)
+        .select("id");
+      if (error) throw new Error(error.message);
+      // Definição ainda não catalogada (não mirrada): cria uma mínima.
+      if (!data || data.length === 0) {
+        const { error: eIns } = await supabase.from("custom_field_definitions").insert({
+          custom_field_name: field!.customFieldName,
+          display_name: (field!.displayName ? { default: field!.displayName } : {}) as Json,
+          custom_field_type: field!.customFieldType ?? null,
+          ...patch,
+        });
+        if (eIns) throw new Error(eIns.message);
+      }
+    },
+    onSuccess: () => {
+      toast.success(t("attachmentField.saved"));
+      onSaved();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>{t("attachmentField.settingsTitle")}</DialogTitle>
+          <DialogDescription>
+            {t("attachmentField.settingsHint", {
+              field: field?.displayName || field?.customFieldName || "",
+            })}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox checked={enabled} onCheckedChange={(c) => setEnabled(Boolean(c))} />
+            {t("attachmentField.enable")}
+          </label>
+          <label
+            className={cn("flex items-center gap-2 text-sm", !enabled && "opacity-50")}
+          >
+            <Checkbox
+              checked={required}
+              disabled={!enabled}
+              onCheckedChange={(c) => setRequired(Boolean(c))}
+            />
+            {t("attachmentField.require")}
+          </label>
+          <div className={cn("space-y-2", !enabled && "opacity-50")}>
+            <Label>{t("attachmentDef.acceptCol")}</Label>
+            <Select value={accept} onValueChange={setAccept} disabled={!enabled}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACCEPT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {t(o.key)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => save.mutate()} disabled={save.isPending || current.isLoading}>
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AttachmentDefDialog({
   open,
   mode,
@@ -975,6 +1117,10 @@ function CustomFieldDialog({
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [sync, setSync] = useState(true);
   const [sectionName, setSectionName] = useState<string>(NO_SECTION);
+  // Anexo comprobatório (complemento do campo).
+  const [attEnabled, setAttEnabled] = useState(false);
+  const [attRequired, setAttRequired] = useState(false);
+  const [attAccept, setAttAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
 
   useEffect(() => {
     if (!open) return;
@@ -986,15 +1132,57 @@ function CustomFieldDialog({
     setSectionName(NO_SECTION);
   }, [open, field]);
 
+  // Flags de anexo atuais (edição): carregadas da definição por nome.
+  const attFlags = useQuery({
+    queryKey: ["cfd-attachment-flags", field?.customFieldName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .select("attachment_enabled, attachment_required, attachment_accept")
+        .eq("custom_field_name", field!.customFieldName)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    enabled: open && mode === "edit" && Boolean(field?.customFieldName),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    if (mode === "create") {
+      setAttEnabled(false);
+      setAttRequired(false);
+      setAttAccept(ACCEPT_OPTIONS[0].value);
+      return;
+    }
+    const d = attFlags.data;
+    setAttEnabled(d?.attachment_enabled ?? false);
+    setAttRequired(d?.attachment_required ?? false);
+    setAttAccept(d?.attachment_accept ?? ACCEPT_OPTIONS[0].value);
+  }, [open, mode, attFlags.data]);
+
   const save = useMutation({
     mutationFn: async () => {
+      // Anexo comprobatório: flags locais gravados na definição (custom_field_definitions).
+      const attPatch = {
+        attachment_enabled: attEnabled,
+        attachment_required: attEnabled ? attRequired : false,
+        attachment_accept: attEnabled ? attAccept : null,
+      };
+
       if (mode === "edit") {
-        return argusApi.updateCustomField(field!.customFieldName, {
+        const res = await argusApi.updateCustomField(field!.customFieldName, {
           displayName: displayName.trim(),
           isReadOnly,
           synchronizationEnabled: sync,
           eTag: field?.eTag ?? null,
         });
+        const { error } = await supabase
+          .from("custom_field_definitions")
+          .update(attPatch)
+          .eq("custom_field_name", field!.customFieldName);
+        if (error) throw new Error(error.message);
+        return res;
       }
 
       const created = await argusApi.createCustomField({
@@ -1017,6 +1205,19 @@ function CustomFieldDialog({
           eTag: sec.eTag,
         });
       }
+
+      // Grava os flags de anexo na definição (a linha pode ainda não ter sido
+      // espelhada do Argus; upsert por nome cria/atualiza sem perder o mirror).
+      const { error } = await supabase.from("custom_field_definitions").upsert(
+        {
+          custom_field_name: name.trim(),
+          display_name: { default: displayName.trim() } as Json,
+          custom_field_type: type,
+          ...attPatch,
+        },
+        { onConflict: "custom_field_name" },
+      );
+      if (error) throw new Error(error.message);
       return created;
     },
     onSuccess: () => {
@@ -1112,6 +1313,41 @@ function CustomFieldDialog({
             <Checkbox checked={sync} onCheckedChange={(v) => setSync(Boolean(v))} />
             {t("customFields.col.synchronization")}
           </label>
+
+          {/* Anexo comprobatório: complemento opcional que comprova o valor do campo. */}
+          <div className="space-y-3 border-t pt-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={attEnabled} onCheckedChange={(v) => setAttEnabled(Boolean(v))} />
+              {t("attachmentField.enable")}
+            </label>
+            <label
+              className={cn("flex items-center gap-2 text-sm", !attEnabled && "opacity-50")}
+            >
+              <Checkbox
+                checked={attRequired}
+                disabled={!attEnabled}
+                onCheckedChange={(v) => setAttRequired(Boolean(v))}
+              />
+              {t("attachmentField.require")}
+            </label>
+            {attEnabled && (
+              <div className="space-y-2">
+                <Label>{t("attachmentDef.acceptCol")}</Label>
+                <Select value={attAccept} onValueChange={setAttAccept}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACCEPT_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {t(o.key)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
         </div>
 
         <DialogFooter>

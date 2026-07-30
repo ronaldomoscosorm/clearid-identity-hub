@@ -261,7 +261,7 @@ export function IdentityForm({
   const [customFields, setCustomFields] = useState<Record<string, string>>({
     ...(initial?.customFields ?? {}),
   });
-  // Anexos preparados para envio (por site_custom_field_id). O upload ocorre ao
+  // Anexos preparados para envio (por custom_field_definition_id). O upload ocorre ao
   // salvar o formulário, quando a identidade já existe no Supabase.
   const [attachments, setAttachments] = useState<Record<string, File | null>>({});
   const setAttachment = (siteFieldId: string, file: File | null) =>
@@ -345,9 +345,12 @@ export function IdentityForm({
     value_range: Json | null;
     display_name_override: Json | null;
     definition: {
+      id: string;
       custom_field_name: string;
       custom_field_type: string | null;
       attachment_accept: string | null;
+      attachment_enabled: boolean;
+      attachment_required: boolean;
     } | null;
   };
   const siteFieldsQuery = useQuery({
@@ -356,7 +359,7 @@ export function IdentityForm({
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
-          "id, is_required, fillable, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type, attachment_accept)",
+          "id, is_required, fillable, value_range, display_name_override, definition:custom_field_definitions(id, custom_field_name, custom_field_type, attachment_accept, attachment_enabled, attachment_required)",
         )
         .eq("site_id", siteId)
         .eq("entity_type", "identity")
@@ -377,22 +380,24 @@ export function IdentityForm({
 
   // Quais campos de anexo já possuem uma versão atual (edição) — usado para
   // validar obrigatoriedade sem exigir novo upload em toda edição.
-  const attachmentFieldIds = siteFields
-    .filter((sf) => siteFieldKind(sf.definition?.custom_field_type) === "attachment")
-    .map((sf) => sf.id);
+  // Anexo é complemento de um campo (attachment_enabled), vinculado à definição.
+  const attachmentDefIds = siteFields
+    .filter((sf) => sf.definition?.attachment_enabled)
+    .map((sf) => sf.definition?.id)
+    .filter((id): id is string => Boolean(id));
   const existingAttachmentsQuery = useQuery({
-    queryKey: ["identity-attachment-presence", identityDbId, attachmentFieldIds.join(",")],
+    queryKey: ["identity-attachment-presence", identityDbId, attachmentDefIds.join(",")],
     queryFn: async (): Promise<string[]> => {
       const { data, error } = await supabase
         .from("identity_attachments")
-        .select("site_custom_field_id")
+        .select("custom_field_definition_id")
         .eq("identity_id", identityDbId as string)
         .eq("is_current", true)
-        .in("site_custom_field_id", attachmentFieldIds);
+        .in("custom_field_definition_id", attachmentDefIds);
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => r.site_custom_field_id);
+      return (data ?? []).map((r) => r.custom_field_definition_id);
     },
-    enabled: Boolean(identityDbId && attachmentFieldIds.length),
+    enabled: Boolean(identityDbId && attachmentDefIds.length),
   });
   const existingAttachmentIds = new Set(existingAttachmentsQuery.data ?? []);
 
@@ -501,23 +506,10 @@ export function IdentityForm({
     const value = customFields[name] ?? "";
     const err = errors[`sf-${sf.id}`];
     const disabled = !sf.fillable; // não preenchível → somente leitura
-    // Anexo: campo só do sistema (arquivo no Storage, versionado). Não vai ao Argus.
-    if (kind === "attachment") {
-      return (
-        <AttachmentField
-          key={sf.id}
-          siteFieldId={sf.id}
-          identityDbId={identityDbId}
-          label={siteFieldLabel(sf)}
-          required={sf.is_required && sf.fillable}
-          disabled={disabled}
-          accept={sf.definition?.attachment_accept ?? null}
-          staged={attachments[sf.id] ?? null}
-          onStage={(file) => setAttachment(sf.id, file)}
-          error={err}
-        />
-      );
-    }
+    // Anexo é COMPLEMENTO (comprovante) do campo: renderiza o valor normalmente e,
+    // quando habilitado, um uploader logo abaixo (vinculado à definição do campo).
+    const hasAttachment = Boolean(sf.definition?.attachment_enabled);
+    const defId = sf.definition?.id ?? sf.id;
     return (
       <div key={sf.id} className="space-y-1.5">
         <Label htmlFor={`sf-${sf.id}`} className="text-xs text-muted-foreground">
@@ -560,6 +552,21 @@ export function IdentityForm({
           />
         )}
         {err && <p className="text-xs text-destructive">{err}</p>}
+        {hasAttachment && (
+          <div className="pt-1">
+            <AttachmentField
+              definitionId={defId}
+              identityDbId={identityDbId}
+              label={t("attachment.evidenceLabel")}
+              required={sf.definition?.attachment_required ?? false}
+              disabled={disabled}
+              accept={sf.definition?.attachment_accept ?? null}
+              staged={attachments[defId] ?? null}
+              onStage={(file) => setAttachment(defId, file)}
+              error={errors[`sf-att-${sf.id}`]}
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -949,22 +956,21 @@ export function IdentityForm({
       out.siteId = t("identityForm.validation.selectSite");
     }
     for (const sf of siteFields) {
-      if (
-        !sf.is_required ||
-        !sf.fillable ||
-        !sf.definition ||
-        !consumedCf.has(sf.definition.custom_field_name) // apenas os campos presentes no layout
-      ) {
+      // Apenas campos preenchíveis e presentes no layout.
+      if (!sf.fillable || !sf.definition || !consumedCf.has(sf.definition.custom_field_name)) {
         continue;
       }
-      if (siteFieldKind(sf.definition.custom_field_type) === "attachment") {
-        // Anexo obrigatório: atendido por um arquivo preparado OU por uma versão
-        // já existente (edição).
-        if (!attachments[sf.id] && !existingAttachmentIds.has(sf.id)) {
-          out[`sf-${sf.id}`] = t("identityForm.validation.requiredField");
-        }
-      } else if (isBlank(customFields[sf.definition.custom_field_name])) {
+      // Valor obrigatório do campo.
+      if (sf.is_required && isBlank(customFields[sf.definition.custom_field_name])) {
         out[`sf-${sf.id}`] = t("identityForm.validation.requiredField");
+      }
+      // Anexo comprobatório obrigatório: atendido por um arquivo preparado OU por
+      // uma versão já existente (edição). Chaveado pela definição do campo.
+      if (sf.definition.attachment_enabled && sf.definition.attachment_required) {
+        const defId = sf.definition.id;
+        if (!attachments[defId] && !existingAttachmentIds.has(defId)) {
+          out[`sf-att-${sf.id}`] = t("identityForm.validation.requiredField");
+        }
       }
     }
     if (Object.keys(out).length) {
@@ -1015,27 +1021,26 @@ export function IdentityForm({
     }
     setErrors({});
     const siteFieldValues: SiteFieldValue[] = siteFields
-      .filter(
-        (sf) =>
-          sf.definition &&
-          consumedCf.has(sf.definition.custom_field_name) &&
-          siteFieldKind(sf.definition.custom_field_type) !== "attachment", // anexo não é valor de texto
-      )
+      .filter((sf) => sf.definition && consumedCf.has(sf.definition.custom_field_name))
       .map((sf) => ({
         site_custom_field_id: sf.id,
         value: cf[sf.definition!.custom_field_name] ? cf[sf.definition!.custom_field_name] : null,
       }));
 
-    // Anexos preparados (upload feito após a identidade existir).
+    // Anexos comprobatórios preparados (upload feito após a identidade existir),
+    // vinculados à DEFINIÇÃO do campo (custom_field_definition_id).
     const pendingAttachments: PendingAttachment[] = siteFields
       .filter(
         (sf) =>
           sf.definition &&
+          sf.definition.attachment_enabled &&
           consumedCf.has(sf.definition.custom_field_name) &&
-          siteFieldKind(sf.definition.custom_field_type) === "attachment" &&
-          attachments[sf.id],
+          attachments[sf.definition.id],
       )
-      .map((sf) => ({ site_custom_field_id: sf.id, file: attachments[sf.id]! }));
+      .map((sf) => ({
+        custom_field_definition_id: sf.definition!.id,
+        file: attachments[sf.definition!.id]!,
+      }));
 
     // Monta os campos adicionais (top-level, privateData, companyData),
     // preservando o que veio do initial (edit) e sobrescrevendo com o form.

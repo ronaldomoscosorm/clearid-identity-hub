@@ -5,19 +5,23 @@
 //   * cada upload cria uma nova VERSÃO em `identity_attachments`, marcando a
 //     anterior como não-atual (histórico preservado, download por URL assinada).
 //
+// O anexo é vinculado à DEFINIÇÃO do campo personalizado (sistema) —
+// custom_field_definition_id — ficando único por (identidade, definição),
+// independente do site.
+//
 // Como o vínculo é com identities.id (uuid do Supabase), o upload só acontece
 // depois que a identidade já foi espelhada (mirrorIdentities) — no cadastro
 // novo, os arquivos ficam "pendentes" no formulário e são enviados no onSuccess.
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 
 export const ATTACHMENT_BUCKET = "identity-attachments";
 
 export type AttachmentVersion = Database["public"]["Tables"]["identity_attachments"]["Row"];
 
 /** Arquivo preparado no formulário, aguardando upload após a criação. */
-export type PendingAttachment = { site_custom_field_id: string; file: File };
+export type PendingAttachment = { custom_field_definition_id: string; file: File };
 
 /** Extensão do arquivo a partir do nome (fallback: bin). */
 function extOf(name: string): string {
@@ -44,13 +48,13 @@ export async function resolveIdentityDbId(clearIdIdentityId: string): Promise<st
 /** Lista as versões de um anexo (mais recente primeiro). */
 export async function listAttachmentVersions(
   identityDbId: string,
-  siteCustomFieldId: string,
+  customFieldDefinitionId: string,
 ): Promise<AttachmentVersion[]> {
   const { data, error } = await supabase
     .from("identity_attachments")
     .select("*")
     .eq("identity_id", identityDbId)
-    .eq("site_custom_field_id", siteCustomFieldId)
+    .eq("custom_field_definition_id", customFieldDefinitionId)
     .order("version", { ascending: false });
   if (error) throw new Error(error.message);
   return data ?? [];
@@ -73,7 +77,7 @@ export async function signedUrlFor(storagePath: string, expiresInSeconds = 300):
  */
 export async function uploadAttachmentVersion(
   identityDbId: string,
-  siteCustomFieldId: string,
+  customFieldDefinitionId: string,
   file: File,
 ): Promise<AttachmentVersion> {
   // Próxima versão = maior atual + 1.
@@ -81,14 +85,14 @@ export async function uploadAttachmentVersion(
     .from("identity_attachments")
     .select("version")
     .eq("identity_id", identityDbId)
-    .eq("site_custom_field_id", siteCustomFieldId)
+    .eq("custom_field_definition_id", customFieldDefinitionId)
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (eLast) throw new Error(eLast.message);
   const nextVersion = (last?.version ?? 0) + 1;
 
-  const path = `${identityDbId}/${siteCustomFieldId}/v${nextVersion}-${crypto.randomUUID()}.${extOf(file.name)}`;
+  const path = `${identityDbId}/${customFieldDefinitionId}/v${nextVersion}-${crypto.randomUUID()}.${extOf(file.name)}`;
 
   const { error: eUp } = await supabase.storage.from(ATTACHMENT_BUCKET).upload(path, file, {
     contentType: file.type || "application/octet-stream",
@@ -101,7 +105,7 @@ export async function uploadAttachmentVersion(
     .from("identity_attachments")
     .update({ is_current: false })
     .eq("identity_id", identityDbId)
-    .eq("site_custom_field_id", siteCustomFieldId)
+    .eq("custom_field_definition_id", customFieldDefinitionId)
     .eq("is_current", true);
   if (eClear) {
     // Desfaz o upload para não deixar objeto órfão.
@@ -116,7 +120,7 @@ export async function uploadAttachmentVersion(
     .from("identity_attachments")
     .insert({
       identity_id: identityDbId,
-      site_custom_field_id: siteCustomFieldId,
+      custom_field_definition_id: customFieldDefinitionId,
       version: nextVersion,
       storage_path: path,
       file_name: file.name,
@@ -139,7 +143,7 @@ export async function uploadAttachmentVersion(
 /**
  * Envia os anexos pendentes de um formulário (best-effort). Resolve o id da
  * identidade e sobe cada arquivo como nova versão. Retorna a lista de campos
- * que falharam (site_custom_field_id) para o chamador reportar.
+ * que falharam (custom_field_definition_id) para o chamador reportar.
  */
 export async function saveIdentityAttachments(
   clearIdIdentityId: string,
@@ -150,28 +154,62 @@ export async function saveIdentityAttachments(
 
   const identityDbId = await resolveIdentityDbId(clearIdIdentityId);
   if (!identityDbId) {
-    return { failed: pending.map((p) => p.site_custom_field_id) };
+    return { failed: pending.map((p) => p.custom_field_definition_id) };
   }
 
   for (const p of pending) {
     try {
-      await uploadAttachmentVersion(identityDbId, p.site_custom_field_id, p.file);
+      await uploadAttachmentVersion(identityDbId, p.custom_field_definition_id, p.file);
     } catch (e) {
       console.error("[attachments] falha ao enviar anexo:", (e as Error).message);
-      failed.push(p.site_custom_field_id);
+      failed.push(p.custom_field_definition_id);
     }
   }
   return { failed };
 }
 
+/** Anexo atual (uma versão vigente) com o rótulo do campo ao qual pertence. */
+export type CurrentAttachment = AttachmentVersion & {
+  definition: { custom_field_name: string; display_name: Json } | null;
+};
+
+/** Lista os anexos ATUAIS (is_current) de uma identidade, com o campo de origem. */
+export async function listCurrentAttachments(identityDbId: string): Promise<CurrentAttachment[]> {
+  const { data, error } = await supabase
+    .from("identity_attachments")
+    .select("*, definition:custom_field_definitions(custom_field_name, display_name)")
+    .eq("identity_id", identityDbId)
+    .eq("is_current", true)
+    .order("created_at", { ascending: false })
+    .returns<CurrentAttachment[]>();
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+/**
+ * Hook: anexos atuais de uma identidade a partir do identityId (texto) do ClearID.
+ * Resolve o id no Supabase (espelhado) e lista os comprovantes vigentes.
+ */
+export function useCurrentAttachments(clearIdIdentityId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["identity-current-attachments", clearIdIdentityId],
+    queryFn: async (): Promise<CurrentAttachment[]> => {
+      const dbId = await resolveIdentityDbId(clearIdIdentityId as string);
+      if (!dbId) return [];
+      return listCurrentAttachments(dbId);
+    },
+    enabled: Boolean(clearIdIdentityId),
+  });
+}
+
 /** Hook: versões de um anexo para uma identidade já existente (modo edição). */
 export function useAttachmentVersions(
   identityDbId: string | null | undefined,
-  siteCustomFieldId: string,
+  customFieldDefinitionId: string,
 ) {
   return useQuery({
-    queryKey: ["identity-attachments", identityDbId, siteCustomFieldId],
-    queryFn: () => listAttachmentVersions(identityDbId as string, siteCustomFieldId),
-    enabled: Boolean(identityDbId && siteCustomFieldId),
+    queryKey: ["identity-attachments", identityDbId, customFieldDefinitionId],
+    queryFn: () => listAttachmentVersions(identityDbId as string, customFieldDefinitionId),
+    enabled: Boolean(identityDbId && customFieldDefinitionId),
   });
 }

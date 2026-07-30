@@ -4,7 +4,8 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --mode dev",
+    "dev:devtools": "vite dev",
     "build": "vite build",
     "build:node": "node scripts/build-node.mjs",
     "build:dev": "vite build --mode development",

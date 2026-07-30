@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
-import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Camera, Users, UserCheck, UserX, ArrowRight } from "lucide-react";
+import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Camera, Users, UserCheck, UserX, ArrowRight, Paperclip, ExternalLink } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { useCurrentAttachments, signedUrlFor } from "@/lib/attachments";
+import { pickLang } from "@/lib/custom-fields";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -389,6 +392,7 @@ function IdentitiesList() {
                 <InspRow k={t("common.email")}><span className="text-[var(--rm-ink)]">{selected.email ?? "—"}</span></InspRow>
                 <InspRow k={t("identities.col.relevance")}><span className="text-[var(--rm-ink)] tnum">{typeof selected.score === "number" ? selected.score.toFixed(2) : "—"}</span></InspRow>
               </dl>
+              <InspectorAttachments identityId={selected.identityId} />
               <div className="flex gap-2 pt-1">
                 <Button asChild className="flex-1 rounded-lg text-white hover:brightness-105" style={{ background: "var(--rm-brand)" }}>
                   <Link to="/identities/$id" params={{ id: selected.identityId }}>
@@ -423,6 +427,46 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-1.5">
       <Label className="text-[var(--rm-dim)]">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+// Anexos (comprovantes) da pessoa selecionada — visualização direto na pesquisa.
+function InspectorAttachments({ identityId }: { identityId: string }) {
+  const { t } = useT();
+  const q = useCurrentAttachments(identityId);
+  const items = q.data ?? [];
+  if (!items.length) return null;
+  const open = async (path: string) => {
+    try {
+      window.open(await signedUrlFor(path), "_blank", "noopener,noreferrer");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  return (
+    <div className="space-y-1.5 border-t border-[var(--rm-line-soft)] pt-3">
+      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--rm-faint)]">
+        {t("identities.inspector.attachments")}
+      </div>
+      {items.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          onClick={() => open(a.storage_path)}
+          title={t("attachment.download")}
+          className="flex w-full items-center gap-2 rounded-md border border-[var(--rm-line-soft)] px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--rm-panel-2)]"
+        >
+          <Paperclip className="h-3.5 w-3.5 shrink-0 text-[var(--rm-dim)]" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-medium text-[var(--rm-ink)]">
+              {pickLang(a.definition?.display_name) || a.definition?.custom_field_name || a.file_name}
+            </span>
+            <span className="block truncate text-[11px] text-[var(--rm-faint)]">{a.file_name}</span>
+          </span>
+          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[var(--rm-dim)]" />
+        </button>
+      ))}
     </div>
   );
 }

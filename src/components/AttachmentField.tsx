@@ -66,7 +66,8 @@ function CurrentThumb({ version }: { version: AttachmentVersion }) {
 }
 
 export type AttachmentFieldProps = {
-  siteFieldId: string;
+  /** custom_field_definitions.id — o anexo é vinculado à definição (sistema). */
+  definitionId: string;
   /** identities.id (uuid) — nulo no cadastro novo (ainda não existe). */
   identityDbId: string | null;
   label: string;
@@ -81,7 +82,7 @@ export type AttachmentFieldProps = {
 };
 
 export function AttachmentField({
-  siteFieldId,
+  definitionId,
   identityDbId,
   label,
   required,
@@ -95,7 +96,7 @@ export function AttachmentField({
   const fileRef = useRef<HTMLInputElement>(null);
   const [showHistory, setShowHistory] = useState(false);
 
-  const versionsQuery = useAttachmentVersions(identityDbId, siteFieldId);
+  const versionsQuery = useAttachmentVersions(identityDbId, definitionId);
   const versions = versionsQuery.data ?? [];
   const current = versions.find((v) => v.is_current) ?? null;
   const history = versions.filter((v) => !v.is_current);
