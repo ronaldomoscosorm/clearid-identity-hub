@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
@@ -7,6 +7,7 @@ import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Camera, Users, UserCheck,
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { useCurrentAttachments, signedUrlFor } from "@/lib/attachments";
 import { pickLang } from "@/lib/custom-fields";
+import { supabase } from "@/integrations/supabase/client";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,8 @@ type AppliedFilters = {
   email: string;
   company: string;
   status: string;
-  workerTypeCode: string;
+  /** Tipo do trabalhador EXATO (worker_types.id) — filtrado localmente, não no ClearID. */
+  workerTypeId: string;
   allSites: boolean;
   siteId?: string;
 };
@@ -68,7 +70,7 @@ type PersistedSearch = {
 let persistedSearch: PersistedSearch | null = null;
 
 function IdentitiesList() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const siteId = useDefaultSiteId();
   const [pictureFor, setPictureFor] = useState<{ id: string; name: string } | null>(null);
   const [sel, setSel] = useState<string | null>(persistedSearch?.sel ?? null);
@@ -95,6 +97,24 @@ function IdentitiesList() {
     .slice()
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
 
+  // Tipos de trabalhador cadastrados (mesma fonte do menu/Nova identity).
+  // O filtro lista os tipos existentes por nome; a busca ClearID recebe o
+  // código Argus (Colaborador/Terceiros) mapeado a partir do tipo escolhido.
+  const workerTypesQuery = useQuery({
+    queryKey: ["worker-types"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("worker_types")
+        .select("*")
+        .eq("is_active", true)
+        .order("display_index", { ascending: true, nullsFirst: false });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const workerTypes = workerTypesQuery.data ?? [];
+
   // Filtros efetivamente aplicados — só mudam ao clicar em Pesquisar
   const [hasSearched, setHasSearched] = useState(persistedSearch?.hasSearched ?? false);
   const [applied, setApplied] = useState<AppliedFilters>(
@@ -103,7 +123,7 @@ function IdentitiesList() {
       email: "",
       company: "",
       status: "all",
-      workerTypeCode: "all",
+      workerTypeId: "all",
       allSites: false,
     },
   );
@@ -131,7 +151,9 @@ function IdentitiesList() {
         email: applied.email || undefined,
         company: applied.company || undefined,
         status: applied.status === "all" ? undefined : applied.status,
-        workerTypeCode: applied.workerTypeCode === "all" ? undefined : applied.workerTypeCode,
+        // Tipo do trabalhador NÃO é conceito do ClearID — filtrado localmente abaixo.
+        // Com filtro de tipo ativo, buscamos um pool maior para o cruzamento local.
+        take: applied.workerTypeId !== "all" ? 200 : undefined,
         allSites: applied.allSites,
         siteId: applied.siteId || undefined,
       }),
@@ -139,21 +161,60 @@ function IdentitiesList() {
     retry: false,
   });
 
-  const items = query.data?.items ?? [];
+  const rawItems = query.data?.items ?? [];
+
+  // Espelha o retorno do ClearID no Supabase antes de cruzar com o tipo local.
+  useEffect(() => {
+    if (rawItems.length) void mirrorIdentities(rawItems);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.data]);
+
+  // Filtro por tipo do trabalhador: cruza os ids retornados com o worker_type_id
+  // gravado localmente (o ClearID não guarda o tipo específico).
+  const rawIdsKey = rawItems.map((i) => i.identityId).sort().join(",");
+  const filterByType = applied.workerTypeId !== "all";
+  const localTypesQuery = useQuery({
+    queryKey: ["identities-local-worker-type", rawIdsKey],
+    enabled: filterByType && rawItems.length > 0,
+    queryFn: async () => {
+      const ids = rawItems.map((i) => i.identityId);
+      const { data, error } = await supabase
+        .from("identities")
+        .select("identity_id, worker_type_id")
+        .in("identity_id", ids);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const items = useMemo(() => {
+    if (!filterByType) return rawItems;
+    const allowed = new Set(
+      (localTypesQuery.data ?? [])
+        .filter((r) => r.worker_type_id === applied.workerTypeId)
+        .map((r) => r.identity_id),
+    );
+    return rawItems.filter((i) => allowed.has(i.identityId));
+  }, [rawItems, filterByType, localTypesQuery.data, applied.workerTypeId]);
+
+  // Aguardando o cruzamento local quando há filtro de tipo ativo.
+  const typeFilterLoading = filterByType && rawItems.length > 0 && localTypesQuery.isLoading;
+
   const isActive = (s: unknown) => String(s ?? "").toLowerCase() === "active";
   const activeCount = items.filter((i) => isActive(i.status)).length;
+  // Com filtro local, o total exibível é a contagem já filtrada.
+  const displayTotal = filterByType ? items.length : query.data?.total ?? items.length;
 
-  // Espelha as identidades retornadas para o Supabase; seleciona a primeira.
+  // Seleciona a primeira identidade visível (após o filtro local).
   useEffect(() => {
-    if (query.data?.items?.length) {
-      void mirrorIdentities(query.data.items);
-      setSel((prev) =>
-        prev && query.data!.items.some((i) => i.identityId === prev) ? prev : query.data!.items[0].identityId,
-      );
+    if (items.length) {
+      setSel((prev) => (prev && items.some((i) => i.identityId === prev) ? prev : items[0].identityId));
     } else {
       setSel(null);
     }
-  }, [query.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawIdsKey, items.length]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,7 +225,7 @@ function IdentitiesList() {
       email: fEmail.trim(),
       company: fCompany.trim(),
       status: fStatus,
-      workerTypeCode: fWorkerType,
+      workerTypeId: fWorkerType,
       allSites,
       siteId: allSites ? undefined : fSite || undefined,
     });
@@ -178,8 +239,14 @@ function IdentitiesList() {
     setFWorkerType("all");
     setFSite(siteId ?? "");
     setHasSearched(false);
-    setApplied({ firstName: "", email: "", company: "", status: "all", workerTypeCode: "all", allSites: false });
+    setApplied({ firstName: "", email: "", company: "", status: "all", workerTypeId: "all", allSites: false });
     persistedSearch = null;
+  };
+
+  // Trocar qualquer dropdown zera o resultado atual — exige nova busca.
+  const resetResults = () => {
+    setHasSearched(false);
+    setSel(null);
   };
 
   const selected = items.find((i) => i.identityId === sel) ?? null;
@@ -206,7 +273,7 @@ function IdentitiesList() {
       {/* Métricas (após buscar) */}
       {hasSearched && items.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
-          <Metric icon={<Users className="h-5 w-5" />} tone="brand" value={query.data?.total ?? items.length} label={t("identities.metric.results")} />
+          <Metric icon={<Users className="h-5 w-5" />} tone="brand" value={displayTotal} label={t("identities.metric.results")} />
           <Metric icon={<UserCheck className="h-5 w-5" />} tone="active" value={activeCount} label={t("identities.metric.active")} />
           <Metric icon={<UserX className="h-5 w-5" />} tone="inactive" value={items.length - activeCount} label={t("identities.metric.inactive")} />
         </div>
@@ -225,7 +292,7 @@ function IdentitiesList() {
             <Input value={fCompany} onChange={(e) => setFCompany(e.target.value)} placeholder={t("identities.filter.company")} />
           </Field>
           <Field label={t("common.status")}>
-            <Select value={fStatus} onValueChange={setFStatus}>
+            <Select value={fStatus} onValueChange={(v) => { setFStatus(v); resetResults(); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Active">{t("identities.status.active")}</SelectItem>
@@ -235,17 +302,20 @@ function IdentitiesList() {
             </Select>
           </Field>
           <Field label={t("identities.filter.workerType")}>
-            <Select value={fWorkerType} onValueChange={setFWorkerType}>
+            <Select value={fWorkerType} onValueChange={(v) => { setFWorkerType(v); resetResults(); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("identities.workerType.all")}</SelectItem>
-                <SelectItem value="Terceiros">{t("identities.workerType.contractor")}</SelectItem>
-                <SelectItem value="Colaborador">{t("identities.workerType.employee")}</SelectItem>
+                {workerTypes.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {pickLang(w.name_i18n, lang) || w.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
           <Field label={t("identities.filter.site")}>
-            <Select value={fSite} onValueChange={setFSite}>
+            <Select value={fSite} onValueChange={(v) => { setFSite(v); resetResults(); }}>
               <SelectTrigger><SelectValue placeholder={t("identities.filter.sitePlaceholder")} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_SITES}>{t("identities.filter.allSites")}</SelectItem>
@@ -283,7 +353,7 @@ function IdentitiesList() {
               <span className="font-semibold text-[var(--rm-brand-ink)]">{t("common.search")}</span>{" "}
               {t("identities.emptyPrompt.after")}
             </EmptyState>
-          ) : query.isLoading || query.isFetching ? (
+          ) : query.isLoading || query.isFetching || typeFilterLoading ? (
             <div className="divide-y divide-[var(--rm-line-soft)]">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 px-4 py-3">
@@ -297,11 +367,11 @@ function IdentitiesList() {
             <EmptyState>{t("identities.emptyResult")}</EmptyState>
           ) : (
             <div>
-              {(query.data?.total ?? 0) > items.length && (
+              {displayTotal > items.length && (
                 <div className="border-b border-[var(--rm-line-soft)] bg-[var(--rm-panel-2)] px-4 py-2 text-xs text-[var(--rm-dim)]">
                   {t("identities.showingFirst", {
                     shown: items.length,
-                    total: query.data?.total ?? items.length,
+                    total: displayTotal,
                   })}
                 </div>
               )}

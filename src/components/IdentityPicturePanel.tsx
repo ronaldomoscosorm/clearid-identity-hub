@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, ClipboardPaste, RefreshCw, Upload, User, X } from "lucide-react";
+import { SilhouetteGuide, PersonBadge, usePersonDetection } from "@/components/CameraGuide";
 import { toast } from "sonner";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
 import { useT } from "@/lib/i18n";
@@ -268,6 +269,9 @@ export function WebcamDialog({
   const [snapshotBlob, setSnapshotBlob] = useState<Blob | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Detecção de pessoa (modelo leve, carregado sob demanda) enquanto a câmera
+  // está ativa. null = indisponível/carregando → silhueta como guia.
+  const personDetected = usePersonDetection(videoRef, open && !err && !snapshot);
 
   useEffect(() => {
     if (!open) return;
@@ -341,12 +345,19 @@ export function WebcamDialog({
           ) : snapshot ? (
             <img src={snapshot} alt={t("picturePanel.captureAlt")} className="h-full w-full object-cover" />
           ) : (
-            <video
-              ref={videoRef}
-              className="h-full w-full object-cover"
-              playsInline
-              muted
-            />
+            <>
+              <video
+                ref={videoRef}
+                className="h-full w-full object-cover"
+                playsInline
+                muted
+              />
+              {/* Silhueta guia para enquadrar o rosto/busto. */}
+              <SilhouetteGuide
+                state={personDetected === null ? "neutral" : personDetected ? "ok" : "warn"}
+              />
+              <PersonBadge detected={personDetected} />
+            </>
           )}
         </div>
         <DialogFooter className="gap-2 sm:gap-2">

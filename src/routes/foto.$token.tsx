@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { getPhotoInfo, submitPhoto, type PhotoUpdateInfo } from "@/lib/photo-public";
 import { Button } from "@/components/ui/button";
+import { SilhouetteGuide, PersonBadge, usePersonDetection } from "@/components/CameraGuide";
 import { PoweredBy } from "@/components/PoweredBy";
 import { useApplyBranding, useBranding } from "@/lib/branding";
 import { ensureTechnicalSession } from "@/lib/tech-auth";
@@ -38,6 +39,7 @@ function PhotoUpdatePage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const personDetected = usePersonDetection(videoRef, cameraOn);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,13 +221,19 @@ function PhotoUpdatePage() {
 
             {cameraOn ? (
               <div className="space-y-3">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="mx-auto h-64 w-full rounded-md bg-black object-contain"
-                />
+                <div className="relative mx-auto h-64 w-full overflow-hidden rounded-md bg-black">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="h-full w-full object-cover"
+                  />
+                  <SilhouetteGuide
+                    state={personDetected === null ? "neutral" : personDetected ? "ok" : "warn"}
+                  />
+                  <PersonBadge detected={personDetected} />
+                </div>
                 <div className="flex gap-2">
                   <Button type="button" className="flex-1" onClick={capturePhoto}>
                     <Camera className="mr-1 h-4 w-4" /> Capturar

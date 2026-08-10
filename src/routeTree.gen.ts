@@ -19,6 +19,7 @@ import { Route as AuthenticatedCamposPersonalizadosRouteImport } from './routes/
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedEmpresasRouteImport } from './routes/_authenticated/empresas'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
+import { Route as AuthenticatedImportarRouteImport } from './routes/_authenticated/importar'
 import { Route as AuthenticatedLayoutFormularioRouteImport } from './routes/_authenticated/layout-formulario'
 import { Route as AuthenticatedRegrasRouteImport } from './routes/_authenticated/regras'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
@@ -83,6 +84,11 @@ const AuthenticatedEmpresasRoute = AuthenticatedEmpresasRouteImport.update({
 const AuthenticatedIdentitiesRoute = AuthenticatedIdentitiesRouteImport.update({
   id: '/identities',
   path: '/identities',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedImportarRoute = AuthenticatedImportarRouteImport.update({
+  id: '/importar',
+  path: '/importar',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedLayoutFormularioRoute =
@@ -165,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/empresas': typeof AuthenticatedEmpresasRoute
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
+  '/importar': typeof AuthenticatedImportarRoute
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/empresas': typeof AuthenticatedEmpresasRoute
+  '/importar': typeof AuthenticatedImportarRoute
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/_authenticated/empresas': typeof AuthenticatedEmpresasRoute
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
+  '/_authenticated/importar': typeof AuthenticatedImportarRoute
   '/_authenticated/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -237,6 +246,7 @@ export interface FileRouteTypes {
     | '/diagnostics'
     | '/empresas'
     | '/identities'
+    | '/importar'
     | '/layout-formulario'
     | '/regras'
     | '/settings'
@@ -259,6 +269,7 @@ export interface FileRouteTypes {
     | '/campos-personalizados'
     | '/diagnostics'
     | '/empresas'
+    | '/importar'
     | '/layout-formulario'
     | '/regras'
     | '/settings'
@@ -283,6 +294,7 @@ export interface FileRouteTypes {
     | '/_authenticated/diagnostics'
     | '/_authenticated/empresas'
     | '/_authenticated/identities'
+    | '/_authenticated/importar'
     | '/_authenticated/layout-formulario'
     | '/_authenticated/regras'
     | '/_authenticated/settings'
@@ -373,6 +385,13 @@ declare module '@tanstack/react-router' {
       path: '/identities'
       fullPath: '/identities'
       preLoaderRoute: typeof AuthenticatedIdentitiesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/importar': {
+      id: '/_authenticated/importar'
+      path: '/importar'
+      fullPath: '/importar'
+      preLoaderRoute: typeof AuthenticatedImportarRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/layout-formulario': {
@@ -489,6 +508,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
   AuthenticatedEmpresasRoute: typeof AuthenticatedEmpresasRoute
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
+  AuthenticatedImportarRoute: typeof AuthenticatedImportarRoute
   AuthenticatedLayoutFormularioRoute: typeof AuthenticatedLayoutFormularioRoute
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -509,6 +529,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
   AuthenticatedEmpresasRoute: AuthenticatedEmpresasRoute,
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
+  AuthenticatedImportarRoute: AuthenticatedImportarRoute,
   AuthenticatedLayoutFormularioRoute: AuthenticatedLayoutFormularioRoute,
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,

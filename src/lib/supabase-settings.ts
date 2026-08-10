@@ -11,8 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { getConfig, saveConfig } from "./argus-env";
 import { getBranding, saveBranding, applyBranding } from "./branding";
 import {
-  getDefaultSiteId,
-  setDefaultSiteId,
+  getConfiguredSiteId,
+  setConfiguredSiteId,
   getSystemObjectId,
   setSystemObjectId,
   getAccountId,
@@ -36,7 +36,7 @@ export async function pushSettings(): Promise<void> {
     user_id: userId,
     argus_base_url: cfg.baseUrl,
     argus_api_key: cfg.apiKey || null,
-    default_site_id: getDefaultSiteId() ?? cfg.defaultSiteId ?? null,
+    default_site_id: getConfiguredSiteId() ?? cfg.defaultSiteId ?? null,
     default_site_name: cfg.defaultSiteName ?? null,
     default_rule_id: cfg.defaultRuleId ?? null,
     default_rule_name: cfg.defaultRuleName ?? null,
@@ -87,7 +87,7 @@ export async function hydrateSettings(): Promise<void> {
     defaultRuleName: data.default_rule_name ?? undefined,
     linkVisitorToIdentity: (data as { link_visitor_to_identity?: boolean }).link_visitor_to_identity ?? false,
   });
-  setDefaultSiteId(data.default_site_id ?? null);
+  setConfiguredSiteId(data.default_site_id ?? null);
   setSystemObjectId(data.system_object_id ?? null);
   setAccountId(data.account_id ?? null);
 

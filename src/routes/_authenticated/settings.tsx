@@ -12,10 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getConfig, saveConfig, type ArgusEnvConfig } from "@/lib/argus-env";
 import {
   argusApi,
-  getDefaultSiteId,
-  setDefaultSiteId,
+  getConfiguredSiteId,
+  setConfiguredSiteId,
   getSystemObjectId,
   setSystemObjectId,
+  useDefaultProfile,
+  setDefaultProfile,
+  CLEARID_PROFILES,
   type DiagnosticsResult,
 } from "@/lib/argus-client";
 import { Badge } from "@/components/ui/badge";
@@ -30,28 +33,46 @@ export const Route = createFileRoute("/_authenticated/settings")({
 function Settings() {
   const [cfg, setCfg] = useState<ArgusEnvConfig>(() => getConfig());
   const [lastResult, setLastResult] = useState<DiagnosticsResult | null>(null);
-  const [siteId, setSiteId] = useState<string>(() => getDefaultSiteId() ?? "");
+  const [siteId, setSiteId] = useState<string>(() => getConfiguredSiteId() ?? "");
   const [systemObjectId, setSystemObjectIdState] = useState<string>(() => getSystemObjectId() ?? "");
   const [ruleId, setRuleId] = useState<string>(() => getConfig().defaultRuleId ?? "");
   const qc = useQueryClient();
   const { t } = useT();
+  const configuredProfile = useDefaultProfile();
 
+  // Troca o cliente PADRÃO (perfil ClearID) salvo em Configurações — e limpa o
+  // override de sessão para o novo padrão valer. Os sites/systems/teams são
+  // escopados por cliente no backend, então recarregamos tudo e limpamos as
+  // seleções do cliente anterior para não misturar dados.
+  const changeProfile = (code: string) => {
+    if (code === configuredProfile) return;
+    setDefaultProfile(code);
+    setSiteId("");
+    setSystemObjectIdState("");
+    setRuleId("");
+    setConfiguredSiteId(null);
+    setSystemObjectId(null);
+    qc.invalidateQueries();
+  };
+
+  // As listagens de Configurações usam o perfil CONFIGURADO (não o da sessão do
+  // topbar), para que trocar o cliente no topo não altere as opções aqui.
   const sitesQuery = useQuery({
-    queryKey: ["argus", "sites"],
-    queryFn: argusApi.listSites,
+    queryKey: ["argus", "sites", configuredProfile],
+    queryFn: () => argusApi.listSites(configuredProfile),
     staleTime: 60_000,
   });
 
   const systemsQuery = useQuery({
-    queryKey: ["argus", "systems"],
-    queryFn: argusApi.listSystems,
+    queryKey: ["argus", "systems", configuredProfile],
+    queryFn: () => argusApi.listSystems(configuredProfile),
     staleTime: 60_000,
   });
 
   const teamsQuery = useQuery({
-    // O endpoint /api/teams exige siteId — usa o site padrão (sem allSites).
-    queryKey: ["argus", "teams", siteId],
-    queryFn: () => argusApi.listTeams({ take: 200 }),
+    // O endpoint /api/teams exige siteId — usa o site configurado.
+    queryKey: ["argus", "teams", configuredProfile, siteId],
+    queryFn: () => argusApi.listTeams({ take: 200, siteId: siteId || undefined, environment: configuredProfile }),
     staleTime: 60_000,
   });
 
@@ -77,7 +98,7 @@ function Settings() {
       defaultRuleName: ruleName,
     };
     saveConfig(nextCfg);
-    setDefaultSiteId(siteId || null);
+    setConfiguredSiteId(siteId || null);
     setSystemObjectId(systemObjectId || null);
     setCfg(nextCfg);
     qc.invalidateQueries();
@@ -157,6 +178,31 @@ function Settings() {
           {lastResult?.backend.message && !lastResult.backend.reachable && (
             <p className="text-sm text-destructive">{lastResult.backend.message}</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("settings.client.title")}</CardTitle>
+          <CardDescription>{t("settings.client.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="client">{t("settings.client.label")}</Label>
+            <Select value={configuredProfile} onValueChange={changeProfile}>
+              <SelectTrigger id="client">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CLEARID_PROFILES.map((p) => (
+                  <SelectItem key={p.code} value={p.code}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("settings.client.hint")}</p>
+          </div>
         </CardContent>
       </Card>
 

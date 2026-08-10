@@ -2,40 +2,73 @@ import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { getConfig } from "./argus-env";
 
-// --- Default site cache ---
-let cachedSiteId: string | null = null;
-const SITE_KEY = "argus.defaultSiteId";
-const siteListeners = new Set<() => void>();
-
-export function getDefaultSiteId(): string | null {
-  if (cachedSiteId) return cachedSiteId;
-  if (typeof window !== "undefined") {
-    try {
-      const stored = window.localStorage.getItem(SITE_KEY);
-      if (stored) cachedSiteId = stored;
-    } catch { /* ignore */ }
-  }
-  return cachedSiteId;
+// --- Armazenamento: helpers localStorage (padrão) e sessionStorage (override) ---
+function lsGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+function lsSet(key: string, val: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (val) window.localStorage.setItem(key, val);
+    else window.localStorage.removeItem(key);
+  } catch { /* ignore */ }
+}
+function ssGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.sessionStorage.getItem(key); } catch { return null; }
+}
+function ssSet(key: string, val: string) {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.setItem(key, val); } catch { /* ignore */ }
+}
+function ssRemove(key: string) {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.removeItem(key); } catch { /* ignore */ }
 }
 
-export function setDefaultSiteId(id: string | null) {
-  cachedSiteId = id || null;
-  if (typeof window !== "undefined") {
-    try {
-      if (id) window.localStorage.setItem(SITE_KEY, id);
-      else window.localStorage.removeItem(SITE_KEY);
-    } catch { /* ignore */ }
-  }
-  for (const cb of siteListeners) cb();
+// --- Site: padrão configurado (localStorage/Configurações) vs seleção da sessão
+// (sessionStorage/topbar). O site "em efeito" (usado nas requisições) é o override
+// da sessão quando houver, senão o padrão configurado. Alterar o site no topbar
+// NÃO altera o padrão salvo em Configurações. ---
+const SITE_KEY = "argus.defaultSiteId";          // padrão (persistente)
+const SITE_SESSION_KEY = "argus.sessionSiteId";  // override da sessão (topbar)
+const siteListeners = new Set<() => void>();
+function notifySite() { for (const cb of siteListeners) cb(); }
+
+/** Site padrão configurado em Configurações (persistente). */
+export function getConfiguredSiteId(): string | null {
+  return lsGet(SITE_KEY);
+}
+
+/** Grava o site padrão (Configurações) e remove o override da sessão. */
+export function setConfiguredSiteId(id: string | null) {
+  lsSet(SITE_KEY, id);
+  ssRemove(SITE_SESSION_KEY);
+  notifySite();
+}
+
+/**
+ * Define o site da SESSÃO (seletor do topbar). Não altera o padrão de
+ * Configurações. `null` = "sem site" explícito (força escolher), gravado como
+ * string vazia para sobrepor o padrão.
+ */
+export function setSessionSiteId(id: string | null) {
+  ssSet(SITE_SESSION_KEY, id ?? "");
+  notifySite();
+}
+
+/** Site em efeito: override da sessão (se houver) senão o padrão configurado. */
+export function getDefaultSiteId(): string | null {
+  const override = ssGet(SITE_SESSION_KEY);
+  if (override !== null) return override || null;
+  return getConfiguredSiteId();
 }
 
 function subscribeSite(cb: () => void) {
   siteListeners.add(cb);
   const onStorage = (e: StorageEvent) => {
-    if (e.key === SITE_KEY) {
-      cachedSiteId = e.newValue || null;
-      cb();
-    }
+    if (e.key === SITE_KEY) cb();
   };
   if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
   return () => {
@@ -44,13 +77,14 @@ function subscribeSite(cb: () => void) {
   };
 }
 
-/** React hook: re-renderiza quando o site padrão muda. */
+/** React hook: site em efeito (sessão ?? padrão). */
 export function useDefaultSiteId(): string | null {
-  return useSyncExternalStore(
-    subscribeSite,
-    () => getDefaultSiteId(),
-    () => null,
-  );
+  return useSyncExternalStore(subscribeSite, () => getDefaultSiteId(), () => null);
+}
+
+/** React hook: site padrão configurado (para Configurações). */
+export function useConfiguredSiteId(): string | null {
+  return useSyncExternalStore(subscribeSite, () => getConfiguredSiteId(), () => null);
 }
 
 // --- AccountId cache (preenchido pelo /api/diagnostics/environment) ---
@@ -135,6 +169,71 @@ export function useSystemObjectId(): string | null {
   );
 }
 
+// --- Perfil ClearID ativo (conta/cliente escolhido POR REQUISIÇÃO) ---
+// O backend passou a atender múltiplas contas por "perfil" (rótulo não sigiloso),
+// enviado no header X-ClearId-Environment. O front escolhe o perfil (seletor) e
+// NÃO envia mais accountId — a conta é derivada do perfil no servidor.
+export type ClearIdProfile = { code: string; label: string };
+
+/** Lista de perfis disponíveis. TODO: tornar dinâmica (endpoint/config). */
+export const CLEARID_PROFILES: ClearIdProfile[] = [
+  { code: "RM", label: "RM" },
+  { code: "Corteva", label: "Corteva" },
+  { code: "Vylor", label: "Vylor" },
+];
+
+const DEFAULT_PROFILE = "RM";
+const PROFILE_KEY = "argus.profile";               // padrão (persistente/Configurações)
+const PROFILE_SESSION_KEY = "argus.sessionProfile"; // override da sessão (topbar)
+const profileListeners = new Set<() => void>();
+function notifyProfile() { for (const cb of profileListeners) cb(); }
+
+/** Perfil padrão configurado em Configurações. */
+export function getDefaultProfile(): string {
+  return lsGet(PROFILE_KEY) || DEFAULT_PROFILE;
+}
+
+/** Grava o perfil padrão (Configurações) e remove o override da sessão. */
+export function setDefaultProfile(code: string | null) {
+  lsSet(PROFILE_KEY, code);
+  ssRemove(PROFILE_SESSION_KEY);
+  notifyProfile();
+}
+
+/** Define o perfil da SESSÃO (topbar). Não altera o padrão de Configurações. */
+export function setSessionProfile(code: string | null) {
+  if (code) ssSet(PROFILE_SESSION_KEY, code);
+  else ssRemove(PROFILE_SESSION_KEY);
+  notifyProfile();
+}
+
+/** Perfil em efeito: override da sessão (se houver) senão o padrão configurado. */
+export function getActiveProfile(): string {
+  return ssGet(PROFILE_SESSION_KEY) || getDefaultProfile();
+}
+
+function subscribeProfile(cb: () => void) {
+  profileListeners.add(cb);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === PROFILE_KEY) cb();
+  };
+  if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
+  return () => {
+    profileListeners.delete(cb);
+    if (typeof window !== "undefined") window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** React hook: perfil em efeito (sessão ?? padrão). */
+export function useActiveProfile(): string {
+  return useSyncExternalStore(subscribeProfile, getActiveProfile, () => DEFAULT_PROFILE);
+}
+
+/** React hook: perfil padrão configurado (para Configurações). */
+export function useDefaultProfile(): string {
+  return useSyncExternalStore(subscribeProfile, getDefaultProfile, () => DEFAULT_PROFILE);
+}
+
 export interface ClearIdSystem {
   systemObjectId: string;
   name: string;
@@ -148,6 +247,33 @@ export interface ArgusError {
   message: string;
   traceId?: string;
   raw?: unknown;
+}
+
+// ---- Importação de identities (planilha CSV/Excel) ----
+
+export interface IdentityImportRow {
+  rowNumber: number;
+  action: string; // Created | Updated | Skipped | Failed | WouldCreate | WouldUpdate
+  identityId?: string | null;
+  externalId?: string | null;
+  email?: string | null;
+  displayName?: string | null;
+  customFieldsSet?: number;
+  messages: string[];
+}
+
+export interface IdentityImportResult {
+  fileName?: string | null;
+  environment: string;
+  dryRun: boolean;
+  detectedColumns: string[];
+  unknownColumns: string[];
+  totalRows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  rows: IdentityImportRow[];
 }
 
 export class ArgusApiError extends Error {
@@ -165,7 +291,7 @@ export class ArgusApiError extends Error {
 export async function argusFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
-  opts: { allSites?: boolean; siteId?: string | null } = {},
+  opts: { allSites?: boolean; siteId?: string | null; environment?: string } = {},
 ): Promise<T> {
   const cfg = getConfig();
 
@@ -178,8 +304,10 @@ export async function argusFetch<T = unknown>(
 
   let url = cfg.baseUrl.replace(/\/+$/, "") + path;
   // Permite escopar a chamada a um site específico (ex.: o site da pessoa),
-  // em vez do site padrão do cabeçalho.
-  const siteIdForQuery = opts.siteId ?? getDefaultSiteId();
+  // em vez do site padrão do cabeçalho. Quando o perfil é forçado (opts.environment,
+  // ex.: página de Configurações), não herdamos o site da sessão — a chamada fica
+  // totalmente desacoplada do estado do topbar.
+  const siteIdForQuery = opts.siteId ?? (opts.environment ? null : getDefaultSiteId());
   if (!opts.allSites && siteIdForQuery && !/[?&]siteId=/.test(url)) {
     url += (url.includes("?") ? "&" : "?") + "siteId=" + encodeURIComponent(siteIdForQuery);
   }
@@ -188,9 +316,10 @@ export async function argusFetch<T = unknown>(
     headers.set("Content-Type", "application/json");
   }
   if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-  const accountId = getAccountId();
-  if (accountId && !headers.has("X-Account-Id")) {
-    headers.set("X-Account-Id", accountId);
+  // Perfil ClearID (conta) por requisição. Não enviamos mais accountId — o
+  // backend deriva a conta a partir do perfil (header X-ClearId-Environment).
+  if (!headers.has("X-ClearId-Environment")) {
+    headers.set("X-ClearId-Environment", opts.environment ?? getActiveProfile());
   }
   const systemObjectId = getSystemObjectId();
   if (systemObjectId && !headers.has("X-System-Object-Id")) {
@@ -227,7 +356,7 @@ export async function argusFetch<T = unknown>(
     });
   }
 
-  const traceId = response.headers.get("x-trace-id") ?? undefined;
+  const headerTraceId = response.headers.get("x-trace-id") ?? undefined;
   const text = await response.text();
   let body: unknown = text;
   if (text) {
@@ -240,6 +369,10 @@ export async function argusFetch<T = unknown>(
 
   if (!response.ok) {
     const bodyObj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+    // O envelope ApiResponse traz o traceId no corpo; o header é um fallback.
+    const traceId =
+      headerTraceId ??
+      (bodyObj && typeof bodyObj.traceId === "string" ? bodyObj.traceId : undefined);
     const msg =
       (bodyObj && "message" in bodyObj && typeof bodyObj.message === "string"
         ? bodyObj.message
@@ -247,6 +380,10 @@ export async function argusFetch<T = unknown>(
       (bodyObj && "error" in bodyObj ? String(bodyObj.error) : null) ??
       response.statusText ??
       `HTTP ${response.status}`;
+    // Loga o traceId para correlação com os logs do backend (Serilog).
+    console.warn(
+      `[argus] ${response.status} ${path} — ${msg}${traceId ? ` (traceId ${traceId})` : ""}`,
+    );
     throw new ArgusApiError({
       status: response.status,
       message: msg,
@@ -862,21 +999,19 @@ export function parseCredentialsResponse(raw: unknown): CredentialRecord[] {
 // ---- API helpers ----
 
 export const argusApi = {
-  listSites: async (): Promise<ClearIdSite[]> => {
+  listSites: async (environment?: string): Promise<ClearIdSite[]> => {
     const data = await unwrap<{ sites?: ClearIdSite[] } | ClearIdSite[]>(
-      argusFetch(`/api/sites`),
+      argusFetch(`/api/sites`, undefined, { environment, allSites: true }),
     );
     if (Array.isArray(data)) return data;
     return data?.sites ?? [];
   },
 
-  listSystems: async (): Promise<ClearIdSystem[]> => {
-    const accountId = getAccountId();
+  listSystems: async (environment?: string): Promise<ClearIdSystem[]> => {
     const q = new URLSearchParams();
-    if (accountId) q.set("accountId", accountId);
     const data = await unwrap<
       { systems?: unknown[] } | unknown[]
-    >(argusFetch(`/api/systems?${q.toString()}`, undefined, { allSites: true }));
+    >(argusFetch(`/api/systems?${q.toString()}`, undefined, { allSites: true, environment }));
     const raw = Array.isArray(data) ? data : (data?.systems ?? []);
     return (raw as Array<Record<string, unknown>>).map((s) => ({
       systemObjectId:
@@ -901,6 +1036,7 @@ export const argusApi = {
     take?: number;
     allSites?: boolean;
     siteId?: string | null;
+    environment?: string;
   }): Promise<ClearIdTeam[]> => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
@@ -910,6 +1046,7 @@ export const argusApi = {
       argusFetch(`/api/teams?${q.toString()}`, undefined, {
         allSites: params?.allSites,
         siteId: params?.siteId,
+        environment: params?.environment,
       }),
     );
     if (Array.isArray(data)) return data;
@@ -939,9 +1076,7 @@ export const argusApi = {
   },
 
   listCustomFields: async (): Promise<ClearIdCustomFieldDef[]> => {
-    const accountId = getAccountId();
     const q = new URLSearchParams();
-    if (accountId) q.set("accountId", accountId);
     const data = await unwrap<
       { customFields?: ClearIdCustomFieldDef[] } | ClearIdCustomFieldDef[]
     >(argusFetch(`/api/custom-fields?${q.toString()}`, undefined, { allSites: true }));
@@ -1401,11 +1536,9 @@ export const argusApi = {
     ),
 
   listCredentialFormats: async (): Promise<CredentialFormat[]> => {
-    const accountId = getAccountId();
     const systemObjectId = getSystemObjectId();
     const q = new URLSearchParams();
     if (systemObjectId) q.set("systemObjectId", systemObjectId);
-    if (accountId) q.set("accountId", accountId);
     const data = await unwrap<
       { credentialFormats?: CredentialFormat[]; formats?: CredentialFormat[] } | CredentialFormat[]
     >(argusFetch(`/api/credentials/formats?${q.toString()}`, undefined, { allSites: true }));
@@ -1478,8 +1611,7 @@ export const argusApi = {
     let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-    const acc = getAccountId();
-    if (acc) headers.set("X-Account-Id", acc);
+    headers.set("X-ClearId-Environment", getActiveProfile());
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
@@ -1500,8 +1632,7 @@ export const argusApi = {
     form.append("picture", blob, "capture.jpg");
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-    const acc = getAccountId();
-    if (acc) headers.set("X-Account-Id", acc);
+    headers.set("X-ClearId-Environment", getActiveProfile());
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
@@ -1512,6 +1643,42 @@ export const argusApi = {
       const text = await res.text().catch(() => "");
       throw new ArgusApiError({ status: res.status, message: text || res.statusText });
     }
+  },
+
+  /**
+   * Importa identities a partir de uma planilha CSV/Excel via
+   * POST /api/identities/import (multipart, campo `file`). `dryRun` simula
+   * sem gravar. Retorna o log completo por linha.
+   */
+  importIdentities: async (
+    file: File,
+    opts?: { dryRun?: boolean },
+  ): Promise<IdentityImportResult> => {
+    const cfg = getConfig();
+    if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+    let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import`;
+    if (opts?.dryRun) url += "?dryRun=true";
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const headers = new Headers();
+    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    const sys = getSystemObjectId();
+    if (sys) {
+      headers.set("X-System-Object-Id", sys);
+      url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
+    }
+    const res = await fetch(url, { method: "POST", headers, body: form });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message =
+        (body && typeof body === "object" && (body as { message?: string }).message) ||
+        res.statusText;
+      throw new ArgusApiError({ status: res.status, message, raw: body });
+    }
+    return (body && typeof body === "object" && "data" in body
+      ? (body as { data: IdentityImportResult }).data
+      : (body as IdentityImportResult));
   },
 
   /**
@@ -1541,7 +1708,7 @@ export const argusApi = {
         (envBody.accountId as string | undefined) ??
         (envBody.AccountId as string | undefined) ??
         (envBody.clientCode as string | undefined);
-      if (clientCode) setAccountId(clientCode);
+      // Não cacheamos mais o accountId: a conta é derivada do perfil no backend.
       const message = (conn?.message as string | undefined) ?? (connBody.message as string | undefined);
       return {
         environment,

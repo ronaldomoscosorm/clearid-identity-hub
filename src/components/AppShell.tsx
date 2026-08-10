@@ -1,10 +1,18 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload } from "lucide-react";
 import { getTheme, applyTheme } from "@/lib/theme";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
-import { argusApi, setDefaultSiteId, useDefaultSiteId, useSystemObjectId } from "@/lib/argus-client";
+import {
+  argusApi,
+  setSessionSiteId,
+  useDefaultSiteId,
+  useSystemObjectId,
+  useActiveProfile,
+  setSessionProfile,
+  CLEARID_PROFILES,
+} from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
@@ -63,7 +71,10 @@ const NAV: NavEntry[] = [
     kind: "group",
     key: "nav.utilities",
     icon: Wrench,
-    items: [{ to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" }],
+    items: [
+      { to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" },
+      { to: "/importar", icon: Upload, key: "nav.importar" },
+    ],
   },
   {
     kind: "group",
@@ -232,9 +243,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const env = envQuery.data?.environment ?? "…";
   const siteId = useDefaultSiteId();
   const systemObjectId = useSystemObjectId();
+  const activeProfile = useActiveProfile();
   const sitesQuery = useQuery({
     queryKey: ["argus", "sites"],
-    queryFn: argusApi.listSites,
+    queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60_000,
     retry: false,
   });
@@ -244,6 +256,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useT();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+
+  // Troca o perfil (conta ClearID) SÓ na sessão — não altera o padrão de
+  // Configurações. Como os dados (sites, campos, pessoas…) são por conta, reseta
+  // o site da sessão e limpa os caches para não misturar clientes.
+  const changeProfile = (code: string) => {
+    if (code === activeProfile) return;
+    setSessionProfile(code);
+    setSessionSiteId(null);
+    queryClient.clear();
+  };
   // Aplica o tema salvo (o controle fica na página Identidade).
   useEffect(() => {
     applyTheme(getTheme());
@@ -415,6 +437,36 @@ export function AppShell({ children }: { children: ReactNode }) {
                     variant="outline"
                     size="sm"
                     className="h-8 gap-1.5 font-normal"
+                    title={t("shell.profile")}
+                  >
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="max-w-[160px] truncate text-xs">
+                      {t("shell.profile")}: {activeProfile}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuLabel>{t("shell.profile")}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {CLEARID_PROFILES.map((p) => (
+                    <DropdownMenuItem
+                      key={p.code}
+                      onClick={() => changeProfile(p.code)}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="truncate">{p.label}</span>
+                      {p.code === activeProfile && <Check className="h-4 w-4 text-primary" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 font-normal"
                     title={t("shell.defaultSite")}
                     disabled={!sitesQuery.data?.length}
                   >
@@ -438,7 +490,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                         return (
                           <DropdownMenuItem
                             key={s.siteId}
-                            onClick={() => setDefaultSiteId(s.siteId)}
+                            onClick={() => setSessionSiteId(s.siteId)}
                             className="flex items-center justify-between gap-2"
                           >
                             <span className="truncate">{s.name ?? s.siteId}</span>

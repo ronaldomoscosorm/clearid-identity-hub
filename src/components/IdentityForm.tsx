@@ -380,11 +380,28 @@ export function IdentityForm({
 
   // Quais campos de anexo já possuem uma versão atual (edição) — usado para
   // validar obrigatoriedade sem exigir novo upload em toda edição.
-  // Anexo é complemento de um campo (attachment_enabled), vinculado à definição.
-  const attachmentDefIds = siteFields
-    .filter((sf) => sf.definition?.attachment_enabled)
-    .map((sf) => sf.definition?.id)
-    .filter((id): id is string => Boolean(id));
+  // Flags de anexo comprobatório de QUALQUER definição habilitada (por nome).
+  // O comprovante vale para qualquer campo do layout, seja ele renderizado como
+  // campo do site, definição do catálogo ou dropdown especial.
+  const attachmentFlagsQuery = useQuery({
+    queryKey: ["cfd-attachment-flags"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .select("id, custom_field_name, attachment_required, attachment_accept")
+        .eq("attachment_enabled", true);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 60 * 1000,
+  });
+  const attachmentByName = new Map(
+    (attachmentFlagsQuery.data ?? []).map((d) => [
+      d.custom_field_name,
+      { id: d.id, required: d.attachment_required, accept: d.attachment_accept },
+    ]),
+  );
+  const attachmentDefIds = [...attachmentByName.values()].map((a) => a.id);
   const existingAttachmentsQuery = useQuery({
     queryKey: ["identity-attachment-presence", identityDbId, attachmentDefIds.join(",")],
     queryFn: async (): Promise<string[]> => {
@@ -506,10 +523,8 @@ export function IdentityForm({
     const value = customFields[name] ?? "";
     const err = errors[`sf-${sf.id}`];
     const disabled = !sf.fillable; // não preenchível → somente leitura
-    // Anexo é COMPLEMENTO (comprovante) do campo: renderiza o valor normalmente e,
-    // quando habilitado, um uploader logo abaixo (vinculado à definição do campo).
-    const hasAttachment = Boolean(sf.definition?.attachment_enabled);
-    const defId = sf.definition?.id ?? sf.id;
+    // O anexo comprobatório é renderizado de forma uniforme no branch cf: do
+    // layout (ver renderStandardField), valendo para qualquer tipo de campo.
     return (
       <div key={sf.id} className="space-y-1.5">
         <Label htmlFor={`sf-${sf.id}`} className="text-xs text-muted-foreground">
@@ -552,21 +567,26 @@ export function IdentityForm({
           />
         )}
         {err && <p className="text-xs text-destructive">{err}</p>}
-        {hasAttachment && (
-          <div className="pt-1">
-            <AttachmentField
-              definitionId={defId}
-              identityDbId={identityDbId}
-              label={t("attachment.evidenceLabel")}
-              required={sf.definition?.attachment_required ?? false}
-              disabled={disabled}
-              accept={sf.definition?.attachment_accept ?? null}
-              staged={attachments[defId] ?? null}
-              onStage={(file) => setAttachment(defId, file)}
-              error={errors[`sf-att-${sf.id}`]}
-            />
-          </div>
-        )}
+      </div>
+    );
+  };
+
+  // Anexo comprobatório de um campo customizável (qualquer caminho de render).
+  const renderFieldAttachment = (name: string): ReactNode => {
+    const att = attachmentByName.get(name);
+    if (!att) return null;
+    return (
+      <div className="pt-1">
+        <AttachmentField
+          definitionId={att.id}
+          identityDbId={identityDbId}
+          label={t("attachment.evidenceLabel")}
+          required={att.required}
+          accept={att.accept}
+          staged={attachments[att.id] ?? null}
+          onStage={(file) => setAttachment(att.id, file)}
+          error={errors[`sf-att-${name}`]}
+        />
       </div>
     );
   };
@@ -687,11 +707,27 @@ export function IdentityForm({
     if (k.startsWith("cf:")) {
       const n = k.slice(3);
       const special = specialByName.get(n);
-      if (special && special.length) return renderSpecialDropdown(n, special);
       const sf = siteFieldByName.get(n);
-      if (sf) return renderSiteField(sf);
       const def = cfDefByName.get(n);
-      return def ? renderDefField(def) : null;
+      const field =
+        special && special.length
+          ? renderSpecialDropdown(n, special)
+          : sf
+            ? renderSiteField(sf)
+            : def
+              ? renderDefField(def)
+              : null;
+      if (!field) return null;
+      const attachment = renderFieldAttachment(n);
+      // Anexo comprobatório aparece abaixo do campo, seja qual for o tipo dele.
+      return attachment ? (
+        <div key={`cf-wrap-${n}`} className="space-y-1.5">
+          {field}
+          {attachment}
+        </div>
+      ) : (
+        field
+      );
     }
     const req = requiredStd.has(k);
     const star = req ? <span className="ml-0.5 text-destructive">*</span> : null;
@@ -956,21 +992,20 @@ export function IdentityForm({
       out.siteId = t("identityForm.validation.selectSite");
     }
     for (const sf of siteFields) {
-      // Apenas campos preenchíveis e presentes no layout.
+      // Valor obrigatório do campo do site (preenchível e no layout).
       if (!sf.fillable || !sf.definition || !consumedCf.has(sf.definition.custom_field_name)) {
         continue;
       }
-      // Valor obrigatório do campo.
       if (sf.is_required && isBlank(customFields[sf.definition.custom_field_name])) {
         out[`sf-${sf.id}`] = t("identityForm.validation.requiredField");
       }
-      // Anexo comprobatório obrigatório: atendido por um arquivo preparado OU por
-      // uma versão já existente (edição). Chaveado pela definição do campo.
-      if (sf.definition.attachment_enabled && sf.definition.attachment_required) {
-        const defId = sf.definition.id;
-        if (!attachments[defId] && !existingAttachmentIds.has(defId)) {
-          out[`sf-att-${sf.id}`] = t("identityForm.validation.requiredField");
-        }
+    }
+    // Anexo comprobatório obrigatório (qualquer campo do layout com anexo exigido):
+    // atendido por um arquivo preparado OU por uma versão já existente (edição).
+    for (const [name, att] of attachmentByName) {
+      if (!att.required || !consumedCf.has(name)) continue;
+      if (!attachments[att.id] && !existingAttachmentIds.has(att.id)) {
+        out[`sf-att-${name}`] = t("identityForm.validation.requiredField");
       }
     }
     if (Object.keys(out).length) {
@@ -1028,19 +1063,11 @@ export function IdentityForm({
       }));
 
     // Anexos comprobatórios preparados (upload feito após a identidade existir),
-    // vinculados à DEFINIÇÃO do campo (custom_field_definition_id).
-    const pendingAttachments: PendingAttachment[] = siteFields
-      .filter(
-        (sf) =>
-          sf.definition &&
-          sf.definition.attachment_enabled &&
-          consumedCf.has(sf.definition.custom_field_name) &&
-          attachments[sf.definition.id],
-      )
-      .map((sf) => ({
-        custom_field_definition_id: sf.definition!.id,
-        file: attachments[sf.definition!.id]!,
-      }));
+    // vinculados à DEFINIÇÃO do campo. `attachments` é chaveado por definição e
+    // só recebe arquivos dos comprovantes renderizados (campos no layout).
+    const pendingAttachments: PendingAttachment[] = Object.entries(attachments)
+      .filter(([, file]) => file)
+      .map(([defId, file]) => ({ custom_field_definition_id: defId, file: file! }));
 
     // Monta os campos adicionais (top-level, privateData, companyData),
     // preservando o que veio do initial (edit) e sobrescrevendo com o form.
