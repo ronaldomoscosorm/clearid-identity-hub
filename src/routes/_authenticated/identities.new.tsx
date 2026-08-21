@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { pickLang } from "@/lib/custom-fields";
-import { argusApi, ArgusApiError, type IdentityUpsert } from "@/lib/argus-client";
+import { argusApi, ArgusApiError, useActiveProfile, type IdentityUpsert } from "@/lib/argus-client";
 import {
   mirrorIdentities,
   saveIdentityCustomFields,
@@ -32,13 +32,15 @@ function NewIdentity() {
   const { type: workerTypeId } = Route.useSearch();
 
   // Nome do tipo de trabalhador para o título "Novo [Tipo]".
+  const activeProfile = useActiveProfile();
   const workerTypesQuery = useQuery({
-    queryKey: ["worker-types"],
+    queryKey: ["worker-types", activeProfile],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("worker_types")
         .select("id, name, name_i18n")
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .eq("profile", activeProfile);
       if (error) throw new Error(error.message);
       return data ?? [];
     },

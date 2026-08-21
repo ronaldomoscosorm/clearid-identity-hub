@@ -5,7 +5,7 @@ import { Plus, RefreshCw, Pencil, Trash2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { useDefaultSiteId } from "@/lib/argus-client";
+import { useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
 import { useT, type TFn } from "@/lib/i18n";
 import { typeOf, pickLang, optionsOf, isTruthy } from "@/lib/custom-fields";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -102,6 +102,7 @@ function fieldLabel(sf: SiteField, t: TFn): string {
 function EmpresasPage() {
   const { t } = useT();
   const siteId = useDefaultSiteId();
+  const activeProfile = useActiveProfile();
   const qc = useQueryClient();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -110,13 +111,14 @@ function EmpresasPage() {
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [toDelete, setToDelete] = useState<Company | null>(null);
 
+  // Empresas do CLIENTE ativo — cada empresa pertence a um cliente (perfil).
   const query = useQuery({
-    queryKey: ["companies"],
+    queryKey: ["companies", activeProfile],
     queryFn: async (): Promise<Company[]> => {
-      // Empresas são por SISTEMA (não filtra por site).
       const { data, error } = await supabase
         .from("companies")
         .select("*")
+        .eq("profile", activeProfile)
         .order("name", { ascending: true });
       if (error) throw new Error(error.message);
       return data ?? [];
@@ -159,9 +161,10 @@ function EmpresasPage() {
         const { error } = await supabase.from("companies").update(payload).eq("id", editing.id);
         if (error) throw new Error(error.message);
       } else {
+        // Vincula a nova empresa ao cliente ativo.
         const { data, error } = await supabase
           .from("companies")
-          .insert(payload)
+          .insert({ ...payload, profile: activeProfile })
           .select("id")
           .single();
         if (error) throw new Error(error.message);
@@ -243,9 +246,14 @@ function EmpresasPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {t("companies.title")}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {t("companies.title")}
+            </h1>
+            <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {t("shell.profile")}: {activeProfile}
+            </span>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">{t("companies.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">

@@ -160,13 +160,15 @@ function NavGroup({
 // cada um abrindo o novo cadastro já com o tipo definido.
 function IdentitiesSubNav({ item, pathname }: { item: NavItem; pathname: string }) {
   const { t, lang } = useT();
+  const activeProfile = useActiveProfile();
   const wtQuery = useQuery({
-    queryKey: ["worker-types"],
+    queryKey: ["worker-types", activeProfile],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("worker_types")
         .select("*")
         .eq("is_active", true)
+        .eq("profile", activeProfile)
         .order("display_index", { ascending: true, nullsFirst: false });
       if (error) throw new Error(error.message);
       return data ?? [];

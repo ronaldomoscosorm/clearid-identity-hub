@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
 import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Camera, Users, UserCheck, UserX, ArrowRight, Paperclip, ExternalLink } from "lucide-react";
-import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
 import { useCurrentAttachments, signedUrlFor } from "@/lib/attachments";
 import { pickLang } from "@/lib/custom-fields";
 import { supabase } from "@/integrations/supabase/client";
@@ -100,13 +100,15 @@ function IdentitiesList() {
   // Tipos de trabalhador cadastrados (mesma fonte do menu/Nova identity).
   // O filtro lista os tipos existentes por nome; a busca ClearID recebe o
   // código Argus (Colaborador/Terceiros) mapeado a partir do tipo escolhido.
+  const activeProfile = useActiveProfile();
   const workerTypesQuery = useQuery({
-    queryKey: ["worker-types"],
+    queryKey: ["worker-types", activeProfile],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("worker_types")
         .select("*")
         .eq("is_active", true)
+        .eq("profile", activeProfile)
         .order("display_index", { ascending: true, nullsFirst: false });
       if (error) throw new Error(error.message);
       return data ?? [];

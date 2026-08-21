@@ -44,7 +44,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import type { IdentityUpsert } from "@/lib/argus-client";
-import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
 import type { SiteFieldValue } from "@/lib/supabase-mirror";
 
 type TFunc = (k: string, vars?: Record<string, string | number>) => string;
@@ -312,16 +312,18 @@ export function IdentityForm({
     });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { alias } = useIdentityFieldLabels();
-  const { config: formLayoutConfig } = useFormLayoutConfig(siteId);
+  const activeProfile = useActiveProfile();
+  const { config: formLayoutConfig } = useFormLayoutConfig(activeProfile, siteId);
 
   // Tipos de trabalhador (Supabase) → mapeados para o workerTypeCode do Argus.
   const workerTypesQuery = useQuery({
-    queryKey: ["worker-types"],
+    queryKey: ["worker-types", activeProfile],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("worker_types")
         .select("*")
         .eq("is_active", true)
+        .eq("profile", activeProfile)
         .order("display_index", { ascending: true, nullsFirst: false });
       if (error) throw new Error(error.message);
       return data ?? [];
@@ -418,14 +420,14 @@ export function IdentityForm({
   });
   const existingAttachmentIds = new Set(existingAttachmentsQuery.data ?? []);
 
-  // Empresas do site (para vincular a identidade e herdar valores).
+  // Empresas do cliente ativo (para vincular a identidade e herdar valores).
   const companiesQuery = useQuery({
-    queryKey: ["companies"],
+    queryKey: ["companies", activeProfile],
     queryFn: async () => {
-      // Empresas são por sistema (não filtra por site).
       const { data, error } = await supabase
         .from("companies")
         .select("id, name, tax_id")
+        .eq("profile", activeProfile)
         .order("name", { ascending: true });
       if (error) throw new Error(error.message);
       return data ?? [];

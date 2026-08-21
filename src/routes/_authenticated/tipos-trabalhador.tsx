@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useT } from "@/lib/i18n";
 import { pickLang } from "@/lib/custom-fields";
+import { useActiveProfile } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -100,18 +101,21 @@ function toForm(w: WorkerType): FormState {
 function WorkerTypesPage() {
   const { t, lang } = useT();
   const qc = useQueryClient();
+  const activeProfile = useActiveProfile();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<WorkerType | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [toDelete, setToDelete] = useState<WorkerType | null>(null);
 
+  // Tipos do CLIENTE ativo — cada tipo pertence a um cliente (perfil ClearID).
   const query = useQuery({
-    queryKey: ["worker-types-admin"],
+    queryKey: ["worker-types-admin", activeProfile],
     queryFn: async (): Promise<WorkerType[]> => {
       const { data, error } = await supabase
         .from("worker_types")
         .select("*")
+        .eq("profile", activeProfile)
         .order("display_index", { ascending: true, nullsFirst: false })
         .order("name", { ascending: true });
       if (error) throw new Error(error.message);
@@ -142,7 +146,10 @@ function WorkerTypesPage() {
           .eq("id", editing.id);
         if (error) throw new Error(error.message);
       } else {
-        const { error } = await supabase.from("worker_types").insert(payload);
+        // Vincula o novo tipo ao cliente ativo.
+        const { error } = await supabase
+          .from("worker_types")
+          .insert({ ...payload, profile: activeProfile });
         if (error) throw new Error(error.message);
       }
     },
@@ -203,9 +210,14 @@ function WorkerTypesPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {t("workerTypes.title")}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {t("workerTypes.title")}
+            </h1>
+            <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {t("shell.profile")}: {activeProfile}
+            </span>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">{t("workerTypes.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">

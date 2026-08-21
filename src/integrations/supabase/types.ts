@@ -40,6 +40,7 @@ export type Database = {
           id: string;
           legal_name: string | null;
           name: string;
+          profile: string;
           site_id: string | null;
           status: string;
           tax_id: string | null;
@@ -51,6 +52,7 @@ export type Database = {
           id?: string;
           legal_name?: string | null;
           name: string;
+          profile?: string;
           site_id?: string | null;
           status?: string;
           tax_id?: string | null;
@@ -62,6 +64,7 @@ export type Database = {
           id?: string;
           legal_name?: string | null;
           name?: string;
+          profile?: string;
           site_id?: string | null;
           status?: string;
           tax_id?: string | null;
@@ -662,6 +665,7 @@ export type Database = {
           is_active: boolean;
           name: string;
           name_i18n: Json;
+          profile: string;
           updated_at: string;
         };
         Insert: {
@@ -673,6 +677,7 @@ export type Database = {
           is_active?: boolean;
           name: string;
           name_i18n?: Json;
+          profile?: string;
           updated_at?: string;
         };
         Update: {
@@ -684,6 +689,7 @@ export type Database = {
           is_active?: boolean;
           name?: string;
           name_i18n?: Json;
+          profile?: string;
           updated_at?: string;
         };
         Relationships: [];

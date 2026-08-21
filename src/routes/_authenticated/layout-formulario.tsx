@@ -31,13 +31,13 @@ import { STANDARD_IDENTITY_FIELDS, useIdentityFieldLabels } from "@/lib/identity
 import {
   useFormLayoutConfig,
   saveFormLayoutConfig,
-  exportFormLayoutToSites,
+  exportFormLayoutToClients,
   REQUIRED_KEYS,
   CF_PREFIX,
   type FormLayout,
   type FormLayoutConfig,
 } from "@/lib/form-layout";
-import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId, useActiveProfile, CLEARID_PROFILES } from "@/lib/argus-client";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -111,8 +111,10 @@ function LayoutFormularioPage() {
   const qc = useQueryClient();
   const { alias } = useIdentityFieldLabels();
 
-  // Layout é POR SITE e SEMPRE segue o site padrão (topbar). Ao trocar o site
-  // padrão, o editor recarrega o layout desse site.
+  // Layout é POR CLIENTE (perfil ClearID): um layout para todos os sites do
+  // cliente. O site ativo serve apenas como fonte dos campos disponíveis na
+  // paleta; ao trocar o cliente no topbar, o editor recarrega o layout dele.
+  const activeProfile = useActiveProfile();
   const defaultSiteId = useDefaultSiteId();
   const editSiteId = defaultSiteId ?? "";
 
@@ -126,7 +128,7 @@ function LayoutFormularioPage() {
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
   const editSiteName = sites.find((s) => s.siteId === editSiteId)?.name ?? "";
 
-  const { config, loaded } = useFormLayoutConfig(editSiteId || null);
+  const { config, loaded } = useFormLayoutConfig(activeProfile, editSiteId || null);
 
   // Campos customizáveis (definições ClearID Vylor_) — para rótulos.
   const customFieldsQuery = useQuery({
@@ -198,7 +200,8 @@ function LayoutFormularioPage() {
   const [model, setModel] = useState<Model>({ available: [], groups: [] });
   const [search, setSearch] = useState("");
 
-  // Reinicializa o editor a cada troca de site (layout é por site).
+  // Reinicializa o editor ao trocar o site ativo: recarrega o layout do cliente
+  // (a config é por cliente) e recompõe a paleta com os campos do novo site.
   const initedSite = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
@@ -213,12 +216,13 @@ function LayoutFormularioPage() {
   }, [ready, editSiteId]);
 
   const workerTypesQuery = useQuery({
-    queryKey: ["worker-types"],
+    queryKey: ["worker-types", activeProfile],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("worker_types")
         .select("*")
         .eq("is_active", true)
+        .eq("profile", activeProfile)
         .order("display_index", { ascending: true, nullsFirst: false });
       if (error) throw new Error(error.message);
       return data ?? [];
@@ -371,7 +375,7 @@ function LayoutFormularioPage() {
   const save = useMutation({
     mutationFn: async () => {
       const payload: FormLayoutConfig = { layouts: commit(layouts), links };
-      await saveFormLayoutConfig(editSiteId, payload);
+      await saveFormLayoutConfig(activeProfile, payload);
     },
     onSuccess: () => {
       toast.success(t("formLayout.saved"));
@@ -380,7 +384,7 @@ function LayoutFormularioPage() {
     onError: (e) => toast.error((e as Error).message),
   });
 
-  // Exportação do layout do site atual para outros sites.
+  // Exportação do layout do cliente atual para outros clientes.
   const [exportOpen, setExportOpen] = useState(false);
   const [exportTargets, setExportTargets] = useState<Record<string, boolean>>({});
   const toggleTarget = (id: string) => setExportTargets((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -388,12 +392,12 @@ function LayoutFormularioPage() {
   const exportMut = useMutation({
     mutationFn: async () => {
       const targets = Object.keys(exportTargets).filter(
-        (id) => exportTargets[id] && id !== editSiteId,
+        (code) => exportTargets[code] && code !== activeProfile,
       );
       if (targets.length === 0) throw new Error(t("formLayout.export.none"));
       // Exporta exatamente o que está na tela (inclui edições não salvas).
       const payload: FormLayoutConfig = { layouts: commit(layouts), links };
-      await exportFormLayoutToSites(payload, targets);
+      await exportFormLayoutToClients(payload, targets);
       return targets.length;
     },
     onSuccess: (count) => {
@@ -423,15 +427,23 @@ function LayoutFormularioPage() {
     <div className={cn("space-y-6", save.isPending && "cursor-wait")}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            {t("formLayout.title")}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("formLayout.subtitle")}</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {t("formLayout.title")}
+            </h1>
+            <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {t("shell.profile")}: {activeProfile}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("formLayout.subtitle")}
+            {editSiteName && ` · ${t("formLayout.fieldsFromSite", { site: editSiteName })}`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Dialog open={exportOpen} onOpenChange={setExportOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" disabled={!editSiteId}>
+              <Button variant="outline">
                 <Share2 className="mr-1 h-4 w-4" />
                 {t("formLayout.export.button")}
               </Button>
@@ -442,21 +454,19 @@ function LayoutFormularioPage() {
                 <DialogDescription>{t("formLayout.export.hint")}</DialogDescription>
               </DialogHeader>
               <div className="max-h-[50vh] space-y-2 overflow-y-auto py-2">
-                {sites
-                  .filter((s) => s.siteId !== editSiteId)
-                  .map((s) => (
-                    <label
-                      key={s.siteId}
-                      className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"
-                    >
-                      <Checkbox
-                        checked={Boolean(exportTargets[s.siteId])}
-                        onCheckedChange={() => toggleTarget(s.siteId)}
-                      />
-                      {s.name}
-                    </label>
-                  ))}
-                {sites.filter((s) => s.siteId !== editSiteId).length === 0 && (
+                {CLEARID_PROFILES.filter((p) => p.code !== activeProfile).map((p) => (
+                  <label
+                    key={p.code}
+                    className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                  >
+                    <Checkbox
+                      checked={Boolean(exportTargets[p.code])}
+                      onCheckedChange={() => toggleTarget(p.code)}
+                    />
+                    {p.label}
+                  </label>
+                ))}
+                {CLEARID_PROFILES.filter((p) => p.code !== activeProfile).length === 0 && (
                   <p className="py-4 text-center text-sm text-muted-foreground">
                     {t("formLayout.export.noOthers")}
                   </p>

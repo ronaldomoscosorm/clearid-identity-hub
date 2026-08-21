@@ -5,7 +5,7 @@ import { Plus, RefreshCw, Pencil, Trash2, SlidersHorizontal } from "lucide-react
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { typeOf, pickLang } from "@/lib/custom-fields";
 import { useT } from "@/lib/i18n";
@@ -197,13 +197,15 @@ function CamposDoSitePage() {
     enabled: Boolean(siteId),
   });
 
+  const activeProfile = useActiveProfile();
   const workerTypesQuery = useQuery({
-    queryKey: ["worker-types"],
+    queryKey: ["worker-types", activeProfile],
     queryFn: async (): Promise<WorkerType[]> => {
       const { data, error } = await supabase
         .from("worker_types")
         .select("*")
         .eq("is_active", true)
+        .eq("profile", activeProfile)
         .order("display_index", { ascending: true, nullsFirst: false });
       if (error) throw new Error(error.message);
       return data ?? [];

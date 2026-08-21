@@ -96,15 +96,27 @@ export function layoutForWorkerType(
   return config.layouts[0] ?? defaultLayout();
 }
 
-/** Chave do mapa de layouts por site dentro de preferences. */
+/** Chave do mapa de layouts por CLIENTE (perfil ClearID) dentro de preferences. */
+const BY_CLIENT_KEY = "formLayoutsByClient";
+/** Chave legada: layouts por site (mantida só para migração/fallback de leitura). */
 const BY_SITE_KEY = "formLayoutsBySite";
 
-/** Extrai o raw de layout para um site: por-site → legado global → formato antigo. */
-function rawForSite(prefs: Record<string, unknown>, siteId: string | null | undefined): unknown {
+/**
+ * Extrai o raw de layout para um cliente. Ordem: layout do cliente → (compat.)
+ * layout do site-semente ainda no formato antigo por-site → legado global →
+ * formato antigo de documento único.
+ */
+function rawForClient(
+  prefs: Record<string, unknown>,
+  profile: string | null | undefined,
+  seedSiteId?: string | null,
+): unknown {
+  const byClient = (prefs[BY_CLIENT_KEY] ?? {}) as Record<string, unknown>;
+  if (profile && byClient[profile]) return byClient[profile];
+  // Compatibilidade: enquanto o cliente não tiver seu layout, usa o layout do
+  // site ativo (modelo antigo por-site) como semente, senão o global antigo.
   const bySite = (prefs[BY_SITE_KEY] ?? {}) as Record<string, unknown>;
-  if (siteId && bySite[siteId]) return bySite[siteId];
-  // Compatibilidade: layout global antigo (formLayouts) vale como padrão para
-  // sites que ainda não têm layout próprio.
+  if (seedSiteId && bySite[seedSiteId]) return bySite[seedSiteId];
   if (prefs.formLayouts) return prefs.formLayouts;
   if (prefs.formLayout) {
     const fl = prefs.formLayout as { groups?: FormLayoutGroup[] };
@@ -113,7 +125,10 @@ function rawForSite(prefs: Record<string, unknown>, siteId: string | null | unde
   return null;
 }
 
-async function fetchConfig(siteId: string | null | undefined): Promise<FormLayoutConfig> {
+async function fetchConfig(
+  profile: string | null | undefined,
+  seedSiteId?: string | null,
+): Promise<FormLayoutConfig> {
   const { data, error } = await supabase
     .from("settings")
     .select("preferences")
@@ -121,15 +136,19 @@ async function fetchConfig(siteId: string | null | undefined): Promise<FormLayou
     .maybeSingle();
   if (error) throw new Error(error.message);
   const prefs = (data?.preferences ?? {}) as Record<string, unknown>;
-  return normalizeConfig(rawForSite(prefs, siteId));
+  return normalizeConfig(rawForClient(prefs, profile, seedSiteId));
 }
 
-export function useFormLayoutConfig(siteId?: string | null) {
+/**
+ * Config de layout do CLIENTE (perfil). `seedSiteId` é usado apenas como
+ * semente de compatibilidade quando o cliente ainda não tem layout próprio.
+ */
+export function useFormLayoutConfig(profile?: string | null, seedSiteId?: string | null) {
   // staleTime 0 + refetchOnMount garantem que o formulário sempre traga o layout
   // mais recente ao abrir, mesmo em navegação SPA logo após salvar no designer.
   const query = useQuery({
-    queryKey: ["form-layout", siteId ?? null],
-    queryFn: () => fetchConfig(siteId),
+    queryKey: ["form-layout", profile ?? null],
+    queryFn: () => fetchConfig(profile, seedSiteId),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -156,30 +175,30 @@ async function persistPrefs(userId: string, prefs: Record<string, unknown>): Pro
   if (error) throw new Error(error.message);
 }
 
-/** Persiste a config de layouts de UM SITE preservando as demais preferences. */
+/** Persiste a config de layout de UM CLIENTE preservando as demais preferences. */
 export async function saveFormLayoutConfig(
-  siteId: string | null | undefined,
+  profile: string | null | undefined,
   config: FormLayoutConfig,
 ): Promise<void> {
-  if (!siteId) throw new Error("Selecione um site para salvar o layout.");
+  if (!profile) throw new Error("Cliente não definido para salvar o layout.");
   const { userId, prefs } = await loadPrefs();
-  const bySite = { ...((prefs[BY_SITE_KEY] ?? {}) as Record<string, unknown>) };
-  bySite[siteId] = config;
-  prefs[BY_SITE_KEY] = bySite;
+  const byClient = { ...((prefs[BY_CLIENT_KEY] ?? {}) as Record<string, unknown>) };
+  byClient[profile] = config;
+  prefs[BY_CLIENT_KEY] = byClient;
   delete prefs.formLayout; // remove o formato legado (documento único)
   await persistPrefs(userId, prefs);
 }
 
-/** Copia a config de layouts para outros sites (exportação entre sites). */
-export async function exportFormLayoutToSites(
+/** Copia a config de layout para outros clientes. */
+export async function exportFormLayoutToClients(
   config: FormLayoutConfig,
-  targetSiteIds: string[],
+  targetProfiles: string[],
 ): Promise<void> {
-  const targets = targetSiteIds.filter(Boolean);
+  const targets = targetProfiles.filter(Boolean);
   if (targets.length === 0) return;
   const { userId, prefs } = await loadPrefs();
-  const bySite = { ...((prefs[BY_SITE_KEY] ?? {}) as Record<string, unknown>) };
-  for (const sid of targets) bySite[sid] = config;
-  prefs[BY_SITE_KEY] = bySite;
+  const byClient = { ...((prefs[BY_CLIENT_KEY] ?? {}) as Record<string, unknown>) };
+  for (const p of targets) byClient[p] = config;
+  prefs[BY_CLIENT_KEY] = byClient;
   await persistPrefs(userId, prefs);
 }
