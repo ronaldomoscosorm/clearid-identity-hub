@@ -20,6 +20,10 @@ import { useT, LANGS } from "@/lib/i18n";
 import { FlagIcon } from "@/components/FlagIcon";
 import { Button } from "@/components/ui/button";
 import { PoweredBy } from "@/components/PoweredBy";
+import { CurrentUserBadge } from "@/components/CurrentUserBadge";
+import { useCurrentUser } from "@/lib/current-user";
+import { useMenuTree, type MenuNode } from "@/lib/menu-tree";
+import { setActiveSite, useEnsureActiveSite } from "@/lib/active-site";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -107,6 +111,39 @@ const NAV: NavEntry[] = [
     ],
   },
 ];
+
+/** Normaliza a key do NAV (ex.: "nav.identities") para a key de menu do backend ("identities"). */
+const menuKeyOf = (navKey: string) => navKey.replace(/^nav\./, "");
+
+/** Coleta todas as keys de menu de uma árvore vinda do backend. */
+function collectMenuKeys(tree: MenuNode[], acc: Set<string> = new Set()): Set<string> {
+  for (const node of tree) {
+    acc.add(node.key);
+    if (node.children?.length) collectMenuKeys(node.children, acc);
+  }
+  return acc;
+}
+
+/**
+ * Filtra o NAV pelas keys permitidas ao usuário (vindas do useMenuTree). `null` =
+ * sem restrição (fallback dev/sem backend) → mostra tudo. Um grupo aparece se ele
+ * próprio ou algum item filho estiver permitido.
+ */
+function filterNav(nav: NavEntry[], allowed: Set<string> | null): NavEntry[] {
+  if (!allowed) return nav;
+  const out: NavEntry[] = [];
+  for (const entry of nav) {
+    if (entry.kind === "item") {
+      if (allowed.has(menuKeyOf(entry.key))) out.push(entry);
+      continue;
+    }
+    const items = entry.items.filter((it) => allowed.has(menuKeyOf(it.key)));
+    if (items.length > 0 || allowed.has(menuKeyOf(entry.key))) {
+      out.push({ ...entry, items });
+    }
+  }
+  return out;
+}
 
 function NavGroup({
   group,
@@ -253,6 +290,51 @@ export function AppShell({ children }: { children: ReactNode }) {
     retry: false,
   });
   const currentSite = sitesQuery.data?.find((s) => s.siteId === siteId);
+
+  // --- Escopo pelo usuário logado (Portal Argus). Fallback gracioso: quando o
+  // backend não retorna dados (ex.: dev/CORS), não há restrição. ---
+  const { data: currentUser } = useCurrentUser();
+  const { data: menuData } = useMenuTree();
+  const userSites = currentUser?.sites ?? [];
+  const restrictByUser = userSites.length > 0;
+  useEnsureActiveSite(restrictByUser ? userSites : undefined);
+
+  // Clientes exibidos: só os que o usuário tem grant (prefixo `cliente:`).
+  const allowedClientCodes = new Set(
+    userSites.map((s) => (s.split(":")[0] ?? "").toLowerCase()),
+  );
+  const visibleProfiles = restrictByUser
+    ? CLEARID_PROFILES.filter((p) => allowedClientCodes.has(p.code.toLowerCase()))
+    : CLEARID_PROFILES;
+
+  // Sites exibidos: só os do usuário no cliente ativo (nome após `cliente:`).
+  const allowedSiteNames = new Set(
+    userSites
+      .filter((s) => (s.split(":")[0] ?? "").toLowerCase() === activeProfile.toLowerCase())
+      .map((s) => s.split(":").slice(1).join(":").toLowerCase()),
+  );
+  const visibleSites = (sitesQuery.data ?? []).filter(
+    (s) => !restrictByUser || allowedSiteNames.has((s.name ?? "").toLowerCase()),
+  );
+
+  // Menus exibidos: filtrados pelas keys permitidas ao usuário (do backend).
+  const allowedMenuKeys = menuData ? collectMenuKeys(menuData.tree) : null;
+  const visibleNav = filterNav(NAV, allowedMenuKeys);
+
+  // Se o cliente ATIVO não faz parte do grant do usuário, troca para o primeiro
+  // permitido (evita operar num cliente sem acesso).
+  const grantKey = userSites.join(",");
+  useEffect(() => {
+    if (!restrictByUser) return;
+    if (allowedClientCodes.has(activeProfile.toLowerCase())) return;
+    const first = visibleProfiles[0];
+    if (first && first.code !== activeProfile) {
+      setSessionProfile(first.code);
+      setSessionSiteId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grantKey, activeProfile, restrictByUser]);
+
   const branding = useBranding();
   useApplyBranding();
   const { t, lang, setLang } = useT();
@@ -345,7 +427,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {NAV.map((entry) =>
+                  {visibleNav.map((entry) =>
                     entry.kind === "item" ? (
                       <SidebarMenuItem key={entry.to}>
                         <SidebarMenuButton
@@ -369,6 +451,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </SidebarContent>
           <SidebarFooter>
             <div className="px-2 group-data-[collapsible=icon]:hidden">
+              <CurrentUserBadge />
               <PoweredBy />
             </div>
           </SidebarFooter>
@@ -451,16 +534,20 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenuContent align="end" className="w-52">
                   <DropdownMenuLabel>{t("shell.profile")}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {CLEARID_PROFILES.map((p) => (
-                    <DropdownMenuItem
-                      key={p.code}
-                      onClick={() => changeProfile(p.code)}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <span className="truncate">{p.label}</span>
-                      {p.code === activeProfile && <Check className="h-4 w-4 text-primary" />}
-                    </DropdownMenuItem>
-                  ))}
+                  {visibleProfiles.length ? (
+                    visibleProfiles.map((p) => (
+                      <DropdownMenuItem
+                        key={p.code}
+                        onClick={() => changeProfile(p.code)}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate">{p.label}</span>
+                        {p.code === activeProfile && <Check className="h-4 w-4 text-primary" />}
+                      </DropdownMenuItem>
+                    ))
+                  ) : (
+                    <DropdownMenuItem disabled>{t("shell.noClients")}</DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
               <DropdownMenu>
@@ -470,7 +557,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     size="sm"
                     className="h-8 gap-1.5 font-normal"
                     title={t("shell.defaultSite")}
-                    disabled={!sitesQuery.data?.length}
+                    disabled={!visibleSites.length}
                   >
                     <Globe className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="max-w-[180px] truncate text-xs">
@@ -482,8 +569,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
                   <DropdownMenuLabel>{t("shell.defaultSite")}</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {sitesQuery.data?.length ? (
-                    [...sitesQuery.data]
+                  {visibleSites.length ? (
+                    [...visibleSites]
                       .sort((a, b) =>
                         (a.name ?? a.siteId).localeCompare(b.name ?? b.siteId, "pt-BR", { sensitivity: "base" }),
                       )
@@ -492,7 +579,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                         return (
                           <DropdownMenuItem
                             key={s.siteId}
-                            onClick={() => setSessionSiteId(s.siteId)}
+                            onClick={() => {
+                              setSessionSiteId(s.siteId);
+                              // Mantém o X-Argus-Site (modelo cliente:site) em sincronia.
+                              setActiveSite(`${activeProfile}:${s.name ?? s.siteId}`);
+                            }}
                             className="flex items-center justify-between gap-2"
                           >
                             <span className="truncate">{s.name ?? s.siteId}</span>

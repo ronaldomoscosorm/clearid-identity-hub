@@ -37,7 +37,7 @@ import {
   type FormLayout,
   type FormLayoutConfig,
 } from "@/lib/form-layout";
-import { argusApi, useDefaultSiteId, useActiveProfile, CLEARID_PROFILES } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId, useActiveProfile, setSessionProfile, setSessionSiteId, CLEARID_PROFILES } from "@/lib/argus-client";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -111,28 +111,41 @@ function LayoutFormularioPage() {
   const qc = useQueryClient();
   const { alias } = useIdentityFieldLabels();
 
-  // Layout é POR CLIENTE (perfil ClearID): um layout para todos os sites do
-  // cliente. O site ativo serve apenas como fonte dos campos disponíveis na
-  // paleta; ao trocar o cliente no topbar, o editor recarrega o layout dele.
+  // Layout e tipos de trabalhador são POR CLIENTE (perfil ClearID). O designer
+  // escolhe o CLIENTE; um site do cliente é usado internamente apenas como fonte
+  // dos campos disponíveis na paleta (inclui campos locais, ex.: Anexo).
   const activeProfile = useActiveProfile();
   const defaultSiteId = useDefaultSiteId();
-  const editSiteId = defaultSiteId ?? "";
 
+  // Sites reativos ao cliente ativo (a key inclui o perfil).
   const sitesQuery = useQuery({
-    queryKey: ["sites"],
+    queryKey: ["sites", activeProfile],
     queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60 * 1000,
   });
   const sites = (sitesQuery.data ?? [])
     .slice()
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
+  // Site fonte dos campos: o do topbar se pertence ao cliente, senão o primeiro.
+  const editSiteId =
+    sites.find((s) => s.siteId === defaultSiteId)?.siteId ?? sites[0]?.siteId ?? "";
   const editSiteName = sites.find((s) => s.siteId === editSiteId)?.name ?? "";
+
+  // Troca o cliente (perfil) na sessão — mesmo comportamento do topbar: reseta o
+  // site da sessão e limpa os caches para recarregar layout, tipos e campos do
+  // novo cliente (sem estado obsoleto).
+  const changeClient = (code: string) => {
+    if (code === activeProfile) return;
+    setSessionProfile(code);
+    setSessionSiteId(null);
+    qc.clear();
+  };
 
   const { config, loaded } = useFormLayoutConfig(activeProfile, editSiteId || null);
 
   // Campos customizáveis (definições ClearID Vylor_) — para rótulos.
   const customFieldsQuery = useQuery({
-    queryKey: ["custom-fields"],
+    queryKey: ["custom-fields", activeProfile],
     queryFn: () => argusApi.listCustomFields(),
     staleTime: 5 * 60 * 1000,
   });
@@ -200,20 +213,22 @@ function LayoutFormularioPage() {
   const [model, setModel] = useState<Model>({ available: [], groups: [] });
   const [search, setSearch] = useState("");
 
-  // Reinicializa o editor ao trocar o site ativo: recarrega o layout do cliente
-  // (a config é por cliente) e recompõe a paleta com os campos do novo site.
-  const initedSite = useRef<string | null>(null);
+  // Reinicializa o editor ao trocar o CLIENTE (a config/layouts são por cliente)
+  // ou o site ativo (recompõe a paleta). A chave inclui o perfil para garantir
+  // o re-seed mesmo quando o site derivado não muda.
+  const initedKey = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
-    if (initedSite.current === editSiteId) return;
-    initedSite.current = editSiteId;
+    const key = `${activeProfile}::${editSiteId}`;
+    if (initedKey.current === key) return;
+    initedKey.current = key;
     setLayouts(config.layouts.map((l) => ({ ...l, groups: l.groups.map((g) => ({ ...g })) })));
     setLinks({ ...config.links });
     const first = config.layouts[0];
     setSelId(first.id);
     setModel(layoutToModel(first, pool));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, editSiteId]);
+  }, [ready, activeProfile, editSiteId]);
 
   const workerTypesQuery = useQuery({
     queryKey: ["worker-types", activeProfile],
@@ -493,10 +508,19 @@ function LayoutFormularioPage() {
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">{t("formLayout.site")}</Label>
-            <div className="flex h-9 w-56 items-center rounded-md border bg-muted/40 px-3 text-sm">
-              {editSiteName || t("formLayout.sitePlaceholder")}
-            </div>
+            <Label className="text-xs text-muted-foreground">{t("shell.profile")}</Label>
+            <Select value={activeProfile} onValueChange={changeClient}>
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CLEARID_PROFILES.map((p) => (
+                  <SelectItem key={p.code} value={p.code}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">{t("formLayout.selectLayout")}</Label>
@@ -534,6 +558,37 @@ function LayoutFormularioPage() {
         </CardContent>
       </Card>
 
+      {/* Vínculos: tipo de trabalhador → layout (logo após escolher o cliente) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("formLayout.links")}</CardTitle>
+          <p className="text-xs text-muted-foreground">{t("formLayout.linksHint")}</p>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          {workerTypes.map((w) => (
+            <div
+              key={w.id}
+              className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+            >
+              <span className="text-sm">{pickLang(w.name_i18n, lang) || w.name}</span>
+              <Select value={links[w.id] ?? "__default__"} onValueChange={(v) => setLink(w.id, v)}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default__">{t("formLayout.useDefault")}</SelectItem>
+                  {layouts.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name.trim() || t("formLayout.newLayoutName")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
       {/* Editor de grupos do layout selecionado */}
       <DndContext
         sensors={sensors}
@@ -541,7 +596,7 @@ function LayoutFormularioPage() {
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
         onDragEnd={onDragEnd}
       >
-        <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
+        <div className="grid gap-4 md:grid-cols-[16rem_1fr]">
           <div>
             <div className="mb-2">
               <p className="text-base font-semibold text-foreground">{t("formLayout.available")}</p>
@@ -608,37 +663,6 @@ function LayoutFormularioPage() {
           </div>
         </div>
       </DndContext>
-
-      {/* Vínculos: tipo de trabalhador → layout */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("formLayout.links")}</CardTitle>
-          <p className="text-xs text-muted-foreground">{t("formLayout.linksHint")}</p>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          {workerTypes.map((w) => (
-            <div
-              key={w.id}
-              className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
-            >
-              <span className="text-sm">{pickLang(w.name_i18n, lang) || w.name}</span>
-              <Select value={links[w.id] ?? "__default__"} onValueChange={(v) => setLink(w.id, v)}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__default__">{t("formLayout.useDefault")}</SelectItem>
-                  {layouts.map((l) => (
-                    <SelectItem key={l.id} value={l.id}>
-                      {l.name.trim() || t("formLayout.newLayoutName")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
     </div>
   );
 }

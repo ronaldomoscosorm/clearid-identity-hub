@@ -38,3 +38,6 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Certificados de dev (mkcert) — SSO local
+certs/

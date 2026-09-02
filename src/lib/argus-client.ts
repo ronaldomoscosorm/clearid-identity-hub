@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { getConfig } from "./argus-env";
+import { getActiveSite } from "./active-site";
 
 // --- Armazenamento: helpers localStorage (padrão) e sessionStorage (override) ---
 function lsGet(key: string): string | null {
@@ -318,6 +319,11 @@ export async function argusFetch<T = unknown>(
   if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
   // Perfil ClearID (conta) por requisição. Não enviamos mais accountId — o
   // backend deriva a conta a partir do perfil (header X-ClearId-Environment).
+  // Site ativo (cliente:site) — validado pelo backend contra os sites permitidos do JWT.
+  const activeSite = getActiveSite();
+  if (activeSite && !headers.has("X-Argus-Site")) {
+    headers.set("X-Argus-Site", activeSite);
+  }
   if (!headers.has("X-ClearId-Environment")) {
     headers.set("X-ClearId-Environment", opts.environment ?? getActiveProfile());
   }
@@ -348,7 +354,9 @@ export async function argusFetch<T = unknown>(
           "Operação bloqueada: DELETE em /api/identities não é permitido. Use updateIdentity com status='Inactive'.",
       });
     }
-    response = await fetch(url, { ...init, headers });
+    // credentials: "include" garante que o cookie SSO rmtecho_token (HttpOnly, domínio .rmtecho.com.br)
+    // viaje até o backend Argus. O `init` do chamador pode sobrescrever se necessário.
+    response = await fetch(url, { credentials: "include", ...init, headers });
   } catch (e) {
     throw new ArgusApiError({
       status: 0,
@@ -1612,12 +1620,14 @@ export const argusApi = {
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     headers.set("X-ClearId-Environment", getActiveProfile());
+    const _activeSite = getActiveSite();
+    if (_activeSite) headers.set("X-Argus-Site", _activeSite);
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
       url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
     }
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { credentials: "include", headers });
     if (res.status === 404) return null;
     if (!res.ok) throw new ArgusApiError({ status: res.status, message: res.statusText });
     return await res.blob();
@@ -1633,12 +1643,14 @@ export const argusApi = {
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     headers.set("X-ClearId-Environment", getActiveProfile());
+    const _activeSite = getActiveSite();
+    if (_activeSite) headers.set("X-Argus-Site", _activeSite);
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
       url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
     }
-    const res = await fetch(url, { method: "POST", headers, body: form });
+    const res = await fetch(url, { method: "POST", credentials: "include", headers, body: form });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new ArgusApiError({ status: res.status, message: text || res.statusText });
@@ -1663,12 +1675,14 @@ export const argusApi = {
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     headers.set("X-ClearId-Environment", getActiveProfile());
+    const _activeSite = getActiveSite();
+    if (_activeSite) headers.set("X-Argus-Site", _activeSite);
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
       url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
     }
-    const res = await fetch(url, { method: "POST", headers, body: form });
+    const res = await fetch(url, { method: "POST", credentials: "include", headers, body: form });
     const body = await res.json().catch(() => null);
     if (!res.ok) {
       const message =

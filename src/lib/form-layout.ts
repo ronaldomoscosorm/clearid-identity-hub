@@ -100,11 +100,17 @@ export function layoutForWorkerType(
 const BY_CLIENT_KEY = "formLayoutsByClient";
 /** Chave legada: layouts por site (mantida só para migração/fallback de leitura). */
 const BY_SITE_KEY = "formLayoutsBySite";
+/**
+ * Cliente dono dos layouts LEGADOS (por-site e global). Antes da separação por
+ * cliente existia só o RM, então esses dados pertencem a ele — e SÓ ele os
+ * herda. Os demais clientes começam do layout padrão.
+ */
+const LEGACY_PROFILE = "RM";
 
 /**
- * Extrai o raw de layout para um cliente. Ordem: layout do cliente → (compat.)
- * layout do site-semente ainda no formato antigo por-site → legado global →
- * formato antigo de documento único.
+ * Extrai o raw de layout para um cliente. Ordem: layout do cliente → (só para o
+ * RM, compat.) layout do site-semente no formato antigo por-site → global antigo
+ * → documento único. Outros clientes sem layout próprio começam do padrão.
  */
 function rawForClient(
   prefs: Record<string, unknown>,
@@ -113,14 +119,16 @@ function rawForClient(
 ): unknown {
   const byClient = (prefs[BY_CLIENT_KEY] ?? {}) as Record<string, unknown>;
   if (profile && byClient[profile]) return byClient[profile];
-  // Compatibilidade: enquanto o cliente não tiver seu layout, usa o layout do
-  // site ativo (modelo antigo por-site) como semente, senão o global antigo.
-  const bySite = (prefs[BY_SITE_KEY] ?? {}) as Record<string, unknown>;
-  if (seedSiteId && bySite[seedSiteId]) return bySite[seedSiteId];
-  if (prefs.formLayouts) return prefs.formLayouts;
-  if (prefs.formLayout) {
-    const fl = prefs.formLayout as { groups?: FormLayoutGroup[] };
-    return { layouts: [{ id: DEFAULT_LAYOUT_ID, name: "Padrão", groups: fl.groups ?? [] }], links: {} };
+  // Só o cliente legado (RM) herda os layouts antigos (por-site/global). Assim,
+  // trocar para Corteva/Vylor não mostra os layouts do RM.
+  if (profile === LEGACY_PROFILE) {
+    const bySite = (prefs[BY_SITE_KEY] ?? {}) as Record<string, unknown>;
+    if (seedSiteId && bySite[seedSiteId]) return bySite[seedSiteId];
+    if (prefs.formLayouts) return prefs.formLayouts;
+    if (prefs.formLayout) {
+      const fl = prefs.formLayout as { groups?: FormLayoutGroup[] };
+      return { layouts: [{ id: DEFAULT_LAYOUT_ID, name: "Padrão", groups: fl.groups ?? [] }], links: {} };
+    }
   }
   return null;
 }
