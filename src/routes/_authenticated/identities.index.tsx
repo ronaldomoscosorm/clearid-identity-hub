@@ -166,8 +166,13 @@ function IdentitiesList() {
   const rawItems = query.data?.items ?? [];
 
   // Espelha o retorno do ClearID no Supabase antes de cruzar com o tipo local.
+  // Best-effort: falha no espelhamento da LISTAGEM não bloqueia a UI (o save
+  // atomic da identity, sim, exige sucesso — ver identity-atomic.ts).
   useEffect(() => {
-    if (rawItems.length) void mirrorIdentities(rawItems);
+    if (rawItems.length)
+      mirrorIdentities(rawItems).catch((err) =>
+        console.error("[mirror] falha ao espelhar listagem:", err),
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.data]);
 

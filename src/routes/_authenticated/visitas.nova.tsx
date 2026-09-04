@@ -7,9 +7,11 @@ import {
   argusApi,
   ArgusApiError,
   useDefaultSiteId,
+  useActiveProfile,
   type VisitVisitor,
 } from "@/lib/argus-client";
 import { useArgusConfig } from "@/lib/argus-env";
+import { useUserScope } from "@/lib/user-scope";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { PhotoCapture } from "@/components/PhotoCapture";
 import { useT } from "@/lib/i18n";
@@ -81,6 +83,8 @@ function NovaVisitaPage() {
   // Fluxo A concluído: visitantes com check-in, aguardando a credencial.
   const [checkedIn, setCheckedIn] = useState<VisitVisitor[] | null>(null);
 
+  const visitActiveProfile = useActiveProfile();
+  const visitScope = useUserScope();
   const sitesQuery = useQuery({
     queryKey: ["sites"],
     queryFn: () => argusApi.listSites(),
@@ -354,7 +358,7 @@ function NovaVisitaPage() {
                 <SelectValue placeholder={t("visits.selectSite")} />
               </SelectTrigger>
               <SelectContent>
-                {(sitesQuery.data ?? []).map((s) => (
+                {visitScope.filterSites(sitesQuery.data ?? [], visitActiveProfile).map((s) => (
                   <SelectItem key={s.siteId} value={s.siteId}>
                     {s.name ?? s.siteId}
                   </SelectItem>

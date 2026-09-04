@@ -3,7 +3,8 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError, useDefaultSiteId, type IdentityImportResult } from "@/lib/argus-client";
+import { argusApi, ArgusApiError, useDefaultSiteId, useActiveProfile, type IdentityImportResult } from "@/lib/argus-client";
+import { useUserScope } from "@/lib/user-scope";
 import { withSiteId } from "@/lib/import-file";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -45,12 +46,15 @@ function ImportPage() {
   const [dryRun, setDryRun] = useState(true);
   const [result, setResult] = useState<IdentityImportResult | null>(null);
 
+  const importActiveProfile = useActiveProfile();
+  const importScope = useUserScope();
   const sitesQuery = useQuery({
     queryKey: ["sites"],
     queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60 * 1000,
   });
-  const sites = (sitesQuery.data ?? [])
+  const sites = importScope
+    .filterSites(sitesQuery.data ?? [], importActiveProfile)
     .slice()
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
 

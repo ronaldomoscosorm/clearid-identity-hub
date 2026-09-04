@@ -16,6 +16,7 @@ import { Route as AuthenticatedBrandingRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedCampanhasFotoRouteImport } from './routes/_authenticated/campanhas-foto'
 import { Route as AuthenticatedCamposDoSiteRouteImport } from './routes/_authenticated/campos-do-site'
 import { Route as AuthenticatedCamposPersonalizadosRouteImport } from './routes/_authenticated/campos-personalizados'
+import { Route as AuthenticatedConfiguracoesClienteRouteImport } from './routes/_authenticated/configuracoes-cliente'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedEmpresasRouteImport } from './routes/_authenticated/empresas'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
@@ -68,6 +69,12 @@ const AuthenticatedCamposPersonalizadosRoute =
   AuthenticatedCamposPersonalizadosRouteImport.update({
     id: '/campos-personalizados',
     path: '/campos-personalizados',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedConfiguracoesClienteRoute =
+  AuthenticatedConfiguracoesClienteRouteImport.update({
+    id: '/configuracoes-cliente',
+    path: '/configuracoes-cliente',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedDiagnosticsRoute =
@@ -168,6 +175,7 @@ export interface FileRoutesByFullPath {
   '/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
+  '/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/empresas': typeof AuthenticatedEmpresasRoute
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
@@ -192,6 +200,7 @@ export interface FileRoutesByTo {
   '/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
+  '/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/empresas': typeof AuthenticatedEmpresasRoute
   '/importar': typeof AuthenticatedImportarRoute
@@ -217,6 +226,7 @@ export interface FileRoutesById {
   '/_authenticated/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/_authenticated/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/_authenticated/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
+  '/_authenticated/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/_authenticated/empresas': typeof AuthenticatedEmpresasRoute
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
     | '/campanhas-foto'
     | '/campos-do-site'
     | '/campos-personalizados'
+    | '/configuracoes-cliente'
     | '/diagnostics'
     | '/empresas'
     | '/identities'
@@ -267,6 +278,7 @@ export interface FileRouteTypes {
     | '/campanhas-foto'
     | '/campos-do-site'
     | '/campos-personalizados'
+    | '/configuracoes-cliente'
     | '/diagnostics'
     | '/empresas'
     | '/importar'
@@ -291,6 +303,7 @@ export interface FileRouteTypes {
     | '/_authenticated/campanhas-foto'
     | '/_authenticated/campos-do-site'
     | '/_authenticated/campos-personalizados'
+    | '/_authenticated/configuracoes-cliente'
     | '/_authenticated/diagnostics'
     | '/_authenticated/empresas'
     | '/_authenticated/identities'
@@ -364,6 +377,13 @@ declare module '@tanstack/react-router' {
       path: '/campos-personalizados'
       fullPath: '/campos-personalizados'
       preLoaderRoute: typeof AuthenticatedCamposPersonalizadosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/configuracoes-cliente': {
+      id: '/_authenticated/configuracoes-cliente'
+      path: '/configuracoes-cliente'
+      fullPath: '/configuracoes-cliente'
+      preLoaderRoute: typeof AuthenticatedConfiguracoesClienteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/diagnostics': {
@@ -505,6 +525,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCampanhasFotoRoute: typeof AuthenticatedCampanhasFotoRoute
   AuthenticatedCamposDoSiteRoute: typeof AuthenticatedCamposDoSiteRoute
   AuthenticatedCamposPersonalizadosRoute: typeof AuthenticatedCamposPersonalizadosRoute
+  AuthenticatedConfiguracoesClienteRoute: typeof AuthenticatedConfiguracoesClienteRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
   AuthenticatedEmpresasRoute: typeof AuthenticatedEmpresasRoute
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
@@ -526,6 +547,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCamposDoSiteRoute: AuthenticatedCamposDoSiteRoute,
   AuthenticatedCamposPersonalizadosRoute:
     AuthenticatedCamposPersonalizadosRoute,
+  AuthenticatedConfiguracoesClienteRoute:
+    AuthenticatedConfiguracoesClienteRoute,
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
   AuthenticatedEmpresasRoute: AuthenticatedEmpresasRoute,
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,

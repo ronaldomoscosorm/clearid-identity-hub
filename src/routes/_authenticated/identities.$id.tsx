@@ -7,10 +7,9 @@ import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
 import {
   mirrorIdentities,
   saveIdentityCustomFields,
-  saveIdentityCompany,
-  saveIdentityWorkerType,
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
+import { updateIdentityAtomic } from "@/lib/identity-atomic";
 import { saveIdentityAttachments, type PendingAttachment } from "@/lib/attachments";
 import { clearIdToFormValues } from "@/lib/argus-client";
 import { useT } from "@/lib/i18n";
@@ -56,9 +55,14 @@ function IdentityDetail() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Espelha a identidade carregada para o Supabase (cobre visualização e refetch pós-update).
+  // Espelha a identidade carregada para o Supabase (cobre visualização e
+  // refetch pós-update). Best-effort — o save atomic já garante consistência;
+  // aqui é só cache.
   useEffect(() => {
-    if (query.data) void mirrorIdentities([query.data]);
+    if (query.data)
+      mirrorIdentities([query.data]).catch((err) =>
+        console.error("[mirror] falha ao espelhar identidade em cache:", err),
+      );
   }, [query.data]);
 
   // Site conforme o ClearID (sem cair no site padrão): se a identidade não tiver
@@ -76,13 +80,24 @@ function IdentityDetail() {
     : undefined;
 
   const update = useMutation({
-    mutationFn: (vars: {
+    mutationFn: async (vars: {
       data: Parameters<typeof argusApi.updateIdentity>[1];
       siteFieldValues: SiteFieldValue[];
       companyId: string | null;
       workerTypeId: string | null;
       attachments: PendingAttachment[];
-    }) => argusApi.updateIdentity(id, vars.data),
+    }) => {
+      // Snapshot ANTES do update para poder reverter no ClearID caso o
+      // Supabase falhe. Se por acaso query.data ainda não estiver disponível
+      // (edge case), refazemos o GET.
+      const originalIdentity = query.data ?? (await argusApi.getIdentity(id));
+      return updateIdentityAtomic(
+        id,
+        vars.data,
+        { companyId: vars.companyId, workerTypeId: vars.workerTypeId },
+        originalIdentity,
+      );
+    },
     onSuccess: async (updated, vars) => {
       const ok: string[] = [t("identityDetail.mainData")];
       const fail: string[] = [];
@@ -133,9 +148,12 @@ function IdentityDetail() {
       } else {
         toast.success(t("identityDetail.updateSuccess", { saved: ok.join(", ") }));
       }
-      await mirrorIdentities([updated]);
-      await saveIdentityCompany(id, vars.companyId);
-      await saveIdentityWorkerType(id, vars.workerTypeId);
+      // Re-mirror (mantém cache fresco após alterações; mirror/company/workerType
+      // já foram gravados na etapa atomic dentro de updateIdentityAtomic).
+      // Best-effort — falha aqui não interrompe o fluxo pós-save.
+      mirrorIdentities([updated]).catch((err) =>
+        console.error("[mirror] falha pós-update:", err),
+      );
       await saveIdentityCustomFields(id, vars.siteFieldValues);
       // Anexos (Storage + versionamento).
       if (vars.attachments.length) {

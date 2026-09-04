@@ -4,8 +4,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClearIdCustomFieldDef, CustomFieldSectionSummary } from "@/lib/argus-client";
 import { RefreshCw, Plus, Pencil, Trash2, Search, ListChecks, Paperclip } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError } from "@/lib/argus-client";
+import { argusApi, ArgusApiError, useActiveProfile } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
+import { useClientSettings, type CustomFieldStorage } from "@/lib/client-settings";
+import {
+  deleteSupabaseSection,
+  listSupabaseSections,
+  unifySections,
+  upsertSupabaseSection,
+  type UnifiedSection,
+} from "@/lib/custom-field-sections";
 import { SpecialFieldsDialog } from "@/components/SpecialFieldsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
@@ -105,10 +113,11 @@ function formatDate(iso?: string | null) {
 function CustomFieldsPage() {
   const { t } = useT();
   const qc = useQueryClient();
+  const activeProfile = useActiveProfile();
   const [editing, setEditing] = useState<ClearIdCustomFieldDef | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<ClearIdCustomFieldDef | null>(null);
-  const [editingSection, setEditingSection] = useState<CustomFieldSectionSummary | null>(null);
+  const [editingSection, setEditingSection] = useState<UnifiedSection | null>(null);
   const [creatingSection, setCreatingSection] = useState(false);
   const [specialOpen, setSpecialOpen] = useState(false);
   const [deletingSection, setDeletingSection] = useState<CustomFieldSectionSummary | null>(null);
@@ -128,7 +137,28 @@ function CustomFieldsPage() {
     retry: false,
   });
 
-  const reload = () => qc.invalidateQueries({ queryKey: ["custom-fields"] });
+  // Campos com storage='supabase' (ou 'both') vivem no Supabase e não são
+  // devolvidos por listCustomFields. Trazemos aqui para unir na listagem.
+  const supaFieldsQuery = useQuery({
+    queryKey: ["supabase-custom-fields", activeProfile],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .select(
+          "custom_field_name, display_name, custom_field_type, is_read_only, synchronization_enabled, is_deleted, storage, section_name",
+        )
+        .eq("profile", activeProfile)
+        .in("storage", ["supabase", "both"])
+        .eq("is_deleted", false);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+  });
+
+  const reload = () => {
+    qc.invalidateQueries({ queryKey: ["custom-fields"] });
+    qc.invalidateQueries({ queryKey: ["supabase-custom-fields"] });
+  };
   const reloadSections = () => qc.invalidateQueries({ queryKey: ["custom-field-sections"] });
 
   // Campos de Anexo (locais — só do sistema).
@@ -164,7 +194,17 @@ function CustomFieldsPage() {
   });
 
   const delSection = useMutation({
-    mutationFn: (name: string) => argusApi.deleteCustomFieldSection(name),
+    mutationFn: async (sec: CustomFieldSectionSummary) => {
+      // Descobre o storage da seção pela linha unificada (default 'clearid').
+      const unified = (sectionsQuery.data ?? []).find((u) => u.sectionName === sec.sectionName);
+      const storage = unified?.storage ?? "clearid";
+      if (storage === "clearid" || storage === "both") {
+        await argusApi.deleteCustomFieldSection(sec.sectionName);
+      }
+      if (storage === "supabase" || storage === "both") {
+        await deleteSupabaseSection(activeProfile, sec.sectionName);
+      }
+    },
     onSuccess: () => {
       toast.success(t("customFields.sectionDeleted"));
       setDeletingSection(null);
@@ -175,19 +215,39 @@ function CustomFieldsPage() {
 
   const del = useMutation({
     mutationFn: async (f: ClearIdCustomFieldDef) => {
-      // O ClearID recusa (400) excluir um campo que ainda pertence a uma seção.
-      // Tiramos o vínculo antes: PUT da seção com a lista de campos sem ele.
-      const secName = sectionOfField.get(f.customFieldName);
-      const sec = secName ? sectionByName.get(secName) : undefined;
-      if (sec) {
-        await argusApi.updateCustomFieldSection(sec.sectionName, {
-          displayName: sec.displayName,
-          index: sec.index,
-          identityCustomFields: sec.fields.filter((x) => x.name !== f.customFieldName),
-          eTag: sec.eTag,
-        });
+      // Descobre o storage pelo registro Supabase (default 'clearid' para
+      // campos que só existem no ClearID sem cadastro local).
+      const supaRow = (supaFieldsQuery.data ?? []).find(
+        (r) => r.custom_field_name === f.customFieldName,
+      );
+      const storage = (supaRow?.storage ?? "clearid") as CustomFieldStorage;
+      const goesToClearId = storage === "clearid" || storage === "both";
+      const goesToSupabase = storage === "supabase" || storage === "both";
+
+      if (goesToClearId) {
+        // O ClearID recusa (400) excluir um campo que ainda pertence a uma
+        // seção. Tira o vínculo antes: PUT da seção com a lista sem ele.
+        const secName = sectionOfField.get(f.customFieldName);
+        const sec = secName ? sectionByName.get(secName) : undefined;
+        if (sec && (sec.storage === "clearid" || sec.storage === "both")) {
+          await argusApi.updateCustomFieldSection(sec.sectionName, {
+            displayName: sec.displayName,
+            index: sec.index,
+            identityCustomFields: sec.fields.filter((x) => x.name !== f.customFieldName),
+            eTag: sec.eTag,
+          });
+        }
+        await argusApi.deleteCustomField(f.customFieldName);
       }
-      return argusApi.deleteCustomField(f.customFieldName);
+
+      if (goesToSupabase) {
+        const { error } = await supabase
+          .from("custom_field_definitions")
+          .delete()
+          .eq("profile", activeProfile)
+          .eq("custom_field_name", f.customFieldName);
+        if (error) throw new Error(error.message);
+      }
     },
     onSuccess: () => {
       toast.success(t("customFields.deleted"));
@@ -199,7 +259,28 @@ function CustomFieldsPage() {
   });
 
   const q = normalize(search);
-  const allItems = useMemo(() => (query.data ?? []).filter((f) => !f.isDeleted), [query.data]);
+
+  // Une os campos: ClearID + supabase-only. Campos "both" já vêm do ClearID
+  // (fonte da verdade) — só entra o supabase-only aqui, deduplicando por
+  // custom_field_name.
+  const allItems = useMemo(() => {
+    const clearIdItems = (query.data ?? []).filter((f) => !f.isDeleted);
+    const seen = new Set(clearIdItems.map((f) => f.customFieldName));
+    const supaOnly: ClearIdCustomFieldDef[] = (supaFieldsQuery.data ?? [])
+      .filter((r) => r.storage === "supabase" && !seen.has(r.custom_field_name))
+      .map((r) => ({
+        customFieldName: r.custom_field_name,
+        displayName:
+          (r.display_name as { default?: string } | null | undefined)?.default ??
+          r.custom_field_name,
+        customFieldType: r.custom_field_type,
+        isReadOnly: r.is_read_only,
+        synchronizationEnabled: r.synchronization_enabled,
+        isDeleted: false,
+        eTag: null,
+      }));
+    return [...clearIdItems, ...supaOnly];
+  }, [query.data, supaFieldsQuery.data]);
   // Busca por nome de exibição ou identificador, ignorando acentos/caixa.
   const items = useMemo(
     () =>
@@ -211,26 +292,58 @@ function CustomFieldsPage() {
     [allItems, q],
   );
 
+  // Seções unificadas: as do ClearID (via backend .NET) + as que só existem
+  // no Supabase (storage='supabase'). O `storage` de cada seção é resolvido
+  // pela linha do Supabase quando presente (default 'clearid' para seções
+  // que só chegam do ClearID sem cadastro local).
   const sectionsQuery = useQuery({
-    queryKey: ["custom-field-sections"],
-    queryFn: () => argusApi.listCustomFieldSections(),
+    queryKey: ["custom-field-sections", activeProfile],
+    queryFn: async (): Promise<UnifiedSection[]> => {
+      const [clearIdSecs, supaSecs] = await Promise.all([
+        argusApi.listCustomFieldSections(),
+        listSupabaseSections(activeProfile),
+      ]);
+      return unifySections(clearIdSecs, supaSecs);
+    },
     staleTime: 5 * 60 * 1000,
   });
 
   // custom_field_name -> sectionName (chave única da seção).
+  // Fontes: fields dentro das seções do ClearID + section_name dos registros
+  // Supabase (que cobre supabase-only e also serve de fallback para 'both').
   const sectionOfField = useMemo(() => {
     const m = new Map<string, string>();
     for (const sec of sectionsQuery.data ?? []) {
       for (const f of sec.fields) m.set(f.name, sec.sectionName);
     }
+    for (const r of supaFieldsQuery.data ?? []) {
+      if (r.section_name && !m.has(r.custom_field_name))
+        m.set(r.custom_field_name, r.section_name);
+    }
     return m;
-  }, [sectionsQuery.data]);
+  }, [sectionsQuery.data, supaFieldsQuery.data]);
 
   const sectionByName = useMemo(() => {
-    const m = new Map<string, CustomFieldSectionSummary>();
+    const m = new Map<string, UnifiedSection>();
     for (const s of sectionsQuery.data ?? []) m.set(s.sectionName, s);
     return m;
   }, [sectionsQuery.data]);
+
+  // custom_field_name -> storage. Campos ausentes na consulta do Supabase
+  // (só ClearID) caem em 'clearid' — não têm linha metadata local.
+  const storageOfField = useMemo(() => {
+    const m = new Map<string, CustomFieldStorage>();
+    for (const r of supaFieldsQuery.data ?? []) {
+      const s = (r.storage as CustomFieldStorage) ?? "both";
+      if (s === "clearid" || s === "supabase" || s === "both")
+        m.set(r.custom_field_name, s);
+    }
+    return m;
+  }, [supaFieldsQuery.data]);
+
+  /** Etiqueta em parênteses para exibir junto do nome. */
+  const storageLabel = (s: CustomFieldStorage | undefined | null) =>
+    s === "supabase" ? "(supabase)" : s === "both" ? "(ambos)" : "(clearid)";
 
   const labelOf = (key: string) =>
     key === OTHER_SECTION
@@ -272,7 +385,12 @@ function CustomFieldsPage() {
 
   const renderRow = (f: ClearIdCustomFieldDef) => (
     <TableRow key={f.customFieldName}>
-      <TableCell className="font-medium">{f.displayName || f.customFieldName}</TableCell>
+      <TableCell className="font-medium">
+        {f.displayName || f.customFieldName}
+        <span className="ml-1 text-xs font-normal text-muted-foreground">
+          {storageLabel(storageOfField.get(f.customFieldName))}
+        </span>
+      </TableCell>
       <TableCell className="font-mono text-xs text-muted-foreground">{f.customFieldName}</TableCell>
       <TableCell>
         <Badge variant="secondary">{f.customFieldType ?? "—"}</Badge>
@@ -396,7 +514,14 @@ function CustomFieldsPage() {
                 return (
                   <div key={sectionKey} className="space-y-2">
                     <div className="flex items-center gap-1">
-                      <p className="text-sm font-medium text-foreground">{labelOf(sectionKey)}</p>
+                      <p className="text-sm font-medium text-foreground">
+                        {labelOf(sectionKey)}
+                        {sec && (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            {storageLabel(sec.storage)}
+                          </span>
+                        )}
+                      </p>
                       {sec && (
                         <>
                           <Button
@@ -606,7 +731,7 @@ function CustomFieldsPage() {
               disabled={delSection.isPending}
               onClick={(e) => {
                 e.preventDefault();
-                if (deletingSection) delSection.mutate(deletingSection.sectionName);
+                if (deletingSection) delSection.mutate(deletingSection);
               }}
             >
               {delSection.isPending ? t("common.saving") : t("common.delete")}
@@ -962,7 +1087,7 @@ function AttachmentDefDialog({
   );
 }
 
-/** Criação/edição de seção. O nome é imutável na edição. */
+/** Criação/edição de seção. O nome e o storage são imutáveis na edição. */
 function SectionDialog({
   mode,
   section,
@@ -972,16 +1097,19 @@ function SectionDialog({
   onSaved,
 }: {
   mode: "create" | "edit";
-  section?: CustomFieldSectionSummary;
-  sections: CustomFieldSectionSummary[];
+  section?: UnifiedSection;
+  sections: UnifiedSection[];
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { t } = useT();
+  const activeProfile = useActiveProfile();
+  const clientSettings = useClientSettings(activeProfile);
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [index, setIndex] = useState("0");
+  const [storage, setStorage] = useState<CustomFieldStorage>("both");
 
   useEffect(() => {
     if (!open) return;
@@ -990,7 +1118,12 @@ function SectionDialog({
     // O índice precisa ser único: no create, já sugere o próximo livre.
     const next = sections.length ? Math.max(...sections.map((s) => s.index)) + 1 : 0;
     setIndex(String(section?.index ?? next));
-  }, [open, section, sections]);
+    setStorage(
+      mode === "edit"
+        ? (section?.storage ?? "both")
+        : (clientSettings.data?.defaultCustomFieldStorage ?? "both"),
+    );
+  }, [open, section, sections, mode, clientSettings.data?.defaultCustomFieldStorage]);
 
   const idxNum = Number.parseInt(index, 10);
   const indexTaken =
@@ -998,22 +1131,54 @@ function SectionDialog({
     sections.some((s) => s.index === idxNum && s.sectionName !== section?.sectionName);
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const idx = Number.parseInt(index, 10);
-      return mode === "create"
-        ? argusApi.createCustomFieldSection({
-            identityCustomFieldsSectionName: name.trim(),
-            displayName: displayName.trim(),
-            index: Number.isFinite(idx) ? idx : 0,
-          })
-        : argusApi.updateCustomFieldSection(section!.sectionName, {
-            displayName: displayName.trim(),
-            index: Number.isFinite(idx) ? idx : 0,
-            // PUT substitui o agrupamento: reenvia os campos atuais para não
-            // esvaziar a seção.
+      const safeIdx = Number.isFinite(idx) ? idx : 0;
+      const trimmedName = name.trim();
+      const trimmedDisplay = displayName.trim();
+      const goesToClearId = storage === "clearid" || storage === "both";
+      const goesToSupabase = storage === "supabase" || storage === "both";
+
+      if (mode === "edit") {
+        if (goesToClearId && section?.eTag !== undefined) {
+          await argusApi.updateCustomFieldSection(section!.sectionName, {
+            displayName: trimmedDisplay,
+            index: safeIdx,
+            // PUT substitui o agrupamento: reenvia os campos atuais para
+            // não esvaziar a seção.
             identityCustomFields: section!.fields,
             eTag: section!.eTag,
           });
+        }
+        if (goesToSupabase) {
+          await upsertSupabaseSection({
+            profile: activeProfile,
+            sectionName: section!.sectionName,
+            displayName: trimmedDisplay,
+            displayIndex: safeIdx,
+            storage,
+          });
+        }
+        return;
+      }
+
+      // CREATE
+      if (goesToClearId) {
+        await argusApi.createCustomFieldSection({
+          identityCustomFieldsSectionName: trimmedName,
+          displayName: trimmedDisplay,
+          index: safeIdx,
+        });
+      }
+      if (goesToSupabase) {
+        await upsertSupabaseSection({
+          profile: activeProfile,
+          sectionName: trimmedName,
+          displayName: trimmedDisplay,
+          displayIndex: safeIdx,
+          storage,
+        });
+      }
     },
     onSuccess: () => {
       toast.success(
@@ -1079,6 +1244,31 @@ function SectionDialog({
               <p className="text-xs text-destructive">{t("customFields.sectionIndexTaken")}</p>
             )}
           </div>
+
+          <div className="space-y-2 border-t pt-4">
+            <Label>Armazenar em</Label>
+            <Select
+              value={storage}
+              onValueChange={(v) => setStorage(v as CustomFieldStorage)}
+              disabled={mode === "edit"}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="clearid">ClearID (SaaS)</SelectItem>
+                <SelectItem value="supabase">Local (Supabase)</SelectItem>
+                <SelectItem value="both">Ambos</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Padrão do cliente {activeProfile}:{" "}
+              <span className="font-medium">
+                {clientSettings.data?.defaultCustomFieldStorage ?? "both"}
+              </span>
+              . Só configurável na criação.
+            </p>
+          </div>
         </div>
 
         <DialogFooter>
@@ -1105,18 +1295,24 @@ function CustomFieldDialog({
 }: {
   mode: "create" | "edit";
   field?: ClearIdCustomFieldDef;
-  sections: CustomFieldSectionSummary[];
+  sections: UnifiedSection[];
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { t } = useT();
+  const activeProfile = useActiveProfile();
+  const clientSettings = useClientSettings(activeProfile);
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [type, setType] = useState<string>("Text");
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [sync, setSync] = useState(true);
-  const [sectionName, setSectionName] = useState<string>(NO_SECTION);
+  // Seção agora é obrigatória: começa vazia e o usuário precisa escolher.
+  const [sectionName, setSectionName] = useState<string>("");
+  // Onde persistir a definição (ClearID / Supabase / ambos). Só configurável
+  // na criação; na edição refletimos o valor já gravado no Supabase.
+  const [storage, setStorage] = useState<CustomFieldStorage>("both");
   // Anexo comprobatório (complemento do campo).
   const [attEnabled, setAttEnabled] = useState(false);
   const [attRequired, setAttRequired] = useState(false);
@@ -1129,8 +1325,15 @@ function CustomFieldDialog({
     setType(field?.customFieldType ?? "Text");
     setIsReadOnly(Boolean(field?.isReadOnly));
     setSync(field?.synchronizationEnabled ?? true);
-    setSectionName(NO_SECTION);
-  }, [open, field]);
+    setSectionName("");
+    // Default do storage: no create usa o padrão do cliente; no edit fica em
+    // "both" enquanto o valor real não é carregado (ver useEffect abaixo).
+    setStorage(
+      mode === "create"
+        ? (clientSettings.data?.defaultCustomFieldStorage ?? "both")
+        : "both",
+    );
+  }, [open, field, mode, clientSettings.data?.defaultCustomFieldStorage]);
 
   // Flags de anexo atuais (edição): carregadas da definição por nome.
   const attFlags = useQuery({
@@ -1138,7 +1341,7 @@ function CustomFieldDialog({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_field_definitions")
-        .select("attachment_enabled, attachment_required, attachment_accept")
+        .select("attachment_enabled, attachment_required, attachment_accept, storage")
         .eq("custom_field_name", field!.customFieldName)
         .maybeSingle();
       if (error) throw new Error(error.message);
@@ -1159,6 +1362,8 @@ function CustomFieldDialog({
     setAttEnabled(d?.attachment_enabled ?? false);
     setAttRequired(d?.attachment_required ?? false);
     setAttAccept(d?.attachment_accept ?? ACCEPT_OPTIONS[0].value);
+    const s = (d?.storage ?? "both") as CustomFieldStorage;
+    setStorage(s === "clearid" || s === "supabase" || s === "both" ? s : "both");
   }, [open, mode, attFlags.data]);
 
   const save = useMutation({
@@ -1170,55 +1375,85 @@ function CustomFieldDialog({
         attachment_accept: attEnabled ? attAccept : null,
       };
 
+      // Storage escolhido decide onde a definição vive:
+      //   clearid   → PIAM é a fonte da verdade. Linha no Supabase serve só
+      //               para registrar a INTENÇÃO (storage='clearid') e não ser
+      //               sobrescrita pelo mirror do listCustomFields.
+      //   supabase  → só local. Nada é enviado ao ClearID.
+      //   both      → PIAM + linha no Supabase (comportamento histórico).
+      const goesToClearId = storage === "clearid" || storage === "both";
+
       if (mode === "edit") {
-        const res = await argusApi.updateCustomField(field!.customFieldName, {
-          displayName: displayName.trim(),
-          isReadOnly,
-          synchronizationEnabled: sync,
-          eTag: field?.eTag ?? null,
-        });
+        // O tipo/nome são imutáveis; storage do campo tampouco muda depois de
+        // criado (mudar destino exige recriar). Atualizamos só o que o ClearID
+        // aceita e os flags locais.
+        if (goesToClearId) {
+          await argusApi.updateCustomField(field!.customFieldName, {
+            displayName: displayName.trim(),
+            isReadOnly,
+            synchronizationEnabled: sync,
+            eTag: field?.eTag ?? null,
+          });
+        }
         const { error } = await supabase
           .from("custom_field_definitions")
-          .update(attPatch)
+          .update({
+            display_name: { default: displayName.trim() } as Json,
+            is_read_only: isReadOnly,
+            synchronization_enabled: sync,
+            ...attPatch,
+          })
+          .eq("profile", activeProfile)
           .eq("custom_field_name", field!.customFieldName);
         if (error) throw new Error(error.message);
-        return res;
+        return null;
       }
 
-      const created = await argusApi.createCustomField({
-        customFieldName: name.trim(),
-        displayName: displayName.trim(),
-        customFieldType: type,
-        isReadOnly,
-        synchronizationEnabled: sync,
-      });
-
-      // A API não aceita seção no create: o vínculo é feito pelo PUT da seção,
-      // que substitui a lista de campos — por isso reenviamos os atuais + o novo.
+      // CREATE
       const sec = sections.find((s) => s.sectionName === sectionName);
-      if (sec) {
-        const nextIdx = sec.fields.length ? Math.max(...sec.fields.map((f) => f.index)) + 1 : 0;
-        await argusApi.updateCustomFieldSection(sec.sectionName, {
-          displayName: sec.displayName,
-          index: sec.index,
-          identityCustomFields: [...sec.fields, { name: name.trim(), index: nextIdx }],
-          eTag: sec.eTag,
+      if (goesToClearId) {
+        await argusApi.createCustomField({
+          customFieldName: name.trim(),
+          displayName: displayName.trim(),
+          customFieldType: type,
+          isReadOnly,
+          synchronizationEnabled: sync,
         });
+
+        // Vínculo com seção no ClearID: só faz sentido se a seção também
+        // existir no ClearID (storage 'clearid' ou 'both'). Para seção
+        // supabase-only, o vínculo fica só em custom_field_definitions.section_name.
+        if (sec && (sec.storage === "clearid" || sec.storage === "both")) {
+          const nextIdx = sec.fields.length ? Math.max(...sec.fields.map((f) => f.index)) + 1 : 0;
+          await argusApi.updateCustomFieldSection(sec.sectionName, {
+            displayName: sec.displayName,
+            index: sec.index,
+            identityCustomFields: [...sec.fields, { name: name.trim(), index: nextIdx }],
+            eTag: sec.eTag,
+          });
+        }
       }
 
-      // Grava os flags de anexo na definição (a linha pode ainda não ter sido
-      // espelhada do Argus; upsert por nome cria/atualiza sem perder o mirror).
+      // Sempre grava a linha metadata no Supabase — com o storage escolhido —
+      // para preservar a intenção mesmo em 'clearid' puro (mirror posterior
+      // não vai sobrescrever a coluna storage porque não a envia). section_name
+      // também é gravado aqui para servir os campos supabase-only.
       const { error } = await supabase.from("custom_field_definitions").upsert(
         {
+          profile: activeProfile,
           custom_field_name: name.trim(),
           display_name: { default: displayName.trim() } as Json,
           custom_field_type: type,
+          is_read_only: isReadOnly,
+          synchronization_enabled: sync,
+          storage,
+          section_name: sec?.sectionName ?? null,
           ...attPatch,
         },
-        { onConflict: "custom_field_name" },
+        { onConflict: "profile,custom_field_name" },
       );
       if (error) throw new Error(error.message);
-      return created;
+      return null;
     },
     onSuccess: () => {
       toast.success(mode === "create" ? t("customFields.created") : t("customFields.updated"));
@@ -1227,8 +1462,25 @@ function CustomFieldDialog({
     onError: (e) => toast.error((e as ArgusApiError).message),
   });
 
+  // Compatibilidade de storage entre campo e seção:
+  //   campo 'clearid'  ⇢ seção 'clearid'  ou 'both'
+  //   campo 'supabase' ⇢ seção 'supabase' ou 'both'
+  //   campo 'both'     ⇢ seção 'both'
+  const compatibleSections = useMemo(
+    () =>
+      sections.filter((s) => {
+        if (storage === "clearid") return s.storage === "clearid" || s.storage === "both";
+        if (storage === "supabase") return s.storage === "supabase" || s.storage === "both";
+        return s.storage === "both";
+      }),
+    [sections, storage],
+  );
+
   const canSave =
-    displayName.trim().length > 0 && (mode === "edit" || name.trim().length > 0) && !save.isPending;
+    displayName.trim().length > 0 &&
+    (mode === "edit" || name.trim().length > 0) &&
+    (mode === "edit" || sectionName.trim().length > 0) &&
+    !save.isPending;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -1286,22 +1538,63 @@ function CustomFieldDialog({
             </Select>
           </div>
 
+          <div className="space-y-2 border-t pt-4">
+            <Label>Armazenar em</Label>
+            <Select
+              value={storage}
+              onValueChange={(v) => {
+                setStorage(v as CustomFieldStorage);
+                setSectionName(""); // reset — muda o filtro de seções compatíveis
+              }}
+              disabled={mode === "edit"}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="clearid">ClearID (SaaS)</SelectItem>
+                <SelectItem value="supabase">Local (Supabase)</SelectItem>
+                <SelectItem value="both">Ambos</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Padrão do cliente {activeProfile}:{" "}
+              <span className="font-medium">
+                {clientSettings.data?.defaultCustomFieldStorage ?? "both"}
+              </span>
+              . Só configurável na criação — para trocar depois, recrie o campo.
+            </p>
+          </div>
+
           {mode === "create" && (
             <div className="space-y-2">
-              <Label>{t("customFields.sectionLabel")}</Label>
+              <Label>{t("customFields.sectionLabel")} <span className="text-destructive">*</span></Label>
               <Select value={sectionName} onValueChange={setSectionName}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Selecione uma seção..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_SECTION}>{t("customFields.noSection")}</SelectItem>
-                  {sections.map((s) => (
-                    <SelectItem key={s.sectionName} value={s.sectionName}>
-                      {s.displayName || s.sectionName}
-                    </SelectItem>
-                  ))}
+                  {compatibleSections.length === 0 ? (
+                    <div className="px-2 py-3 text-xs text-muted-foreground">
+                      Nenhuma seção compatível com storage <span className="font-medium">{storage}</span>.
+                      Crie uma seção antes de cadastrar o campo.
+                    </div>
+                  ) : (
+                    compatibleSections.map((s) => (
+                      <SelectItem key={s.sectionName} value={s.sectionName}>
+                        {(s.displayName || s.sectionName)}
+                        <span className="ml-2 text-xs text-muted-foreground">[{s.storage}]</span>
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                A seção precisa estar compatível com o storage do campo (
+                <span className="font-medium">clearid</span> ↔ clearid/both,{" "}
+                <span className="font-medium">supabase</span> ↔ supabase/both,{" "}
+                <span className="font-medium">both</span> ↔ both).
+              </p>
             </div>
           )}
 

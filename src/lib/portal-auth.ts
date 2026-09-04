@@ -45,6 +45,33 @@ export function redirectToPortalLogin(currentUrl?: string): void {
 }
 
 /**
+ * URL de logout do Portal Argus: a rota `/logout` do FRONTEND do portalargus.
+ * Essa rota encerra a sessão de forma COMPLETA — limpa o token local do Portal
+ * (localStorage), apaga o cookie SSO `rmtecho_token` (.rmtecho.com.br, some de todos
+ * os apps) via API, e cai na tela de login. Derivada da URL de login (mesmo origin).
+ */
+export function getPortalArgusLogoutUrl(): string {
+  const url = new URL(getPortalArgusLoginUrl());
+  url.pathname = "/logout";
+  url.search = "";
+  return url.toString();
+}
+
+/**
+ * Encerra a sessão: navega para o logout do Portal (limpa localStorage do portalargus
+ * + cookie SSO compartilhado) e cai no login — sempre, mesmo se já estava logado.
+ */
+export function redirectToLogout(): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem("portal_auth_redirected");
+  } catch {
+    /* ignore */
+  }
+  window.location.assign(getPortalArgusLogoutUrl());
+}
+
+/**
  * Verifica no servidor (Nitro) se o cookie SSO está presente no request atual.
  * Não valida o token — apenas confirma que existe. A validação criptográfica é
  * responsabilidade do backend .NET.

@@ -8,8 +8,14 @@ import { AccessDenied } from "@/components/AccessDenied";
 // ArthosMFA inclui esse código na claim "apps" quando o usuário tem grant.
 const ARGUS_APP_CODE = "clearid";
 
-/** Flag (por aba) que evita loop de redirect quando o cookie não pode ser obtido. */
+/** Marca (por aba) do último redirect ao login — usada só p/ detectar loop rápido. */
 const REDIRECTED_FLAG = "portal_auth_redirected";
+/**
+ * Janela do loop-guard: só bloqueia um novo redirect se o anterior foi há menos que
+ * isto (ms). Assim um loop real (clearid → login → clearid automático) é contido, mas
+ * uma nova visita legítima sem sessão (o usuário digita a URL de novo) redireciona normal.
+ */
+const REDIRECT_LOOP_WINDOW_MS = 10_000;
 
 /**
  * Guarda de autenticação de USUÁRIO (Portal Argus / SSO por cookie).
@@ -18,10 +24,10 @@ const REDIRECTED_FLAG = "portal_auth_redirected";
  * o backend respondeu "sem usuário" (401/403) OU porque não deu para verificar
  * (erro de rede/CORS/timeout) — redireciona para o login do Portal Argus.
  *
- * Proteção contra loop: redireciona no máximo UMA vez por aba (sessionStorage).
- * Se, após o redirect, o app for reaberto e ainda não houver usuário (ex.: em
- * `localhost`, onde o cookie `.rmtecho.com.br` não existe), o app é renderizado
- * em vez de redirecionar de novo. Ao autenticar, a flag é limpa.
+ * Proteção contra loop (por tempo): se acabou de redirecionar (< janela) e voltou
+ * sem usuário, renderiza em vez de redirecionar de novo (evita loop clearid↔login).
+ * Uma nova visita sem sessão, fora da janela, redireciona normalmente. Ao autenticar,
+ * a marca é limpa.
  *
  * A auth de DADOS continua pela sessão técnica do Supabase (independente disto).
  */
@@ -43,11 +49,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     const noUser = isSuccess || isError;
     if (!noUser) return; // ainda verificando
 
-    // Guard de loop: redireciona no máximo uma vez por aba.
-    let already = false;
-    try { already = !!sessionStorage.getItem(REDIRECTED_FLAG); } catch { /* ignore */ }
-    if (already) return; // já tentou → renderiza o app (evita loop)
-    try { sessionStorage.setItem(REDIRECTED_FLAG, "1"); } catch { /* ignore */ }
+    // Guard de loop POR TEMPO: se acabamos de redirecionar (< janela) e voltamos sem
+    // usuário, é loop → renderiza em vez de redirecionar de novo. Fora da janela,
+    // uma nova visita sem sessão redireciona normalmente ao login.
+    let lastTs = 0;
+    try { lastTs = Number(sessionStorage.getItem(REDIRECTED_FLAG)) || 0; } catch { /* ignore */ }
+    if (Date.now() - lastTs < REDIRECT_LOOP_WINDOW_MS) return;
+    try { sessionStorage.setItem(REDIRECTED_FLAG, String(Date.now())); } catch { /* ignore */ }
     setRedirecting(true);
     redirectToPortalLogin();
   }, [isSuccess, isError, data]);

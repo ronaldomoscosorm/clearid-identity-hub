@@ -1,6 +1,6 @@
 import { AlertTriangle, LogOut, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getPortalArgusLoginUrl } from "@/lib/portal-auth";
+import { getPortalArgusLoginUrl, getPortalArgusLogoutUrl } from "@/lib/portal-auth";
 
 /**
  * Tela exibida quando o usuário está autenticado no Portal Argus (cookie SSO válido),
@@ -29,8 +29,8 @@ export function AccessDenied({
       : "Peça ao administrador para vincular ao menos um site (cliente + unidade) ao seu usuário no Portal Argus.";
 
   const portalUrl = getPortalArgusLoginUrl();
-  // Logout: chama endpoint do Portal que apaga o cookie SSO, depois volta ao login.
-  const logoutUrl = portalUrl.replace(/\/login.*$/, "/logout") + "?returnUrl=" + encodeURIComponent(portalUrl);
+  // Logout: endpoint do Portal (API) que apaga o cookie SSO e volta ao login.
+  const logoutUrl = getPortalArgusLogoutUrl();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">

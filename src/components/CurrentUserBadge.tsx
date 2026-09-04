@@ -1,5 +1,6 @@
-import { UserCircle } from "lucide-react";
+import { LogOut, UserCircle } from "lucide-react";
 import { useCurrentUser } from "@/lib/current-user";
+import { redirectToLogout } from "@/lib/portal-auth";
 
 /**
  * Indicador do usuário autenticado no Portal Argus (SSO por cookie).
@@ -21,6 +22,15 @@ export function CurrentUserBadge() {
           <div className="truncate text-muted-foreground">{user.argusProfile}</div>
         )}
       </div>
+      <button
+        type="button"
+        onClick={() => redirectToLogout()}
+        title="Sair"
+        aria-label="Sair"
+        className="ml-auto shrink-0 rounded p-1 text-muted-foreground hover:bg-[var(--rm-line)] hover:text-foreground"
+      >
+        <LogOut className="h-4 w-4" />
+      </button>
     </div>
   );
 }

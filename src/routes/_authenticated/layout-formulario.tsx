@@ -37,7 +37,8 @@ import {
   type FormLayout,
   type FormLayoutConfig,
 } from "@/lib/form-layout";
-import { argusApi, useDefaultSiteId, useActiveProfile, setSessionProfile, setSessionSiteId, CLEARID_PROFILES } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId, useActiveProfile, setSessionProfile, setSessionSiteId } from "@/lib/argus-client";
+import { useUserScope } from "@/lib/user-scope";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -116,6 +117,7 @@ function LayoutFormularioPage() {
   // dos campos disponíveis na paleta (inclui campos locais, ex.: Anexo).
   const activeProfile = useActiveProfile();
   const defaultSiteId = useDefaultSiteId();
+  const scope = useUserScope();
 
   // Sites reativos ao cliente ativo (a key inclui o perfil).
   const sitesQuery = useQuery({
@@ -123,7 +125,8 @@ function LayoutFormularioPage() {
     queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60 * 1000,
   });
-  const sites = (sitesQuery.data ?? [])
+  const sites = scope
+    .filterSites(sitesQuery.data ?? [], activeProfile)
     .slice()
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
   // Site fonte dos campos: o do topbar se pertence ao cliente, senão o primeiro.
@@ -469,7 +472,7 @@ function LayoutFormularioPage() {
                 <DialogDescription>{t("formLayout.export.hint")}</DialogDescription>
               </DialogHeader>
               <div className="max-h-[50vh] space-y-2 overflow-y-auto py-2">
-                {CLEARID_PROFILES.filter((p) => p.code !== activeProfile).map((p) => (
+                {scope.visibleProfiles.filter((p) => p.code !== activeProfile).map((p) => (
                   <label
                     key={p.code}
                     className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"
@@ -481,7 +484,7 @@ function LayoutFormularioPage() {
                     {p.label}
                   </label>
                 ))}
-                {CLEARID_PROFILES.filter((p) => p.code !== activeProfile).length === 0 && (
+                {scope.visibleProfiles.filter((p) => p.code !== activeProfile).length === 0 && (
                   <p className="py-4 text-center text-sm text-muted-foreground">
                     {t("formLayout.export.noOthers")}
                   </p>
@@ -514,7 +517,7 @@ function LayoutFormularioPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CLEARID_PROFILES.map((p) => (
+                {scope.visibleProfiles.map((p) => (
                   <SelectItem key={p.code} value={p.code}>
                     {p.label}
                   </SelectItem>

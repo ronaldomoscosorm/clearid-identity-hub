@@ -93,7 +93,12 @@ function toIdentityRow(i: ClearIdIdentity): IdentityInsert {
   };
 }
 
-/** Faz upsert das identidades na tabela `identities` (por identity_id). */
+/**
+ * Faz upsert das identidades na tabela `identities` (por identity_id).
+ * LANÇA em caso de erro — callers passivos (listagens/cache) devem envolver em
+ * try/catch e apenas logar; o save atomic de identity precisa do throw para
+ * disparar a saga de compensação.
+ */
 export async function mirrorIdentities(items: ClearIdIdentity[]): Promise<void> {
   if (!items?.length) return;
   const rows = items.filter((i) => i.identityId).map(toIdentityRow);
@@ -102,12 +107,15 @@ export async function mirrorIdentities(items: ClearIdIdentity[]): Promise<void> 
   const { error } = await supabase
     .from("identities")
     .upsert(rows, { onConflict: "identity_id" });
-  if (error) console.error("[mirror] falha ao espelhar identidades:", error.message);
+  if (error) throw new Error(`Falha ao espelhar identidades: ${error.message}`);
 }
 
 export type SiteFieldValue = { site_custom_field_id: string; value: string | null };
 
-/** Grava o vínculo da identidade com uma empresa (company_id) no Supabase. */
+/**
+ * Grava o vínculo da identidade com uma empresa (company_id) no Supabase.
+ * LANÇA em caso de erro.
+ */
 export async function saveIdentityCompany(
   clearIdIdentityId: string,
   companyId: string | null,
@@ -117,13 +125,15 @@ export async function saveIdentityCompany(
     .from("identities")
     .update({ company_id: companyId })
     .eq("identity_id", clearIdIdentityId);
-  if (error) console.error("[mirror] falha ao gravar empresa da identidade:", error.message);
+  if (error) throw new Error(`Falha ao gravar empresa da identidade: ${error.message}`);
 }
 
 /**
  * Grava o tipo do trabalhador EXATO (worker_type_id) da identidade no Supabase.
  * Necessário porque o workerTypeCode do Argus não distingue Visitante de Terceiro
  * (ambos "Terceiros"); este valor garante o round-trip correto na edição.
+ * LANÇA em caso de erro — o worker_type só existe no Supabase; perder essa
+ * gravação corrompe a semântica de tipo.
  */
 export async function saveIdentityWorkerType(
   clearIdIdentityId: string,
@@ -134,7 +144,7 @@ export async function saveIdentityWorkerType(
     .from("identities")
     .update({ worker_type_id: workerTypeId })
     .eq("identity_id", clearIdIdentityId);
-  if (error) console.error("[mirror] falha ao gravar tipo do trabalhador:", error.message);
+  if (error) throw new Error(`Falha ao gravar tipo do trabalhador: ${error.message}`);
 }
 
 /**

@@ -18,12 +18,12 @@ import {
   setSystemObjectId,
   useDefaultProfile,
   setDefaultProfile,
-  CLEARID_PROFILES,
   type DiagnosticsResult,
 } from "@/lib/argus-client";
 import { Badge } from "@/components/ui/badge";
 import { pushSettings } from "@/lib/supabase-settings";
 import { useT } from "@/lib/i18n";
+import { useUserScope } from "@/lib/user-scope";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "Configurações — Argus ClearID" }] }),
@@ -39,6 +39,7 @@ function Settings() {
   const qc = useQueryClient();
   const { t } = useT();
   const configuredProfile = useDefaultProfile();
+  const scope = useUserScope();
 
   // Troca o cliente PADRÃO (perfil ClearID) salvo em Configurações — e limpa o
   // override de sessão para o novo padrão valer. Os sites/systems/teams são
@@ -194,7 +195,7 @@ function Settings() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CLEARID_PROFILES.map((p) => (
+                {scope.visibleProfiles.map((p) => (
                   <SelectItem key={p.code} value={p.code}>
                     {p.label}
                   </SelectItem>
@@ -227,7 +228,8 @@ function Settings() {
                 } />
               </SelectTrigger>
               <SelectContent>
-                {(sitesQuery.data ?? [])
+                {scope
+                  .filterSites(sitesQuery.data ?? [], configuredProfile)
                   .slice()
                   .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }))
                   .map((s) => (

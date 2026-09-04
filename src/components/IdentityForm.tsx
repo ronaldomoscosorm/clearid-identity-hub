@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/command";
 import type { IdentityUpsert } from "@/lib/argus-client";
 import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
+import { useUserScope } from "@/lib/user-scope";
 import type { SiteFieldValue } from "@/lib/supabase-mirror";
 
 type TFunc = (k: string, vars?: Record<string, string | number>) => string;
@@ -255,7 +256,10 @@ export function IdentityForm({
     queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60 * 1000,
   });
-  const sites = (sitesQuery.data ?? [])
+  const identityActiveProfile = useActiveProfile();
+  const identityScope = useUserScope();
+  const sites = identityScope
+    .filterSites(sitesQuery.data ?? [], identityActiveProfile)
     .slice()
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
   const [customFields, setCustomFields] = useState<Record<string, string>>({

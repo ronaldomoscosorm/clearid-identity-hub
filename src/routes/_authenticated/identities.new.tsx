@@ -6,12 +6,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { pickLang } from "@/lib/custom-fields";
 import { argusApi, ArgusApiError, useActiveProfile, type IdentityUpsert } from "@/lib/argus-client";
 import {
-  mirrorIdentities,
   saveIdentityCustomFields,
-  saveIdentityCompany,
-  saveIdentityWorkerType,
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
+import { createIdentityAtomic } from "@/lib/identity-atomic";
 import { saveIdentityAttachments, type PendingAttachment } from "@/lib/attachments";
 import { Button } from "@/components/ui/button";
 import { IdentityForm } from "@/components/IdentityForm";
@@ -73,13 +71,19 @@ function NewIdentity() {
           }),
         });
       }
-      return argusApi.createIdentity(vars.data);
+      // Etapa ATÔMICA (fonte de verdade da identity): grava no ClearID e no
+      // Supabase; se qualquer lado falhar, a criação inteira é revertida e o
+      // erro sobe para onError.
+      return createIdentityAtomic(vars.data, {
+        companyId: vars.companyId,
+        workerTypeId: vars.workerTypeId,
+      });
     },
     onSuccess: async (data, vars) => {
-      // Sem transação: cada etapa é gravada em separado. Rastreamos o resultado
-      // de cada uma (identity / customizáveis / regra) e notificamos o que
-      // deu certo e o que falhou.
-      const ok: string[] = [t("identityNew.step.main")]; // etapa 1 (identity) já concluída aqui
+      // A partir daqui, a identity já existe em AMBOS os sistemas (ClearID +
+      // Supabase). As etapas abaixo são complementares e best-effort: cada
+      // uma falha isolada não invalida a criação.
+      const ok: string[] = [t("identityNew.step.main")]; // etapa 1 (atomic) já concluída aqui
       const fail: string[] = [];
 
       // Etapa 2 — campos personalizados (endpoint dedicado).
@@ -136,10 +140,8 @@ function NewIdentity() {
         toast.success(t("identityNew.createdSuccess", { ok: ok.join(", ") }));
       }
 
-      // Espelhamento no Supabase (best-effort, fora das 3 etapas do Argus).
-      await mirrorIdentities([data]);
-      await saveIdentityCompany(data.identityId, vars.companyId);
-      await saveIdentityWorkerType(data.identityId, vars.workerTypeId);
+      // Espelhamento adicional no Supabase — valores de campos personalizados
+      // por site. Mirror/company/workerType já foram gravados na etapa atomic.
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
       // Anexos (Storage + versionamento) — após a identidade existir no Supabase.
       if (vars.attachments.length) {

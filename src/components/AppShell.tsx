@@ -11,8 +11,8 @@ import {
   useSystemObjectId,
   useActiveProfile,
   setSessionProfile,
-  CLEARID_PROFILES,
 } from "@/lib/argus-client";
+import { useUserScope } from "@/lib/user-scope";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
@@ -296,26 +296,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: currentUser } = useCurrentUser();
   const { data: menuData } = useMenuTree();
   const userSites = currentUser?.sites ?? [];
-  const restrictByUser = userSites.length > 0;
+  const { restrictByUser, allowedClientCodes, visibleProfiles, filterSites } = useUserScope();
   useEnsureActiveSite(restrictByUser ? userSites : undefined);
-
-  // Clientes exibidos: só os que o usuário tem grant (prefixo `cliente:`).
-  const allowedClientCodes = new Set(
-    userSites.map((s) => (s.split(":")[0] ?? "").toLowerCase()),
-  );
-  const visibleProfiles = restrictByUser
-    ? CLEARID_PROFILES.filter((p) => allowedClientCodes.has(p.code.toLowerCase()))
-    : CLEARID_PROFILES;
-
-  // Sites exibidos: só os do usuário no cliente ativo (nome após `cliente:`).
-  const allowedSiteNames = new Set(
-    userSites
-      .filter((s) => (s.split(":")[0] ?? "").toLowerCase() === activeProfile.toLowerCase())
-      .map((s) => s.split(":").slice(1).join(":").toLowerCase()),
-  );
-  const visibleSites = (sitesQuery.data ?? []).filter(
-    (s) => !restrictByUser || allowedSiteNames.has((s.name ?? "").toLowerCase()),
-  );
+  const visibleSites = filterSites(sitesQuery.data ?? [], activeProfile);
 
   // Menus exibidos: filtrados pelas keys permitidas ao usuário (do backend).
   const allowedMenuKeys = menuData ? collectMenuKeys(menuData.tree) : null;
