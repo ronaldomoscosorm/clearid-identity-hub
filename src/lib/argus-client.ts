@@ -333,11 +333,10 @@ export async function argusFetch<T = unknown>(
   }
   // Perfil ClearID (conta) por requisição. Não enviamos mais accountId — o
   // backend deriva a conta a partir do perfil (header X-ClearId-Environment).
-  // Site ativo (cliente:site) — validado pelo backend contra os sites permitidos do JWT.
-  const activeSite = getActiveSite();
-  if (activeSite && !headers.has("X-Argus-Site")) {
-    headers.set("X-Argus-Site", activeSite);
-  }
+  // NÃO enviamos mais o X-Argus-Site: o formato do site selecionado no front
+  // (code:nome) não casa com o grant (clienteId:siteId) e derrubava TODAS as
+  // chamadas com 403. A regra do backend "header ausente → aprova" libera; a
+  // autorização fica no app-level (apps=clearid) + policies.
   if (!headers.has("X-ClearId-Environment")) {
     headers.set("X-ClearId-Environment", opts.environment ?? getActiveProfile());
   }
@@ -1790,8 +1789,7 @@ export const argusApi = {
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     headers.set("X-ClearId-Environment", getActiveProfile());
-    const _activeSite = getActiveSite();
-    if (_activeSite) headers.set("X-Argus-Site", _activeSite);
+    // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
@@ -1813,8 +1811,7 @@ export const argusApi = {
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     headers.set("X-ClearId-Environment", getActiveProfile());
-    const _activeSite = getActiveSite();
-    if (_activeSite) headers.set("X-Argus-Site", _activeSite);
+    // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
@@ -1845,8 +1842,7 @@ export const argusApi = {
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     headers.set("X-ClearId-Environment", getActiveProfile());
-    const _activeSite = getActiveSite();
-    if (_activeSite) headers.set("X-Argus-Site", _activeSite);
+    // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
