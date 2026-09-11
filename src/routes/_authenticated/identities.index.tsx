@@ -93,6 +93,14 @@ function IdentitiesList() {
     if (siteId) setFSite(siteId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId]);
+  // DIAGNÓSTICO (temporário): confirma qual build está no ar nesta tela.
+  // eslint-disable-next-line no-console
+  console.info("[clearid] identities-filter-v2 →", {
+    siteId,
+    fSite,
+    manuallySet: siteManuallySet.current,
+    persisted: persistedSearch?.fSite ?? null,
+  });
 
   const sitesQuery = useQuery({
     queryKey: ["sites"],
