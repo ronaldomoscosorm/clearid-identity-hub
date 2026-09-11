@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
@@ -83,10 +83,16 @@ function IdentitiesList() {
   // Site do filtro: um siteId específico ou ALL_SITES. Vazio só ocorre antes de o
   // site padrão resolver — uma pesquisa restaurada sempre tem site definido.
   const [fSite, setFSite] = useState<string>(persistedSearch?.fSite ?? "");
+  // O filtro SEGUE o site padrão da topbar até o usuário escolher manualmente
+  // (ou até restaurar uma pesquisa). Sem isso, se o site padrão fosse aplicado
+  // DEPOIS do primeiro render (ou o localStorage tivesse um site antigo), o
+  // filtro ficava travado no valor errado / vazio na primeira carga.
+  const siteManuallySet = useRef<boolean>(Boolean(persistedSearch?.fSite));
   useEffect(() => {
-    if (!fSite && siteId) setFSite(siteId);
+    if (siteManuallySet.current) return;
+    if (siteId) setFSite(siteId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteId, fSite]);
+  }, [siteId]);
 
   const sitesQuery = useQuery({
     queryKey: ["sites"],
@@ -322,7 +328,7 @@ function IdentitiesList() {
             </Select>
           </Field>
           <Field label={t("identities.filter.site")}>
-            <Select value={fSite} onValueChange={(v) => { setFSite(v); resetResults(); }}>
+            <Select value={fSite} onValueChange={(v) => { siteManuallySet.current = true; setFSite(v); resetResults(); }}>
               <SelectTrigger><SelectValue placeholder={t("identities.filter.sitePlaceholder")} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_SITES}>{t("identities.filter.allSites")}</SelectItem>
