@@ -1,92 +1,65 @@
-// Helpers para restringir listagens (clientes/sites) ao que o usuário logado
-// tem grant no Portal Argus. Os grants vêm em CurrentUser.sites no formato
-// "Cliente:Site" (ex.: "Corteva:LA-BR-Alphaville", "Vylor:LA-BR-Itumbiara").
+// Restringe o dropdown de clientes ao DOMÍNIO DE PERMISSÃO do usuário logado.
 //
-// Fallback gracioso: se o backend não devolveu sites (dev/CORS off, ou usuário
-// sem grants ainda), NADA é restringido — a UI se comporta como antes. Isso
-// evita travar o app durante desenvolvimento local.
+// O domínio vem em CurrentUser.sites (claim `argus_sites`), no formato
+// `clienteId:siteId` com os IDS INTEIROS do CorporateData (ex.: "1:9"). O
+// catálogo (código/nome do cliente) vem do CorporateData por id. Vale para
+// TODOS os usuários (inclusive admin).
+//
+// Observação: o filtro por SITE está relaxado (mostra todos os sites do cliente
+// permitido) porque a lista de sites atual não carrega o id do CorporateData
+// para casar com o grant. A restrição de nível de CLIENTE segue valendo.
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useCurrentUser } from "@/lib/current-user";
-import { CLEARID_PROFILES, type ClearIdProfile } from "@/lib/argus-client";
+import { type ClearIdProfile } from "@/lib/argus-client";
+import { corporateData } from "@/lib/corporatedata-client";
 
 export interface UserScope {
-  /** true se o usuário tem grants; false → não restringir (dev/fallback). */
+  /** true quando a restrição por domínio está ativa (bypass off). */
   restrictByUser: boolean;
   /** Códigos de cliente permitidos (lowercase). */
   allowedClientCodes: Set<string>;
-  /** Perfis de cliente visíveis (filtrados pelos grants). */
+  /** Clientes visíveis = os do domínio de permissão (únicos). */
   visibleProfiles: ClearIdProfile[];
-  /**
-   * Nomes de site permitidos NO CLIENTE informado, em lowercase.
-   * Usado para filtrar `listSites()` (que devolve pelo nome do site).
-   */
+  /** Compat: nomes de site permitidos (não usado no filtro atual). */
   allowedSiteNames: (profile: string) => Set<string>;
-  /**
-   * Filtro pronto: recebe a lista bruta de sites do ClearID e o cliente
-   * atual; devolve só os sites cujo nome bate com o grant do usuário. Se
-   * `restrictByUser=false`, devolve a lista original.
-   */
+  /** Filtro de sites — passthrough (restrição é no nível de cliente). */
   filterSites: <T extends { name?: string | null }>(sites: T[], profile: string) => T[];
 }
 
 export function useUserScope(): UserScope {
   const { data: currentUser } = useCurrentUser();
-  const userSites = currentUser?.sites ?? [];
+  const grants = currentUser?.sites ?? []; // ["1:9"] = clienteId:siteId (ids CorporateData)
+  const { data: clientes } = useQuery({
+    queryKey: ["corporatedata", "clientes"],
+    queryFn: () => corporateData.listClientes(),
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+
+  const grantsKey = grants.join(",");
+  const clientesKey = (clientes ?? []).map((c) => `${c.id}:${c.code}`).join(",");
 
   return useMemo(() => {
-    const restrictByUser = userSites.length > 0;
+    const bypass = import.meta.env.VITE_DISABLE_ACCESS_SCOPE === "true";
+    const restrictByUser = !bypass;
 
-    const allowedClientCodes = new Set(
-      userSites.map((s) => (s.split(":")[0] ?? "").toLowerCase()),
+    // Domínio: ids de cliente (numéricos) presentes nos grants.
+    const allowedClienteIds = new Set(
+      grants.map((g) => (g.split(":")[0] ?? "").trim()).filter(Boolean),
     );
 
-    const visibleProfiles = restrictByUser
-      ? CLEARID_PROFILES.filter((p) => allowedClientCodes.has(p.code.toLowerCase()))
-      : CLEARID_PROFILES;
+    const list = clientes ?? [];
+    const visibleProfiles: ClearIdProfile[] = (
+      restrictByUser ? list.filter((c) => allowedClienteIds.has(String(c.id))) : list
+    ).map((c) => ({ code: c.code, label: c.name }));
 
-    const allowedSiteNames = (profile: string): Set<string> =>
-      new Set(
-        userSites
-          .filter((s) => (s.split(":")[0] ?? "").toLowerCase() === profile.toLowerCase())
-          .map((s) => s.split(":").slice(1).join(":").toLowerCase()),
-      );
+    const allowedClientCodes = new Set(visibleProfiles.map((p) => p.code.toLowerCase()));
 
-    /**
-     * Filtra sites do ClearID pelo grant do usuário.
-     * - Compara por `name` E por `siteId` (o que o Portal Argus guardar em
-     *   UserSites.SiteCode pode ser o nome de exibição OU o guid — aceitamos
-     *   ambos para não engessar o cadastro).
-     * - Soft-fallback: se o usuário tem grant no cliente mas o filtro
-     *   devolveria vazio (naming divergiu entre Portal Argus e ClearID),
-     *   retorna a lista SEM filtrar e loga um aviso. É mais seguro exibir
-     *   demais do que esconder tudo e travar o operador.
-     */
-    const filterSites = <T extends { name?: string | null; siteId?: string | null }>(
-      sites: T[],
-      profile: string,
-    ): T[] => {
-      if (!restrictByUser) return sites;
-      const allowed = allowedSiteNames(profile);
-      if (allowed.size === 0) return []; // sem grant nesse cliente → esconde tudo
-      const filtered = sites.filter((s) => {
-        const name = (s.name ?? "").toLowerCase();
-        const id = (s.siteId ?? "").toLowerCase();
-        return allowed.has(name) || (id && allowed.has(id));
-      });
-      if (filtered.length === 0 && sites.length > 0) {
-        console.warn(
-          `[user-scope] grant do usuário em '${profile}' (${[...allowed].join(", ")}) não bateu ` +
-            `com nenhum site retornado pelo ClearID (${sites
-              .map((s) => s.name)
-              .join(", ")}). Exibindo lista completa como fallback — ajuste UserSites.SiteCode ` +
-            `no Portal Argus para bater com Site.Name do ClearID.`,
-        );
-        return sites;
-      }
-      return filtered;
-    };
+    const allowedSiteNames = (): Set<string> => new Set<string>();
+    const filterSites = <T extends { name?: string | null }>(sites: T[]): T[] => sites;
 
     return { restrictByUser, allowedClientCodes, visibleProfiles, allowedSiteNames, filterSites };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userSites.join(",")]);
+  }, [grantsKey, clientesKey]);
 }

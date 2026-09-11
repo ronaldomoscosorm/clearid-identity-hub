@@ -213,9 +213,11 @@ function CamposDoSitePage() {
   });
   const workerTypes = workerTypesQuery.data ?? [];
 
+  // Seções unificadas (ClearID + Supabase) — direto do backend, com `storage`.
   const sectionsQuery = useQuery({
-    queryKey: ["custom-field-sections"],
-    queryFn: () => argusApi.listCustomFieldSections(),
+    queryKey: ["custom-field-sections", "unified", activeProfile],
+    queryFn: () =>
+      argusApi.listCustomFieldSectionsUnified({ source: "all", profile: activeProfile }),
     staleTime: 5 * 60 * 1000,
   });
   const sections = sectionsQuery.data ?? [];
@@ -223,7 +225,7 @@ function CamposDoSitePage() {
   const sectionByField = useMemo(() => {
     const m = new Map<string, string>();
     for (const sec of sections) {
-      for (const f of sec.fields) m.set(f.name, sec.displayName || sec.sectionName);
+      for (const name of sec.fieldNames) m.set(name, sec.displayName || sec.sectionName);
     }
     return m;
   }, [sections]);
@@ -231,7 +233,7 @@ function CamposDoSitePage() {
   const sectionFieldNames = useMemo(() => {
     if (!form.section || form.section === ALL_SECTIONS) return null;
     const sec = sections.find((s) => s.sectionName === form.section);
-    return new Set((sec?.fields ?? []).map((f) => f.name));
+    return new Set(sec?.fieldNames ?? []);
   }, [sections, form.section]);
 
   const defsQuery = useQuery({

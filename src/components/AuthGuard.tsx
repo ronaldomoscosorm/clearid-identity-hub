@@ -35,7 +35,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { data, isError, isSuccess } = useCurrentUser();
   const [redirecting, setRedirecting] = useState(false);
 
+  // ⚠️ BYPASS TEMPORÁRIO: ignora completamente a autenticação — nenhum redirect
+  // para o Portal Argus, nenhum bloqueio por grant. O app entra direto.
+  const bypassAccessScope = import.meta.env.VITE_DISABLE_ACCESS_SCOPE === "true";
+
   useEffect(() => {
+    if (bypassAccessScope) return; // não redireciona, não valida
     // Autenticado de verdade: precisa ter username preenchido.
     // Backend em modo bypass (AuthenticationSettings.Enabled=false) responde 200
     // com objeto vazio ({ username: "", apps: [], ... }) — isso NÃO conta como
@@ -58,12 +63,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     try { sessionStorage.setItem(REDIRECTED_FLAG, String(Date.now())); } catch { /* ignore */ }
     setRedirecting(true);
     redirectToPortalLogin();
-  }, [isSuccess, isError, data]);
+  }, [isSuccess, isError, data, bypassAccessScope]);
 
   if (redirecting) return <AuthSplash label="Redirecionando ao login…" />;
 
-  // Autenticado mas SEM grant para o app "argus" → tela de acesso negado.
-  if (data && data.username) {
+  // Autenticado mas SEM grant para o app "clearid" → tela de acesso negado.
+  if (!bypassAccessScope && data && data.username) {
     const hasArgusApp = data.apps?.some(
       (a) => a?.toLowerCase() === ARGUS_APP_CODE,
     );

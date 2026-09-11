@@ -14,6 +14,12 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { hydrateSettings } from "@/lib/supabase-settings";
+import { captureTokenFromUrl } from "@/lib/sso-token";
+
+// SSO via fragment — se o Portal Argus nos redirecionou com `#token=<jwt>`,
+// captura AGORA (antes das queries de auth). Roda no import do módulo para
+// pegar antes de qualquer render.
+if (typeof window !== "undefined") captureTokenFromUrl();
 
 function NotFoundComponent() {
   return (

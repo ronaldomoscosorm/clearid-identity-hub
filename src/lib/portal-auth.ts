@@ -65,6 +65,8 @@ export function redirectToLogout(): void {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.removeItem("portal_auth_redirected");
+    // Limpa o JWT do SSO via localStorage (fluxo novo — bypass do cookie).
+    localStorage.removeItem("argus.ssoToken");
   } catch {
     /* ignore */
   }

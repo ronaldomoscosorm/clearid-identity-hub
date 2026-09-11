@@ -146,15 +146,14 @@ function LayoutFormularioPage() {
 
   const { config, loaded } = useFormLayoutConfig(activeProfile, editSiteId || null);
 
-  // Campos customizáveis (definições ClearID Vylor_) — para rótulos.
+  // Campos customizáveis — endpoint UNIFICADO (source=all): união ClearID +
+  // Supabase, por cliente, com `storage`. Todos ficam disponíveis no palette.
   const customFieldsQuery = useQuery({
-    queryKey: ["custom-fields", activeProfile],
-    queryFn: () => argusApi.listCustomFields(),
+    queryKey: ["custom-fields", "unified", activeProfile],
+    queryFn: () => argusApi.listCustomFieldsUnified({ source: "all", profile: activeProfile }),
     staleTime: 5 * 60 * 1000,
   });
-  const allCustomDefs = (customFieldsQuery.data ?? []).filter(
-    (f) => !f.isDeleted && f.customFieldName.startsWith("Vylor_"),
-  );
+  const allCustomDefs = (customFieldsQuery.data ?? []).filter((f) => !f.isDeleted);
 
   // Campos customizáveis do SITE EDITADO — restringem os disponíveis. Inclui os
   // campos LOCAIS (ex.: Anexo), que não vêm do catálogo Argus.
@@ -176,17 +175,14 @@ function LayoutFormularioPage() {
     staleTime: 5 * 60 * 1000,
   });
   const siteDefs = siteFieldsQuery.data ?? [];
-  const siteFieldNames = siteFieldsQuery.data
-    ? new Set(siteDefs.map((d) => d.custom_field_name))
-    : undefined;
 
   // Dropdowns especiais — ficam disponíveis independentemente do site.
   const { list: specialList, loaded: specialLoaded } = useSpecialFields();
 
-  // Disponíveis = campos do site editado + dropdowns especiais (rótulos do catálogo/label especial).
-  const siteCustomDefs = siteFieldNames
-    ? allCustomDefs.filter((d) => siteFieldNames.has(d.customFieldName))
-    : allCustomDefs;
+  // Disponíveis = TODOS os custom fields do cliente (union ClearID+Supabase) +
+  // dropdowns especiais + campos locais do site. NÃO gated por site: no layout,
+  // o cliente arruma todos os seus campos custom.
+  const siteCustomDefs = allCustomDefs;
   const cfLabel = new Map(
     allCustomDefs.map((d) => [CF_PREFIX + d.customFieldName, d.displayName || d.customFieldName]),
   );

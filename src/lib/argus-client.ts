@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { getConfig } from "./argus-env";
 import { getActiveSite } from "./active-site";
+import { getSsoToken } from "./sso-token";
 
 // --- Armazenamento: helpers localStorage (padrão) e sessionStorage (override) ---
 function lsGet(key: string): string | null {
@@ -316,7 +317,20 @@ export async function argusFetch<T = unknown>(
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+  // Precedência do Bearer:
+  //   1) apiKey em config (uso legado — quando o app foi configurado com um
+  //      token estático via Configurações). Ainda respeitado.
+  //   2) SSO Token do localStorage (fluxo novo — populado por captureTokenFromUrl
+  //      após redirect do Portal Argus com #token= no fragment). Substitui o
+  //      cookie, que não era propagado entre subdomínios.
+  if (cfg.apiKey) {
+    headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+  } else {
+    const ssoToken = getSsoToken();
+    if (ssoToken && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${ssoToken}`);
+    }
+  }
   // Perfil ClearID (conta) por requisição. Não enviamos mais accountId — o
   // backend deriva a conta a partir do perfil (header X-ClearId-Environment).
   // Site ativo (cliente:site) — validado pelo backend contra os sites permitidos do JWT.
@@ -795,9 +809,40 @@ export interface ClearIdCustomFieldDef {
   isDeleted?: boolean;
 }
 
+/**
+ * Definição unificada — como o backend .NET devolve em GET /api/custom-fields?source=….
+ * Contém `storage` + metadados do Supabase (profile, sectionName, attachment).
+ */
+export interface UnifiedCustomFieldDef {
+  customFieldName: string;
+  displayName?: string | null;
+  customFieldType?: string | null;
+  storage: "clearid" | "supabase" | "both";
+  profile?: string | null;
+  sectionName?: string | null;
+  isReadOnly: boolean;
+  synchronizationEnabled: boolean;
+  isDeleted: boolean;
+  eTag?: string | null;
+  attachmentEnabled: boolean;
+  attachmentAccept?: string | null;
+  attachmentRequired: boolean;
+}
+
 export interface ClearIdCustomFieldSection {
   sectionName: string;
   identityCustomFields?: Array<{ name: string; index: number }>;
+}
+
+/** Section unificada — devolvida por GET /api/custom-fields/sections?source=…. */
+export interface UnifiedCustomFieldSection {
+  sectionName: string;
+  displayName?: string | null;
+  index: number;
+  storage: "clearid" | "supabase" | "both";
+  profile?: string | null;
+  fieldNames: string[];
+  eTag?: string | null;
 }
 
 /** Seção de campos personalizados, já normalizada para a UI. */
@@ -1092,6 +1137,77 @@ export const argusApi = {
     return data?.customFields ?? [];
   },
 
+  /**
+   * Lista unificada — ClearID + Supabase. Backend faz o merge por
+   * customFieldName e devolve `storage` em cada item. Use quando quiser
+   * substituir a dupla `listCustomFields()` + `supaFieldsQuery`.
+   *
+   * `source`: clearid (default) | supabase | both | all.
+   * `profile`: se omitido, backend usa o header X-ClearId-Environment.
+   */
+  listCustomFieldsUnified: async (opts?: {
+    source?: "clearid" | "supabase" | "both" | "all";
+    profile?: string;
+    includeDeleted?: boolean;
+  }): Promise<UnifiedCustomFieldDef[]> => {
+    const q = new URLSearchParams();
+    q.set("source", opts?.source ?? "all");
+    if (opts?.profile) q.set("profile", opts.profile);
+    if (opts?.includeDeleted) q.set("includeDeleted", "true");
+    const data = await unwrap<UnifiedCustomFieldDef[]>(
+      argusFetch(`/api/custom-fields?${q.toString()}`, undefined, { allSites: true }),
+    );
+    return Array.isArray(data) ? data : [];
+  },
+
+  /**
+   * Cria/atualiza campo com storage. Roteia entre ClearID/Supabase/ambos no backend.
+   * Substitui `createCustomField` + upsert direto no Supabase.
+   */
+  upsertCustomFieldUnified: (
+    payload: {
+      customFieldName?: string;
+      displayName: string;
+      customFieldType?: string;
+      storage: "clearid" | "supabase" | "both";
+      profile?: string;
+      sectionName?: string | null;
+      isReadOnly?: boolean;
+      synchronizationEnabled?: boolean;
+      eTag?: string | null;
+      attachmentEnabled?: boolean;
+      attachmentAccept?: string | null;
+      attachmentRequired?: boolean;
+    },
+    method: "POST" | "PUT" = "POST",
+    customFieldName?: string,
+  ) =>
+    unwrap<UnifiedCustomFieldDef>(
+      argusFetch(
+        method === "POST"
+          ? `/api/custom-fields`
+          : `/api/custom-fields/${encodeURIComponent(customFieldName ?? payload.customFieldName ?? "")}`,
+        { method, body: JSON.stringify(payload) },
+        { allSites: true },
+      ),
+    ),
+
+  /** Delete unificado — `storage` na query decide alvos. */
+  deleteCustomFieldUnified: (
+    customFieldName: string,
+    opts: { storage: "clearid" | "supabase" | "both"; profile?: string },
+  ) => {
+    const q = new URLSearchParams({ storage: opts.storage });
+    if (opts.profile) q.set("profile", opts.profile);
+    return unwrap<unknown>(
+      argusFetch(
+        `/api/custom-fields/${encodeURIComponent(customFieldName)}?${q.toString()}`,
+        { method: "DELETE" },
+        { allSites: true },
+      ),
+    );
+  },
+
   /** Cria uma definição de campo personalizado. O nome/tipo são imutáveis depois. */
   createCustomField: (payload: {
     customFieldName: string;
@@ -1133,6 +1249,60 @@ export const argusApi = {
         { allSites: true },
       ),
     ),
+
+  /**
+   * Lista unificada de sections — ClearID + Supabase, com `storage` por item.
+   * Backend faz o merge em GET /api/custom-fields/sections?source=….
+   */
+  listCustomFieldSectionsUnified: async (opts?: {
+    source?: "clearid" | "supabase" | "both" | "all";
+    profile?: string;
+  }): Promise<UnifiedCustomFieldSection[]> => {
+    const q = new URLSearchParams();
+    q.set("source", opts?.source ?? "all");
+    if (opts?.profile) q.set("profile", opts.profile);
+    const data = await unwrap<UnifiedCustomFieldSection[]>(
+      argusFetch(`/api/custom-fields/sections?${q.toString()}`),
+    );
+    return Array.isArray(data) ? data : [];
+  },
+
+  /** Upsert section com storage. */
+  upsertCustomFieldSectionUnified: (
+    payload: {
+      sectionName?: string;
+      displayName: string;
+      index?: number;
+      storage: "clearid" | "supabase" | "both";
+      profile?: string;
+      eTag?: string | null;
+    },
+    method: "POST" | "PUT" = "POST",
+    sectionName?: string,
+  ) =>
+    unwrap<UnifiedCustomFieldSection>(
+      argusFetch(
+        method === "POST"
+          ? `/api/custom-fields/sections`
+          : `/api/custom-fields/sections/${encodeURIComponent(sectionName ?? payload.sectionName ?? "")}`,
+        { method, body: JSON.stringify(payload) },
+      ),
+    ),
+
+  /** Delete section unificado. */
+  deleteCustomFieldSectionUnified: (
+    sectionName: string,
+    opts: { storage: "clearid" | "supabase" | "both"; profile?: string },
+  ) => {
+    const q = new URLSearchParams({ storage: opts.storage });
+    if (opts.profile) q.set("profile", opts.profile);
+    return unwrap<unknown>(
+      argusFetch(
+        `/api/custom-fields/sections/${encodeURIComponent(sectionName)}?${q.toString()}`,
+        { method: "DELETE" },
+      ),
+    );
+  },
 
   /** Lista todas as seções de campos personalizados (nome, exibição, campos). */
   listCustomFieldSections: async (): Promise<CustomFieldSectionSummary[]> => {

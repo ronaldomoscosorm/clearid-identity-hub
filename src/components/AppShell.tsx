@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle } from "lucide-react";
+import { redirectToLogout } from "@/lib/portal-auth";
 import { getTheme, applyTheme } from "@/lib/theme";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -11,7 +12,9 @@ import {
   useSystemObjectId,
   useActiveProfile,
   setSessionProfile,
+  type ClearIdSite,
 } from "@/lib/argus-client";
+import { corporateData } from "@/lib/corporatedata-client";
 import { useUserScope } from "@/lib/user-scope";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { useArgusConfig } from "@/lib/argus-env";
@@ -283,9 +286,37 @@ export function AppShell({ children }: { children: ReactNode }) {
   const siteId = useDefaultSiteId();
   const systemObjectId = useSystemObjectId();
   const activeProfile = useActiveProfile();
+
+  // Catálogo de clientes do CorporateData — resolve o cliente ativo (code) para
+  // o clienteId interno usado ao listar os sites.
+  const clientesQuery = useQuery({
+    queryKey: ["corporatedata", "clientes"],
+    queryFn: () => corporateData.listClientes(),
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+  const activeCliente = clientesQuery.data?.find(
+    (c) => c.code.toLowerCase() === activeProfile.toLowerCase(),
+  );
+
+  // Sites do cliente ativo vêm do CorporateData (scope ClearID), não mais do
+  // ClearID direto. `externalId` é o GUID do site no ClearID → mapeado em
+  // `siteId` para o restante do app continuar funcionando igual.
   const sitesQuery = useQuery({
-    queryKey: ["argus", "sites"],
-    queryFn: () => argusApi.listSites(),
+    queryKey: ["corporatedata", "sites", activeCliente?.id ?? null],
+    queryFn: async (): Promise<ClearIdSite[]> => {
+      if (!activeCliente) return [];
+      const sites = await corporateData.listClearIdSites(activeCliente.id);
+      return sites.map((s) => ({
+        siteId: s.externalId,
+        name: s.name,
+        description: s.description ?? null,
+        accountId: activeCliente.externalAccountId ?? undefined,
+        regionId: s.regionId ?? null,
+        timeZoneId: s.timeZoneId ?? null,
+      }));
+    },
+    enabled: !!activeCliente,
     staleTime: 5 * 60_000,
     retry: false,
   });
@@ -358,9 +389,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     queryClient.invalidateQueries({
       predicate: (q) => {
         const k0 = q.queryKey?.[0];
-        const k1 = q.queryKey?.[1];
         if (k0 === "backend-env") return false;
-        if (k0 === "argus" && k1 === "sites") return false;
+        // Catálogo do shell (clientes/sites do CorporateData) não pisca junto
+        // com o conteúdo da página.
+        if (k0 === "corporatedata") return false;
         return true;
       },
     });
@@ -444,6 +476,43 @@ export function AppShell({ children }: { children: ReactNode }) {
           <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:px-6">
             <SidebarTrigger className="-ml-1" />
             <div className="ml-auto flex items-center gap-3">
+              {currentUser?.username ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 font-normal"
+                      title={currentUser.username}
+                    >
+                      <UserCircle className="h-4 w-4 text-muted-foreground" />
+                      <span className="max-w-[160px] truncate text-xs">
+                        {currentUser.username}
+                      </span>
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuLabel className="flex flex-col gap-0.5">
+                      <span className="truncate font-medium">{currentUser.username}</span>
+                      {currentUser.argusProfile && (
+                        <span className="truncate text-xs font-normal text-muted-foreground">
+                          {currentUser.argusProfile}
+                        </span>
+                      )}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => redirectToLogout()}
+                      className="flex items-center gap-2 text-destructive focus:text-destructive"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Sair</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+
               <Button
                 variant="outline"
                 size="sm"
