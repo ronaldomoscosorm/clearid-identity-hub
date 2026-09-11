@@ -137,10 +137,16 @@ async function fetchConfig(
   profile: string | null | undefined,
   seedSiteId?: string | null,
 ): Promise<FormLayoutConfig> {
+  // Lê a MESMA linha que saveFormLayoutConfig grava: a do usuário técnico
+  // (auth.getUser). Antes usava `.limit(1)` sem user_id, o que pegava uma linha
+  // arbitrária quando `settings` tinha mais de uma → o formulário abria com o
+  // layout padrão em vez do configurado.
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
   const { data, error } = await supabase
     .from("settings")
     .select("preferences")
-    .limit(1)
+    .eq("user_id", userId ?? "")
     .maybeSingle();
   if (error) throw new Error(error.message);
   const prefs = (data?.preferences ?? {}) as Record<string, unknown>;
