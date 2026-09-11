@@ -13,7 +13,7 @@ import { redirectToPortalLogin } from "./portal-auth";
 export interface CurrentUser {
   username: string;
   apps: string[];
-  /** Perfil no app Argus (ex.: "Administrator", "Operator", "Viewer"). */
+  /** Perfil no app Argus (ex.: "Administrador", "Operador", "Consulta"). */
   argusProfile: string | null;
   /** Roles clássicas (legacy). */
   roles: string[];
@@ -121,19 +121,19 @@ export function useRequireCurrentUser() {
 
 /**
  * Helpers de permissão — mapeiam o perfil do JWT nas policies do backend.
- * Os nomes de perfil estão em inglês (base de AccessProfiles do Portal Argus).
  */
 export function isAdmin(user: CurrentUser | null | undefined): boolean {
-  return user?.argusProfile?.toLowerCase() === "administrator";
+  return user?.argusProfile?.toLowerCase() === "administrador";
 }
 
 export function canWrite(user: CurrentUser | null | undefined): boolean {
   const p = user?.argusProfile?.toLowerCase();
-  return p === "administrator" || p === "operator";
+  return p === "administrador" || p === "operador";
 }
 
 export function canRead(user: CurrentUser | null | undefined): boolean {
   return (
-    user?.apps?.some((a) => a.toLowerCase() === "clearid") === true && !!user?.argusProfile
+    user?.apps?.some((a) => a.toLowerCase() === "argus") === true &&
+    !!user?.argusProfile
   );
 }
