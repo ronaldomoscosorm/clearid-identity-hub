@@ -65,12 +65,11 @@ async function cdFetch<T>(path: string): Promise<T> {
     headers,
   });
 
-  if (res.status === 401 || res.status === 403) {
-    // Sem sessão/permissão no CorporateData — trata como catálogo vazio; o
-    // AuthGuard/UserScope já cuidam do fluxo de acesso negado.
-    return [] as unknown as T;
-  }
   if (!res.ok) {
+    // LANÇA em qualquer erro (inclusive 401/403). Não devolver [] silenciosamente:
+    // um 401 transitório (ex.: refetch em foco) sobrescreveria o catálogo já
+    // carregado com vazio, fazendo os clientes SUMIREM do dropdown. Com throw, o
+    // React Query mantém o último dado bom; quem trata "sem acesso" é o AuthGuard.
     throw new Error(`CorporateData ${path} → HTTP ${res.status}`);
   }
 

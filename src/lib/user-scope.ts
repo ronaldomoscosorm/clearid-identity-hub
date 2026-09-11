@@ -48,6 +48,7 @@ export function useUserScope(): UserScope {
     queryFn: () => corporateData.listClientes(),
     staleTime: 30 * 60_000,
     retry: false,
+    refetchOnWindowFocus: false,
   });
 
   const grantsKey = grants.join(",");

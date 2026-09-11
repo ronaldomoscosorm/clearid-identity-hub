@@ -294,6 +294,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     queryFn: () => corporateData.listClientes(),
     staleTime: 30 * 60_000,
     retry: false,
+    refetchOnWindowFocus: false,
   });
   const activeCliente = clientesQuery.data?.find(
     (c) => c.code.toLowerCase() === activeProfile.toLowerCase(),
