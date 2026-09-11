@@ -68,15 +68,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (redirecting) return <AuthSplash label="Redirecionando ao login…" />;
 
   // Autenticado mas SEM grant para o app "clearid" → tela de acesso negado.
+  // NÃO bloqueia mais por falta de sites: a permissão de SITE é enforçada no
+  // backend (ArgusSiteRequirement/policies do ArgusClearId.Api). Bloquear aqui
+  // deixava o app inteiro inacessível quando o `sites` do /me vinha vazio.
   if (!bypassAccessScope && data && data.username) {
     const hasArgusApp = data.apps?.some(
       (a) => a?.toLowerCase() === ARGUS_APP_CODE,
     );
     if (!hasArgusApp) {
       return <AccessDenied username={data.username} reason="no-app" />;
-    }
-    if (!data.sites || data.sites.length === 0) {
-      return <AccessDenied username={data.username} reason="no-sites" />;
     }
   }
 
