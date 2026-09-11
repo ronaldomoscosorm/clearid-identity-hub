@@ -87,7 +87,11 @@ function IdentitiesList() {
   // (ou até restaurar uma pesquisa). Sem isso, se o site padrão fosse aplicado
   // DEPOIS do primeiro render (ou o localStorage tivesse um site antigo), o
   // filtro ficava travado no valor errado / vazio na primeira carga.
-  const siteManuallySet = useRef<boolean>(Boolean(persistedSearch?.fSite));
+  // Começa SEMPRE false: só o clique do usuário (onValueChange) marca como
+  // manual. NÃO derivar de persistedSearch — o site persistido foi auto-
+  // preenchido por este efeito, não escolhido; tratá-lo como manual travava o
+  // filtro vazio ao remontar a tela (troca de cliente no login).
+  const siteManuallySet = useRef<boolean>(false);
   useEffect(() => {
     if (siteManuallySet.current) return;
     if (siteId) setFSite(siteId);
