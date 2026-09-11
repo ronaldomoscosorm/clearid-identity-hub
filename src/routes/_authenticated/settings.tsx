@@ -136,20 +136,44 @@ function Settings() {
     qc.invalidateQueries();
 
     // Persiste os defaults por (USUÁRIO + CLIENTE) — o que reaplica ao logar.
-    if (userKey) {
-      updateUserClientDefaults.mutate({
-        userKey,
-        profile: configuredProfile,
-        defaults: {
-          defaultSiteId: siteId || null,
-          defaultSiteName: siteName ?? null,
-          defaultRuleId: ruleId || null,
-          defaultRuleName: ruleName ?? null,
-          systemObjectId: systemObjectId || null,
+    // eslint-disable-next-line no-console
+    console.info("[clearid] save user-defaults →", {
+      userKey,
+      profile: configuredProfile,
+      siteId,
+      systemObjectId,
+      ruleId,
+    });
+    if (!userKey) {
+      toast.warning(
+        "Não foi possível identificar o usuário (username vazio no /me) — defaults por usuário NÃO gravados.",
+      );
+    } else {
+      updateUserClientDefaults.mutate(
+        {
+          userKey,
+          profile: configuredProfile,
+          defaults: {
+            defaultSiteId: siteId || null,
+            defaultSiteName: siteName ?? null,
+            defaultRuleId: ruleId || null,
+            defaultRuleName: ruleName ?? null,
+            systemObjectId: systemObjectId || null,
+          },
         },
-      });
+        {
+          onError: (e) =>
+            toast.error(`Falha ao gravar defaults do cliente: ${(e as Error).message}`),
+        },
+      );
       // Garante que este cliente seja o padrão do usuário (aterrissa aqui ao logar).
-      updateUserDefaultProfile.mutate({ userKey, defaultProfile: configuredProfile });
+      updateUserDefaultProfile.mutate(
+        { userKey, defaultProfile: configuredProfile },
+        {
+          onError: (e) =>
+            toast.error(`Falha ao gravar cliente padrão: ${(e as Error).message}`),
+        },
+      );
     }
 
     pushSettings()
