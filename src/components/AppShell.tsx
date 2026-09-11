@@ -358,8 +358,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const appliedDefaultsRef = useRef<string | null>(null);
   useEffect(() => {
     const d = clientDefaults.data;
+    // eslint-disable-next-line no-console
+    console.info("[clearid] apply defaults →", {
+      userKey,
+      activeProfile,
+      appliedRef: appliedDefaultsRef.current,
+      data: d,
+    });
     if (!d) return;
     if (appliedDefaultsRef.current === activeProfile) return;
+    // Nada a aplicar (linha vazia / ainda sem defaults) → NÃO marca como aplicado,
+    // para que um resultado com dados (ex.: após refetch) ainda aplique.
+    if (!d.defaultSiteId && !d.systemObjectId && !d.defaultRuleId) return;
     appliedDefaultsRef.current = activeProfile;
     if (d.defaultSiteId) {
       // setConfiguredSiteId já remove o override de sessão, então o default
