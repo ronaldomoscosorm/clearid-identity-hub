@@ -362,8 +362,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (appliedDefaultsRef.current === activeProfile) return;
     appliedDefaultsRef.current = activeProfile;
     if (d.defaultSiteId) {
+      // setConfiguredSiteId já remove o override de sessão, então o default
+      // aparece na topbar na hora. (NÃO chamar setSessionSiteId(null): ele grava
+      // override vazio "" que faz getDefaultSiteId retornar null e esconde o site.)
       setConfiguredSiteId(d.defaultSiteId);
-      setSessionSiteId(null); // deixa o default do usuário aparecer na topbar
     }
     if (d.systemObjectId) setSystemObjectId(d.systemObjectId);
     if (d.defaultRuleId) {
