@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle } from "lucide-react";
 import { redirectToLogout } from "@/lib/portal-auth";
 import { getTheme, applyTheme } from "@/lib/theme";
@@ -8,16 +8,20 @@ import { useQuery } from "@tanstack/react-query";
 import {
   argusApi,
   setSessionSiteId,
+  setConfiguredSiteId,
+  setSystemObjectId,
   useDefaultSiteId,
   useSystemObjectId,
   useActiveProfile,
   setSessionProfile,
+  setDefaultProfile,
   type ClearIdSite,
 } from "@/lib/argus-client";
 import { corporateData } from "@/lib/corporatedata-client";
 import { useUserScope } from "@/lib/user-scope";
+import { useUserClientDefaults, useUserDefaultProfile } from "@/lib/user-defaults";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
-import { useArgusConfig } from "@/lib/argus-env";
+import { useArgusConfig, saveConfig, getConfig } from "@/lib/argus-env";
 import { useBranding, useApplyBranding } from "@/lib/branding";
 import { useT, LANGS } from "@/lib/i18n";
 import { FlagIcon } from "@/components/FlagIcon";
@@ -331,6 +335,46 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { restrictByUser, allowedClientCodes, visibleProfiles, filterSites } = useUserScope();
   useEnsureActiveSite(restrictByUser ? userSites : undefined);
   const visibleSites = filterSites(sitesQuery.data ?? [], activeProfile);
+
+  // Defaults por usuário real (chave = username do /me).
+  const userKey = currentUser?.username || undefined;
+
+  // No LOGIN, aterrissa no cliente padrão do usuário (persistido no servidor).
+  // Uma vez por sessão; depois o usuário troca livremente pela topbar.
+  const userDefaultProfile = useUserDefaultProfile(userKey);
+  const appliedDefaultProfileRef = useRef(false);
+  useEffect(() => {
+    if (appliedDefaultProfileRef.current) return;
+    const dp = userDefaultProfile.data;
+    if (!dp) return;
+    appliedDefaultProfileRef.current = true;
+    if (dp !== activeProfile) setDefaultProfile(dp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userDefaultProfile.data]);
+
+  // Ao ENTRAR num cliente, aplica os defaults DESTE usuário NAQUELE cliente
+  // (site/system/regra) na topbar. Uma vez por cliente — depois pode trocar.
+  const clientDefaults = useUserClientDefaults(userKey, activeProfile);
+  const appliedDefaultsRef = useRef<string | null>(null);
+  useEffect(() => {
+    const d = clientDefaults.data;
+    if (!d) return;
+    if (appliedDefaultsRef.current === activeProfile) return;
+    appliedDefaultsRef.current = activeProfile;
+    if (d.defaultSiteId) {
+      setConfiguredSiteId(d.defaultSiteId);
+      setSessionSiteId(null); // deixa o default do usuário aparecer na topbar
+    }
+    if (d.systemObjectId) setSystemObjectId(d.systemObjectId);
+    if (d.defaultRuleId) {
+      saveConfig({
+        ...getConfig(),
+        defaultRuleId: d.defaultRuleId,
+        defaultRuleName: d.defaultRuleName ?? undefined,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientDefaults.data, activeProfile]);
 
   // Menus exibidos: filtrados pelas keys permitidas ao usuário (do backend).
   const allowedMenuKeys = menuData ? collectMenuKeys(menuData.tree) : null;

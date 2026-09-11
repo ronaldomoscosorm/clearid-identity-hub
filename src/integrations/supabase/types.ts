@@ -60,6 +60,63 @@ export type Database = {
         }
         Relationships: []
       }
+      user_client_defaults: {
+        Row: {
+          created_at: string
+          default_rule_id: string | null
+          default_rule_name: string | null
+          default_site_id: string | null
+          default_site_name: string | null
+          profile: string
+          system_object_id: string | null
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          default_rule_id?: string | null
+          default_rule_name?: string | null
+          default_site_id?: string | null
+          default_site_name?: string | null
+          profile: string
+          system_object_id?: string | null
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          default_rule_id?: string | null
+          default_rule_name?: string | null
+          default_site_id?: string | null
+          default_site_name?: string | null
+          profile?: string
+          system_object_id?: string | null
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
+      user_defaults: {
+        Row: {
+          created_at: string
+          default_profile: string | null
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          default_profile?: string | null
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          default_profile?: string | null
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
       custom_field_sections: {
         Row: {
           created_at: string

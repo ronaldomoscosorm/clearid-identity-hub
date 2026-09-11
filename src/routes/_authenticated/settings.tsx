@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
@@ -24,6 +24,12 @@ import { Badge } from "@/components/ui/badge";
 import { pushSettings } from "@/lib/supabase-settings";
 import { useT } from "@/lib/i18n";
 import { useUserScope } from "@/lib/user-scope";
+import { useCurrentUser } from "@/lib/current-user";
+import {
+  useUserClientDefaults,
+  useUpdateUserClientDefaults,
+  useUpdateUserDefaultProfile,
+} from "@/lib/user-defaults";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "Configurações — Argus ClearID" }] }),
@@ -41,13 +47,37 @@ function Settings() {
   const configuredProfile = useDefaultProfile();
   const scope = useUserScope();
 
-  // Troca o cliente PADRÃO (perfil ClearID) salvo em Configurações — e limpa o
-  // override de sessão para o novo padrão valer. Os sites/systems/teams são
-  // escopados por cliente no backend, então recarregamos tudo e limpamos as
-  // seleções do cliente anterior para não misturar dados.
+  // Usuário REAL do ClearID (chave dos defaults por usuário).
+  const { data: currentUser } = useCurrentUser();
+  const userKey = currentUser?.username || undefined;
+
+  // Defaults por (USUÁRIO + CLIENTE): site/regra/system. Ao trocar o cliente
+  // configurado, o formulário reflete os defaults salvos do usuário no cliente.
+  const clientDefaultsQuery = useUserClientDefaults(userKey, configuredProfile);
+  const updateUserClientDefaults = useUpdateUserClientDefaults();
+  const updateUserDefaultProfile = useUpdateUserDefaultProfile();
+  const loadedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const d = clientDefaultsQuery.data;
+    if (!d) return;
+    if (loadedRef.current === configuredProfile) return; // já populou este cliente
+    loadedRef.current = configuredProfile;
+    setSiteId(d.defaultSiteId ?? "");
+    setSystemObjectIdState(d.systemObjectId ?? "");
+    setRuleId(d.defaultRuleId ?? "");
+    // Aplica também na topbar (default do usuário naquele cliente).
+    setConfiguredSiteId(d.defaultSiteId ?? null);
+    setSystemObjectId(d.systemObjectId ?? null);
+  }, [clientDefaultsQuery.data, configuredProfile]);
+
+  // Troca o cliente PADRÃO do usuário (persistido no servidor por user_key) e
+  // limpa o override de sessão. Reseta o ref para o form recarregar os defaults
+  // do usuário no novo cliente.
   const changeProfile = (code: string) => {
     if (code === configuredProfile) return;
     setDefaultProfile(code);
+    if (userKey) updateUserDefaultProfile.mutate({ userKey, defaultProfile: code });
+    loadedRef.current = null;
     setSiteId("");
     setSystemObjectIdState("");
     setRuleId("");
@@ -90,11 +120,12 @@ function Settings() {
   });
 
   const handleSave = () => {
+    const siteName = sitesQuery.data?.find((s) => s.siteId === siteId)?.name;
     const ruleName = teamsQuery.data?.find((t) => t.teamId === ruleId)?.name;
     const nextCfg: ArgusEnvConfig = {
       ...cfg,
       defaultSiteId: siteId || undefined,
-      defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name,
+      defaultSiteName: siteName,
       defaultRuleId: ruleId || undefined,
       defaultRuleName: ruleName,
     };
@@ -103,6 +134,24 @@ function Settings() {
     setSystemObjectId(systemObjectId || null);
     setCfg(nextCfg);
     qc.invalidateQueries();
+
+    // Persiste os defaults por (USUÁRIO + CLIENTE) — o que reaplica ao logar.
+    if (userKey) {
+      updateUserClientDefaults.mutate({
+        userKey,
+        profile: configuredProfile,
+        defaults: {
+          defaultSiteId: siteId || null,
+          defaultSiteName: siteName ?? null,
+          defaultRuleId: ruleId || null,
+          defaultRuleName: ruleName ?? null,
+          systemObjectId: systemObjectId || null,
+        },
+      });
+      // Garante que este cliente seja o padrão do usuário (aterrissa aqui ao logar).
+      updateUserDefaultProfile.mutate({ userKey, defaultProfile: configuredProfile });
+    }
+
     pushSettings()
       .then(() => toast.success(t("settings.toast.saved")))
       .catch(() => toast.warning(t("settings.toast.savedLocalSyncFail")));
