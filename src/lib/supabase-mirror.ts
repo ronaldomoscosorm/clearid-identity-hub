@@ -179,25 +179,13 @@ export async function saveIdentityCustomFields(
   if (error) console.error("[mirror] falha ao gravar campos da identidade:", error.message);
 }
 
-/** Faz upsert das definições globais de campos personalizados (por nome). */
-export async function mirrorCustomFieldDefs(defs: ClearIdCustomFieldDef[]): Promise<void> {
-  if (!defs?.length) return;
-
-  const rows: CfdInsert[] = defs
-    .filter((d) => d.customFieldName)
-    .map((d) => ({
-      custom_field_name: d.customFieldName,
-      display_name: (d.displayName ? { default: d.displayName } : {}) as Json,
-      custom_field_type: d.customFieldType ?? null,
-      is_read_only: d.isReadOnly ?? false,
-      synchronization_enabled: d.synchronizationEnabled ?? true,
-      is_deleted: d.isDeleted ?? false,
-      etag: d.eTag ?? null,
-    }));
-  if (!rows.length) return;
-
-  const { error } = await supabase
-    .from("custom_field_definitions")
-    .upsert(rows, { onConflict: "custom_field_name" });
-  if (error) console.error("[mirror] falha ao espelhar definições de campos:", error.message);
+/**
+ * DESATIVADO: o espelhamento das definições de campos para o Supabase agora é
+ * responsabilidade do backend unificado (`/api/custom-fields`, source=all, via
+ * SupabaseCustomFieldRepository). O upsert antigo aqui usava `on_conflict`
+ * incompatível com a constraint (profile, custom_field_name) e sem o `profile`,
+ * gerando 400. No-op para não escrever no Supabase pelo bundle público.
+ */
+export async function mirrorCustomFieldDefs(_defs: ClearIdCustomFieldDef[]): Promise<void> {
+  return;
 }
