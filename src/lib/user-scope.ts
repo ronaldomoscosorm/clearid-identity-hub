@@ -44,6 +44,18 @@ export function useUserScope(): UserScope {
         ? clientes.map((c) => ({ code: c.code, label: c.name }))
         : CLEARID_PROFILES;
 
+    // DIAGNÓSTICO (temporário): confirma qual build está no ar e o que resolveu.
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line no-console
+      console.info(
+        "[clearid] BUILD=user-scope-v2-nofilter | clientes=",
+        clientes?.length ?? "loading",
+        "| visibleProfiles=",
+        visibleProfiles.length,
+        visibleProfiles.map((p) => p.code),
+      );
+    }
+
     const allowedClientCodes = new Set(visibleProfiles.map((p) => p.code.toLowerCase()));
 
     // Sem restrição no front: o backend valida acesso por site.
