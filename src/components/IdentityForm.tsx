@@ -287,9 +287,12 @@ export function IdentityForm({
   });
   const setExtraField = (key: string, value: string) =>
     setExtra((prev) => ({ ...prev, [key]: value }));
+  const activeProfile = useActiveProfile();
+  // Campos customizáveis unificados (ClearID + Supabase). O layout referencia
+  // campos `cf:<name>` cuja definição pode vir do Supabase — por isso `source:"all"`.
   const fieldsQuery = useQuery({
-    queryKey: ["custom-fields"],
-    queryFn: () => argusApi.listCustomFields(),
+    queryKey: ["custom-fields", "unified", activeProfile],
+    queryFn: () => argusApi.listCustomFieldsUnified({ source: "all", profile: activeProfile }),
     staleTime: 5 * 60 * 1000,
   });
   const sectionQuery = useQuery({
@@ -316,7 +319,6 @@ export function IdentityForm({
     });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { alias } = useIdentityFieldLabels();
-  const activeProfile = useActiveProfile();
   const { config: formLayoutConfig } = useFormLayoutConfig(activeProfile, siteId);
 
   // Tipos de trabalhador (Supabase) → mapeados para o workerTypeCode do Argus.
@@ -523,6 +525,78 @@ export function IdentityForm({
   // Dropdowns especiais (opções value/label vinculadas a campos do ClearID).
   const { byName: specialByName, labelByName: specialLabelByName } = useSpecialFields();
 
+  // Seletor de data compartilhado (campos do site e do catálogo). Usa
+  // Popover+Calendário em vez de <input type="date">: o input nativo mostra a
+  // data de hoje em cinza quando vazio, dando a falsa impressão de preenchido.
+  // Aqui, sem valor, aparece o placeholder ("Selecionar data"); com valor
+  // vencido, o badge "Vencida"; e o botão de limpar permite zerar (mantendo o
+  // histórico do anexo comprobatório, que não é tocado ao limpar a data).
+  const renderDatePicker = (id: string, name: string, disabled: boolean): ReactNode => {
+    const iso = toDateInputValue(customFields[name] ?? "");
+    const selected = iso ? parse(iso, "yyyy-MM-dd", new Date()) : undefined;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isExpired = !!selected && selected < today;
+    return (
+      <>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              id={id}
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              className={cn(
+                "w-full justify-start text-left font-normal",
+                !selected && "text-muted-foreground",
+                isExpired &&
+                  "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {selected
+                ? format(selected, "dd/MM/yyyy", { locale: ptBR })
+                : t("identityForm.datePlaceholder")}
+              {isExpired && (
+                <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
+                  {t("identityForm.expiredBadge")}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              locale={ptBR}
+              selected={selected}
+              onSelect={(d) => setField(name, d ? format(d, "yyyy-MM-dd") : "")}
+              initialFocus
+              className={cn("p-3 pointer-events-auto")}
+            />
+            {selected && !disabled && (
+              <div className="border-t p-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setField(name, "")}
+                >
+                  {t("identityForm.clear")}
+                </Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+        {isExpired && (
+          <p className="text-xs font-medium text-destructive">
+            {t("identityForm.expiredDate")}
+          </p>
+        )}
+      </>
+    );
+  };
+
   const renderSiteField = (sf: SiteFieldLite) => {
     const name = sf.definition?.custom_field_name ?? sf.id;
     const kind = siteFieldKind(sf.definition?.custom_field_type);
@@ -562,10 +636,12 @@ export function IdentityForm({
               ))}
             </SelectContent>
           </Select>
+        ) : kind === "date" ? (
+          renderDatePicker(`sf-${sf.id}`, name, disabled)
         ) : (
           <Input
             id={`sf-${sf.id}`}
-            type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
+            type={kind === "number" ? "number" : "text"}
             value={value}
             onChange={(e) => setField(name, e.target.value)}
             className={cn(err && "border-destructive")}
@@ -626,10 +702,12 @@ export function IdentityForm({
               disabled={disabled}
             />
           </div>
+        ) : kind === "date" ? (
+          renderDatePicker(`cf-${name}`, name, disabled)
         ) : (
           <Input
             id={`cf-${name}`}
-            type={kind === "date" ? "date" : kind === "number" ? "number" : "text"}
+            type={kind === "number" ? "number" : "text"}
             value={value}
             onChange={(e) => setField(name, e.target.value)}
             disabled={disabled}
@@ -1023,23 +1101,33 @@ export function IdentityForm({
     const { name: _fullName, ...baseData } = parsedData;
     const { firstName, lastName } = splitName(_fullName);
     const cfErrors: Record<string, string> = {};
-    const dateFieldNames = new Set(
-      defs.filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName),
-    );
+    // Nomes de campos de data — do catálogo (defs) E dos campos do site do
+    // tipo de trabalhador (certidões costumam ser campos do site). Cobre
+    // normalização de sentinela e o "zerar" em ambos os caminhos de render.
+    const dateFieldNames = new Set<string>([
+      ...defs.filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName),
+      ...siteFields
+        .filter((sf) => sf.definition && isDate(sf.definition.custom_field_type))
+        .map((sf) => sf.definition!.custom_field_name),
+    ]);
     const cf: Record<string, string> = {};
     for (const [k, v] of Object.entries(customFields)) {
       const key = k.trim();
       if (!key) continue;
       if (dateFieldNames.has(key)) {
         const raw = (v ?? "").trim();
-        if (!raw) {
+        // Normaliza sentinelas (0001-/1900-01-01/1970-01-01 que o ClearID
+        // devolve para "sem valor") → vazio. Registros sem informação no
+        // Supabase ficam com data nula, não com data fictícia.
+        const norm = toDateInputValue(raw);
+        if (!norm) {
           // Mantém o campo no payload (PUT do ClearID é replace);
-          // valor vazio significa "sem data".
+          // valor vazio significa "sem data" (permite zerar a certidão).
           cf[key] = "";
           continue;
         }
         // Aceita ISO (vindo do GET sem edição) ou dd/MM/yyyy
-        const iso = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : brToIso(raw);
+        const iso = /^\d{4}-\d{2}-\d{2}/.test(norm) ? norm.slice(0, 10) : brToIso(norm);
         if (iso === null || iso === "") {
           cfErrors[`cf-${key}`] = t("identityForm.validation.invalidDate");
           continue;
@@ -1055,6 +1143,12 @@ export function IdentityForm({
         // Campo de data do site (input nativo → ISO): normaliza para yyyy-MM-dd.
         cf[key] = /^\d{4}-\d{2}-\d{2}/.test(val) ? val.slice(0, 10) : val;
       }
+    }
+    // Datas do layout que o usuário não tocou (ausentes em customFields) entram
+    // como vazio → a rota envia null e o ClearID grava nulo, em vez de assumir a
+    // data de hoje num registro novo sem informação.
+    for (const name of consumedCf) {
+      if (dateFieldNames.has(name) && !(name in cf)) cf[name] = "";
     }
     if (Object.keys(cfErrors).length) {
       setErrors(cfErrors);

@@ -136,14 +136,6 @@ function Settings() {
     qc.invalidateQueries();
 
     // Persiste os defaults por (USUÁRIO + CLIENTE) — o que reaplica ao logar.
-    // eslint-disable-next-line no-console
-    console.info("[clearid] save user-defaults →", {
-      userKey,
-      profile: configuredProfile,
-      siteId,
-      systemObjectId,
-      ruleId,
-    });
     if (!userKey) {
       toast.warning(
         "Não foi possível identificar o usuário (username vazio no /me) — defaults por usuário NÃO gravados.",

@@ -87,9 +87,19 @@ function NewIdentity() {
       const fail: string[] = [];
 
       // Etapa 2 — campos personalizados (endpoint dedicado).
+      // NÃO re-filtra vazios: o formulário (buildPayload) já removeu os campos
+      // que não devem ir e mantém `""` de propósito para datas não preenchidas —
+      // enviar o vazio faz o ClearID gravar nulo em vez de assumir a data de hoje
+      // (registro novo sem informação = data nula). Só descarta null/undefined.
       const cf = Object.entries(vars.data.customFields ?? {})
-        .filter(([, v]) => (v ?? "").trim())
-        .map(([customFieldName, customFieldValue]) => ({ customFieldName, customFieldValue }));
+        .filter(([, v]) => v != null)
+        .map(([customFieldName, v]) => ({
+          customFieldName,
+          // Vazio → null: o ClearID grava nulo (não a data de hoje) para datas
+          // não preenchidas. Só datas chegam vazias aqui (buildPayload já
+          // descartou os demais campos sem valor).
+          customFieldValue: (v ?? "").toString().trim() === "" ? null : String(v),
+        }));
       if (cf.length) {
         try {
           await argusApi.patchIdentityCustomFields(data.identityId, cf);

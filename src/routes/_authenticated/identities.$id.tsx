@@ -104,11 +104,18 @@ function IdentityDetail() {
 
       // Etapa — campos personalizados via PATCH (isola erros de valor, ex.: CPF
       // inválido, que não bloqueiam mais a atualização da identity).
+      // NÃO re-filtra vazios aqui: o formulário (buildPayload) já removeu os
+      // campos que não devem ser enviados e mantém `""` de propósito para datas
+      // que o usuário zerou (ex.: certidão vencida) — o PATCH precisa levar o
+      // vazio para o ClearID limpar o valor. Só descarta null/undefined.
       const cf = Object.entries(vars.data.customFields ?? {})
-        .filter(([, v]) => (v ?? "").toString().trim())
-        .map(([customFieldName, customFieldValue]) => ({
+        .filter(([, v]) => v != null)
+        .map(([customFieldName, v]) => ({
           customFieldName,
-          customFieldValue: String(customFieldValue),
+          // Vazio → null (o ClearID limpa o campo com null; "" numa data não
+          // limpa e acaba virando a data de hoje). Só datas chegam vazias aqui,
+          // pois o buildPayload já descartou os demais campos sem valor.
+          customFieldValue: (v ?? "").toString().trim() === "" ? null : String(v),
         }));
       if (cf.length) {
         try {

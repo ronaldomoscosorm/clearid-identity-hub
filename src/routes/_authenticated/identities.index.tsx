@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
 import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Camera, Users, UserCheck, UserX, ArrowRight, Paperclip, ExternalLink } from "lucide-react";
 import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
+import { corporateData } from "@/lib/corporatedata-client";
 import { useCurrentAttachments, signedUrlFor } from "@/lib/attachments";
 import { pickLang } from "@/lib/custom-fields";
 import { supabase } from "@/integrations/supabase/client";
@@ -97,28 +98,45 @@ function IdentitiesList() {
     if (siteId) setFSite(siteId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [siteId]);
-  // DIAGNÓSTICO (temporário): confirma qual build está no ar nesta tela.
-  // eslint-disable-next-line no-console
-  console.info("[clearid] identities-filter-v2 →", {
-    siteId,
-    fSite,
-    manuallySet: siteManuallySet.current,
-    persisted: persistedSearch?.fSite ?? null,
-  });
 
+  // Sites do filtro vêm do CorporateData (mesma fonte da topbar), não do
+  // /api/sites do ClearID (que retorna vazio para este usuário). Resolve o
+  // cliente ativo (code do profile) → clienteId e lista os sites de escopo
+  // ClearID, mapeando externalId → siteId como o resto do app espera.
+  const activeProfile = useActiveProfile();
+  const clientesQuery = useQuery({
+    queryKey: ["corporatedata", "clientes"],
+    queryFn: () => corporateData.listClientes(),
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const activeCliente = clientesQuery.data?.find(
+    (c) => c.code.toLowerCase() === activeProfile.toLowerCase(),
+  );
   const sitesQuery = useQuery({
-    queryKey: ["sites"],
-    queryFn: () => argusApi.listSites(),
+    queryKey: ["corporatedata", "sites", activeCliente?.id ?? null],
+    queryFn: async () => {
+      if (!activeCliente) return [];
+      const list = await corporateData.listClearIdSites(activeCliente.id);
+      return list.map((s) => ({ siteId: s.externalId, name: s.name }));
+    },
+    enabled: !!activeCliente,
     staleTime: 5 * 60 * 1000,
+    retry: false,
   });
   const sites = (sitesQuery.data ?? [])
     .slice()
-    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
+    .sort((a, b) => {
+      // Site padrão (o da topbar) sempre em primeiro; o resto alfabético.
+      if (a.siteId === siteId && b.siteId !== siteId) return -1;
+      if (b.siteId === siteId && a.siteId !== siteId) return 1;
+      return (a.name ?? "").localeCompare(b.name ?? "", "pt-BR");
+    });
 
   // Tipos de trabalhador cadastrados (mesma fonte do menu/Nova identity).
   // O filtro lista os tipos existentes por nome; a busca ClearID recebe o
   // código Argus (Colaborador/Terceiros) mapeado a partir do tipo escolhido.
-  const activeProfile = useActiveProfile();
   const workerTypesQuery = useQuery({
     queryKey: ["worker-types", activeProfile],
     queryFn: async () => {

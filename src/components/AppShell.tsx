@@ -358,13 +358,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const appliedDefaultsRef = useRef<string | null>(null);
   useEffect(() => {
     const d = clientDefaults.data;
-    // eslint-disable-next-line no-console
-    console.info("[clearid] apply defaults →", {
-      userKey,
-      activeProfile,
-      appliedRef: appliedDefaultsRef.current,
-      data: d,
-    });
     if (!d) return;
     if (appliedDefaultsRef.current === activeProfile) return;
     // Nada a aplicar (linha vazia / ainda sem defaults) → NÃO marca como aplicado,
