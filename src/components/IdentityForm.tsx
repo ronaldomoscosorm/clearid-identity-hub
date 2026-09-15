@@ -941,6 +941,23 @@ export function IdentityForm({
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
         );
+      case "external_id":
+        return (
+          <div key={k} className="space-y-2 sm:col-span-2 sm:max-w-sm">
+            <Label htmlFor="externalId">
+              {alias("external_id", t("identityForm.externalId"))}
+              {star}
+            </Label>
+            <Input
+              id="externalId"
+              value={externalId}
+              onChange={(e) => setExternalId(e.target.value)}
+            />
+            {errors.externalId && (
+              <p className="text-xs text-destructive">{errors.externalId}</p>
+            )}
+          </div>
+        );
       case "last_name":
         return null; // Sobrenome deixou de ser campo separado (unificado em Nome).
       case "display_name":

@@ -41,6 +41,7 @@ export const STANDARD_IDENTITY_FIELDS: StandardIdentityField[] = [
   { key: "first_name", required: true },
   { key: "display_name", required: false },
   { key: "email", required: true },
+  { key: "external_id", required: false },
   { key: "company_site_id", required: true },
   { key: "company_id", required: false },
   { key: "middle_name", required: false },

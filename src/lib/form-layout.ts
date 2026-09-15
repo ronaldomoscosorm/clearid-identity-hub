@@ -136,7 +136,7 @@ function rawForClient(
 async function fetchConfig(
   profile: string | null | undefined,
   seedSiteId?: string | null,
-): Promise<FormLayoutConfig> {
+): Promise<{ config: FormLayoutConfig; isDefault: boolean }> {
   // Lê a MESMA linha que saveFormLayoutConfig grava: a do usuário técnico
   // (auth.getUser). Antes usava `.limit(1)` sem user_id, o que pegava uma linha
   // arbitrária quando `settings` tinha mais de uma → o formulário abria com o
@@ -150,7 +150,10 @@ async function fetchConfig(
     .maybeSingle();
   if (error) throw new Error(error.message);
   const prefs = (data?.preferences ?? {}) as Record<string, unknown>;
-  return normalizeConfig(rawForClient(prefs, profile, seedSiteId));
+  const raw = rawForClient(prefs, profile, seedSiteId);
+  // isDefault = o cliente ainda NÃO tem layout salvo (cai no padrão). O designer
+  // usa isso para semear o padrão com os campos do cliente, não com todo o ClearID.
+  return { config: normalizeConfig(raw), isDefault: raw == null };
 }
 
 /**
@@ -166,7 +169,11 @@ export function useFormLayoutConfig(profile?: string | null, seedSiteId?: string
     staleTime: 0,
     refetchOnMount: "always",
   });
-  return { config: query.data ?? normalizeConfig(null), loaded: query.isSuccess };
+  return {
+    config: query.data?.config ?? normalizeConfig(null),
+    loaded: query.isSuccess,
+    isDefault: query.data?.isDefault ?? true,
+  };
 }
 
 /** Lê as preferences atuais do usuário técnico (para gravação). */

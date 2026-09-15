@@ -8,6 +8,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "siteFields.form.allowedSite": "— Permitido no cliente (pool do layout) —",
     "identityForm.validation.photoRequired": "A foto é obrigatória.",
     "identityForm.validation.photoRequiredEditHint": "Adicione a foto no painel acima antes de salvar.",
+    "identityForm.externalId": "ID externo (integração)",
     "customFields.form.expiration": "Calcular vencimento no cadastro",
     "customFields.form.expirationHint": "Quando ligado, a data mostra o alerta \"Vencida\" se estiver no passado.",
     // Navegação
@@ -167,6 +168,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "siteFields.form.allowedSite": "— Allowed for client (layout pool) —",
     "identityForm.validation.photoRequired": "Photo is required.",
     "identityForm.validation.photoRequiredEditHint": "Add the photo in the panel above before saving.",
+    "identityForm.externalId": "External ID (integration)",
     "customFields.form.expiration": "Track expiration on registration",
     "customFields.form.expirationHint": "When on, the date shows an \"Expired\" alert if it is in the past.",
     "nav.identities": "People",
@@ -322,6 +324,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "siteFields.form.allowedSite": "— Permitido para el cliente (pool del layout) —",
     "identityForm.validation.photoRequired": "La foto es obligatoria.",
     "identityForm.validation.photoRequiredEditHint": "Agregue la foto en el panel de arriba antes de guardar.",
+    "identityForm.externalId": "ID externo (integración)",
     "customFields.form.expiration": "Calcular vencimiento en el registro",
     "customFields.form.expirationHint": "Cuando está activo, la fecha muestra la alerta \"Vencida\" si está en el pasado.",
     "nav.identities": "Personas",

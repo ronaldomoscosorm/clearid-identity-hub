@@ -22,12 +22,13 @@ drop index if exists public.scf_allowed_native;
 drop index if exists public.scf_entity_idx;
 
 -- 3) Novo escopo por cliente (tabela vazia → NOT NULL sem default é seguro).
+--    Idempotente: se já existir (re-execução), não refaz.
 alter table public.site_custom_fields
-  add column profile text not null;
+  add column if not exists profile text not null;
 
 -- 4) Remove o escopo antigo por site.
 alter table public.site_custom_fields
-  drop column site_id;
+  drop column if exists site_id;
 
 -- 4.1) Garante o CHECK relaxado (identity pode ter worker_type_id null =
 --      "permitido no cliente"). Auto-suficiente: independe de a F3 ter rodado.
@@ -40,28 +41,28 @@ alter table public.site_custom_fields
   );
 
 -- 5) Recria os índices por profile (mesma semântica, trocando site_id→profile).
-create unique index scf_unique_identity
+create unique index if not exists scf_unique_identity
   on public.site_custom_fields (profile, definition_id, worker_type_id)
   where entity_type = 'identity';
 
-create unique index scf_unique_identity_native
+create unique index if not exists scf_unique_identity_native
   on public.site_custom_fields (profile, native_field_key, worker_type_id)
   where entity_type = 'identity' and native_field_key is not null;
 
-create unique index scf_unique_company
+create unique index if not exists scf_unique_company
   on public.site_custom_fields (profile, definition_id)
   where entity_type = 'company';
 
-create unique index scf_allowed_def
+create unique index if not exists scf_allowed_def
   on public.site_custom_fields (profile, definition_id)
   where entity_type = 'identity' and worker_type_id is null
         and definition_id is not null;
 
-create unique index scf_allowed_native
+create unique index if not exists scf_allowed_native
   on public.site_custom_fields (profile, native_field_key)
   where entity_type = 'identity' and worker_type_id is null
         and native_field_key is not null;
 
-create index scf_entity_idx on public.site_custom_fields (profile, entity_type);
+create index if not exists scf_entity_idx on public.site_custom_fields (profile, entity_type);
 
 commit;

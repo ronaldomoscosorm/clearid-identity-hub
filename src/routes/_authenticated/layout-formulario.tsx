@@ -77,6 +77,7 @@ const LABEL_KEY: Record<string, string> = {
   last_name: "identityForm.lastName",
   display_name: "identityForm.displayName",
   email: "common.email",
+  external_id: "identityForm.externalId",
   company_site_id: "identityForm.site",
   company_id: "identityForm.company",
 };
@@ -144,7 +145,7 @@ function LayoutFormularioPage() {
     qc.clear();
   };
 
-  const { config, loaded } = useFormLayoutConfig(activeProfile, editSiteId || null);
+  const { config, loaded, isDefault } = useFormLayoutConfig(activeProfile, editSiteId || null);
 
   // Campos customizáveis — endpoint UNIFICADO (source=all): união ClearID +
   // Supabase, por cliente, com `storage`. Todos ficam disponíveis no palette.
@@ -188,10 +189,11 @@ function LayoutFormularioPage() {
     .map((r) => r.definition)
     .filter((d): d is SiteDef => Boolean(d));
 
-  // "Permitido no site" = linhas com worker_type_id null. Se o site ainda não
-  // tem nenhum permitido configurado, mantém o pool completo (não quebra sites
-  // existentes que só usam o Layout do formulário).
-  const allowedRows = siteRows.filter((r) => r.worker_type_id === null);
+  // Campos do cliente = TODOS os configurados em "Campos do cliente" (permitido
+  // no cliente E exibido por tipo, qualquer worker_type). O layout usa isso como
+  // pool; o cadastro (F6) filtra o exibido por tipo. Assim o layout reflete o
+  // que foi configurado, sem exigir que se use especificamente o nível permitido.
+  const allowedRows = siteRows;
   const allowedConfigured = allowedRows.length > 0;
   const allowedNative = new Set(
     allowedRows.map((r) => r.native_field_key).filter((k): k is string => Boolean(k)),
@@ -216,21 +218,34 @@ function LayoutFormularioPage() {
     cfLabel.set(CF_PREFIX + d.custom_field_name, pickLang(d.display_name) || d.custom_field_name);
   }
 
-  // Pool limitado ao permitido no site (quando configurado). Os campos NATIVOS
-  // obrigatórios entram sempre (o formulário precisa deles); os dropdowns
-  // especiais também (mecanismo global). O resto é gated pelo permitido.
-  const nativePool = allowedConfigured
-    ? ALL_KEYS.filter((k) => REQUIRED.has(k) || allowedNative.has(k))
-    : ALL_KEYS;
+  // Pool ESTRITO: só os campos do cliente ("permitido" em Campos do cliente).
+  // Sem fallback para todo o ClearID — sem permitido configurado, sobram apenas
+  // os obrigatórios (o formulário precisa deles) + os dropdowns especiais
+  // (mecanismo global, sempre disponíveis para adicionar).
+  const nativePool = ALL_KEYS.filter((k) => REQUIRED.has(k) || allowedNative.has(k));
   const catalogCustomKeys = siteCustomDefs
-    .filter((d) => !allowedConfigured || allowedCustomNames.has(d.customFieldName))
+    .filter((d) => allowedCustomNames.has(d.customFieldName))
     .map((d) => CF_PREFIX + d.customFieldName);
   const specialKeys = specialList.map((s) => CF_PREFIX + s.custom_field_name);
   const localKeys = localSiteDefs
-    .filter((d) => !allowedConfigured || allowedCustomNames.has(d.custom_field_name))
+    .filter((d) => allowedCustomNames.has(d.custom_field_name))
     .map((d) => CF_PREFIX + d.custom_field_name);
   const customKeys = [...new Set([...catalogCustomKeys, ...specialKeys, ...localKeys])];
   const pool = [...nativePool, ...customKeys];
+  // Semente do layout PADRÃO / novo: reflete SÓ os campos configurados em
+  // "Campos do cliente" (permitido). Diferente do `pool`, NÃO faz fallback para
+  // todos os campos — sem nada configurado, cai apenas nos obrigatórios.
+  const clientSeed = allowedConfigured
+    ? [
+        ...new Set([
+          ...REQUIRED_KEYS,
+          ...ALL_KEYS.filter((k) => allowedNative.has(k)),
+          ...siteCustomDefs
+            .filter((d) => allowedCustomNames.has(d.customFieldName))
+            .map((d) => CF_PREFIX + d.customFieldName),
+        ]),
+      ]
+    : [...REQUIRED_KEYS];
   const siteReady = !editSiteId || siteFieldsQuery.isSuccess;
   const ready = loaded && customFieldsQuery.isSuccess && siteReady && specialLoaded;
 
@@ -255,9 +270,19 @@ function LayoutFormularioPage() {
     const key = `${activeProfile}::${editSiteId}`;
     if (initedKey.current === key) return;
     initedKey.current = key;
-    setLayouts(config.layouts.map((l) => ({ ...l, groups: l.groups.map((g) => ({ ...g })) })));
+    // Sem layout salvo, o "Padrão" reflete os CAMPOS DO CLIENTE (pool = permitido
+    // no cliente + obrigatórios + especiais), não todos os campos do ClearID.
+    const seeded = isDefault
+      ? [
+          {
+            ...config.layouts[0],
+            groups: [{ name: "", fields: [...clientSeed] }],
+          },
+        ]
+      : config.layouts.map((l) => ({ ...l, groups: l.groups.map((g) => ({ ...g })) }));
+    setLayouts(seeded);
     setLinks({ ...config.links });
-    const first = config.layouts[0];
+    const first = seeded[0];
     setSelId(first.id);
     setModel(layoutToModel(first, pool));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -301,10 +326,13 @@ function LayoutFormularioPage() {
 
   const addLayout = () => {
     const committed = commit(layouts);
+    // Um layout novo já segue os campos configurados do cliente (permitido);
+    // sem nada configurado, cai só nos obrigatórios (não em todo o ClearID).
+    const seed = [...clientSeed];
     const nl: FormLayout = {
       id: uid(),
       name: t("formLayout.newLayoutName"),
-      groups: [{ name: "", fields: [...REQUIRED_KEYS] }],
+      groups: [{ name: "", fields: seed }],
     };
     setLayouts([...committed, nl]);
     setSelId(nl.id);

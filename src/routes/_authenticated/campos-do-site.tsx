@@ -75,6 +75,7 @@ const NATIVE_LABEL_KEY: Record<string, string> = {
   last_name: "identityForm.lastName",
   display_name: "identityForm.displayName",
   email: "common.email",
+  external_id: "identityForm.externalId",
   company_site_id: "identityForm.site",
   company_id: "identityForm.company",
 };
