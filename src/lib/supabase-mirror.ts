@@ -1,113 +1,47 @@
-// Espelhamento (cache local) de identidades e definições de campos
-// personalizados do ClearID nas tabelas do Supabase. As gravações são
-// "best-effort": qualquer falha é logada e nunca interrompe o fluxo principal
-// (a API Argus continua sendo a fonte de verdade em runtime).
+// Shadow (LGPD) de identidades no Supabase.
 //
-// Schema v2: tabelas compartilhadas entre autenticados (sem user_id).
-// - identities: colunas achatadas (root + private + company + system).
-// - custom_field_definitions: catálogo global.
-// - Os VALORES de campos personalizados por identidade (identity_custom_fields)
-//   dependem do vínculo com site_custom_fields e são geridos pela aplicação;
-//   aqui o bruto fica preservado em identities.system_custom_fields (jsonb).
+// A tabela `public.identities` NÃO contém mais PII: só o link identity_id (do
+// ClearID) + metadados locais (company_id, worker_type_id). PII nativa (nome,
+// e-mail, telefone, endereço, aniversário, vínculo corporativo, systemData)
+// vive apenas no ClearID e é buscada em runtime por lá.
+//
+// A shadow row precisa existir para viabilizar as FKs de:
+//   - identity_custom_fields (valores de campos personalizados)
+//   - identity_attachments   (anexos de campos personalizados)
+//   - companies              (vínculo local)
+//   - worker_types           (tipo do trabalhador exato)
 import { supabase } from "@/integrations/supabase/client";
-import type { Database, Json } from "@/integrations/supabase/types";
+import type { Database } from "@/integrations/supabase/types";
 import type { ClearIdIdentity, ClearIdCustomFieldDef } from "./argus-client";
 
 type IdentityInsert = Database["public"]["Tables"]["identities"]["Insert"];
-type CfdInsert = Database["public"]["Tables"]["custom_field_definitions"]["Insert"];
 
-const rec = (v: unknown): Record<string, unknown> =>
-  v && typeof v === "object" ? (v as Record<string, unknown>) : {};
-const str = (v: unknown): string | null => (v == null ? null : String(v));
-const bool = (v: unknown): boolean | null => (v == null ? null : Boolean(v));
-const int = (v: unknown): number | null =>
-  v == null || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null;
-const jsonOrNull = (v: unknown): Json | null => (v == null ? null : (v as Json));
-
-function toIdentityRow(i: ClearIdIdentity): IdentityInsert {
+function toShadowRow(i: ClearIdIdentity): IdentityInsert {
   const root = i as unknown as Record<string, unknown>;
-  const priv = rec(i.privateData);
-  const comp = rec(i.companyData);
-  const sys = rec(i.systemData);
-
   return {
     account_id: i.accountId ?? null,
     identity_id: i.identityId,
     etag: i.eTag ?? null,
-    first_name: i.firstName,
-    last_name: i.lastName,
-    middle_name: i.middleName ?? null,
-    display_name: i.displayName ?? null,
-    email: i.email ?? null,
-    identity_type: i.identityType ?? null,
-    status: i.status ?? "Active",
-    description: i.description ?? null,
-    country_code: i.countryCode ?? null,
-    culture: i.culture ?? null,
-    has_vehicles: bool(root.hasVehicles),
-    has_licensed_vehicles: bool(root.hasLicensedVehicles),
-    created_by: str(root.createdBy),
-    creation_date_utc: i.creationDateUtc ?? null,
-    creation_on_behalf: str(root.creationOnBehalf),
-    last_modified_by: str(root.lastModifiedBy),
-    last_modification_date_utc: i.lastModificationDateUtc ?? null,
-    ordinal: int(root.ordinal),
     is_deleted: Boolean(root.isDeleted ?? false),
-
-    // privateData
-    private_picture_blob_name: str(priv.pictureBlobName),
-    private_birthday: str(priv.birthday),
-    private_employee_number: str(priv.employeeNumber),
-    private_secondary_email: str(priv.secondaryEmail),
-    private_city_of_residence: str(priv.cityOfResidence),
-    private_state_of_residence: str(priv.stateOfResidence),
-    private_zip_code: str(priv.zipCode),
-    private_phone_primary: str(priv.phoneNumberPrimary),
-    private_phone_secondary: str(priv.phoneNumberSecondary),
-
-    // companyData
-    company_name: str(comp.companyName),
-    company_job_title: str(comp.jobTitle),
-    company_department_name: str(comp.departmentName),
-    company_supervisor_name: str(comp.supervisorName),
-    company_site_id: str(comp.siteId),
-    company_worker_type_code: str(comp.workerTypeCode) ?? i.workerTypeCode ?? null,
-    company_worker_type_desc: str(comp.workerTypeDescription),
-    company_approvers: jsonOrNull(comp.approvers),
-
-    // systemData
-    system_external_id: str(sys.externalId) ?? i.externalId ?? null,
-    system_external_sync_source_id: str(sys.externalSyncSourceId),
-    system_external_sync_time_utc: str(sys.externalSyncTimeUtc),
-    system_horizon_id: str(sys.horizonId),
-    system_activation_date_utc: str(sys.activationDateUtc),
-    system_expiration_date_utc: str(sys.expirationDateUtc),
-    system_has_extended_time: bool(sys.hasExtendedTime),
-    system_can_escort: bool(sys.canEscort),
-    system_antipassback_exemption: bool(sys.antipassbackExemption),
-    system_trigger_code: int(sys.triggerCode),
-    system_access_permission_level: int(sys.accessPermissionLevel),
-    system_provisioning_attributes: jsonOrNull(sys.provisioningAttributes),
-    system_custom_fields: jsonOrNull(sys.customFields),
-    system_resource_filters: jsonOrNull(sys.resourceFilters),
   };
 }
 
 /**
- * Faz upsert das identidades na tabela `identities` (por identity_id).
- * LANÇA em caso de erro — callers passivos (listagens/cache) devem envolver em
- * try/catch e apenas logar; o save atomic de identity precisa do throw para
- * disparar a saga de compensação.
+ * Cria/atualiza a shadow row da identidade no Supabase (só o link identity_id
+ * e metadados leves; nenhum campo de PII).
+ *
+ * LANÇA em caso de erro — a saga de compensação (create/update identity)
+ * depende do throw. Listagens/cache passivos devem envolver em try/catch.
  */
 export async function mirrorIdentities(items: ClearIdIdentity[]): Promise<void> {
   if (!items?.length) return;
-  const rows = items.filter((i) => i.identityId).map(toIdentityRow);
+  const rows = items.filter((i) => i.identityId).map(toShadowRow);
   if (!rows.length) return;
 
   const { error } = await supabase
     .from("identities")
     .upsert(rows, { onConflict: "identity_id" });
-  if (error) throw new Error(`Falha ao espelhar identidades: ${error.message}`);
+  if (error) throw new Error(`Falha ao criar shadow da identidade: ${error.message}`);
 }
 
 export type SiteFieldValue = { site_custom_field_id: string; value: string | null };
@@ -182,9 +116,8 @@ export async function saveIdentityCustomFields(
 /**
  * DESATIVADO: o espelhamento das definições de campos para o Supabase agora é
  * responsabilidade do backend unificado (`/api/custom-fields`, source=all, via
- * SupabaseCustomFieldRepository). O upsert antigo aqui usava `on_conflict`
- * incompatível com a constraint (profile, custom_field_name) e sem o `profile`,
- * gerando 400. No-op para não escrever no Supabase pelo bundle público.
+ * SupabaseCustomFieldRepository). No-op para não escrever no Supabase pelo
+ * bundle público.
  */
 export async function mirrorCustomFieldDefs(_defs: ClearIdCustomFieldDef[]): Promise<void> {
   return;

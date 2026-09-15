@@ -5,7 +5,7 @@ import { Plus, RefreshCw, Pencil, Trash2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
+import { useActiveProfile } from "@/lib/argus-client";
 import { useT, type TFn } from "@/lib/i18n";
 import { typeOf, pickLang, optionsOf, isTruthy } from "@/lib/custom-fields";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -101,7 +101,6 @@ function fieldLabel(sf: SiteField, t: TFn): string {
 
 function EmpresasPage() {
   const { t } = useT();
-  const siteId = useDefaultSiteId();
   const activeProfile = useActiveProfile();
   const qc = useQueryClient();
 
@@ -126,14 +125,15 @@ function EmpresasPage() {
   });
 
   const siteFieldsQuery = useQuery({
-    queryKey: ["site-custom-fields-active", siteId],
+    queryKey: ["site-custom-fields-active", activeProfile],
     queryFn: async (): Promise<SiteField[]> => {
+      // Campos da empresa por CLIENTE (profile), não mais por site.
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
           "id, is_required, value_range, display_name_override, definition:custom_field_definitions(custom_field_name, custom_field_type)",
         )
-        .eq("site_id", siteId as string)
+        .eq("profile", activeProfile)
         .eq("entity_type", "company")
         .eq("is_active", true)
         .order("display_index", { ascending: true, nullsFirst: false })
@@ -141,7 +141,7 @@ function EmpresasPage() {
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    enabled: Boolean(siteId),
+    enabled: Boolean(activeProfile),
   });
 
   const siteFields = siteFieldsQuery.data ?? [];

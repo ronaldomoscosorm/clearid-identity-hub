@@ -1203,6 +1203,30 @@ function CustomFieldDialog({
   const [attEnabled, setAttEnabled] = useState(false);
   const [attRequired, setAttRequired] = useState(false);
   const [attAccept, setAttAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
+  // Calcular vencimento (só faz sentido em campos de data). Padrão: ligado.
+  const [expiration, setExpiration] = useState(true);
+  const isDateType = type === "Date" || type === "DateTime";
+  const expirationQuery = useQuery({
+    queryKey: ["cfd-expiration", field?.customFieldName, activeProfile],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("custom_field_definitions")
+        .select("expiration_enabled")
+        .eq("custom_field_name", field!.customFieldName)
+        .eq("profile", activeProfile)
+        .maybeSingle();
+      return data?.expiration_enabled ?? true;
+    },
+    enabled: open && mode === "edit" && Boolean(field?.customFieldName),
+  });
+  useEffect(() => {
+    if (!open) return;
+    if (mode === "create") {
+      setExpiration(true);
+      return;
+    }
+    if (expirationQuery.data != null) setExpiration(expirationQuery.data);
+  }, [open, mode, expirationQuery.data]);
 
   useEffect(() => {
     if (!open) return;
@@ -1247,6 +1271,31 @@ function CustomFieldDialog({
         attachmentAccept: attEnabled ? attAccept : null,
       };
 
+      // Flag de vencimento: só para campos de data e persistido direto no
+      // Supabase (o backend unificado não conhece essa coluna). Update por
+      // (custom_field_name + profile); se ainda não houver linha catalogada,
+      // cria uma mínima (mesmo padrão do diálogo de anexo).
+      const persistExpiration = async (cfName: string) => {
+        if (!isDateType) return;
+        const { data: upd, error } = await supabase
+          .from("custom_field_definitions")
+          .update({ expiration_enabled: expiration })
+          .eq("custom_field_name", cfName)
+          .eq("profile", activeProfile)
+          .select("id");
+        if (error) throw new Error(error.message);
+        if (!upd || upd.length === 0) {
+          const { error: eIns } = await supabase.from("custom_field_definitions").insert({
+            custom_field_name: cfName,
+            profile: activeProfile,
+            display_name: (displayName.trim() ? { default: displayName.trim() } : {}) as Json,
+            custom_field_type: type,
+            expiration_enabled: expiration,
+          });
+          if (eIns) throw new Error(eIns.message);
+        }
+      };
+
       if (mode === "edit") {
         // Nome/tipo/storage são imutáveis; a seção não é editada aqui, então
         // reenvia a atual para preservar o vínculo.
@@ -1264,6 +1313,7 @@ function CustomFieldDialog({
           "PUT",
           field!.customFieldName,
         );
+        await persistExpiration(field!.customFieldName);
         return null;
       }
 
@@ -1279,6 +1329,7 @@ function CustomFieldDialog({
         synchronizationEnabled: sync,
         ...attPatch,
       });
+      await persistExpiration(name.trim());
       return null;
     },
     onSuccess: () => {
@@ -1432,6 +1483,19 @@ function CustomFieldDialog({
             <Checkbox checked={sync} onCheckedChange={(v) => setSync(Boolean(v))} />
             {t("customFields.col.synchronization")}
           </label>
+
+          {/* Vencimento: só para campos de data. Controla o alerta "Vencida". */}
+          {isDateType && (
+            <div className="space-y-1">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <Checkbox checked={expiration} onCheckedChange={(v) => setExpiration(Boolean(v))} />
+                {t("customFields.form.expiration")}
+              </label>
+              <p className="pl-6 text-xs text-muted-foreground">
+                {t("customFields.form.expirationHint")}
+              </p>
+            </div>
+          )}
 
           {/* Anexo comprobatório: complemento opcional que comprova o valor do campo. */}
           <div className="space-y-3 border-t pt-4">

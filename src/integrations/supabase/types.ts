@@ -241,6 +241,7 @@ export type Database = {
           custom_field_type: string | null
           display_name: Json
           etag: string | null
+          expiration_enabled: boolean
           id: string
           is_deleted: boolean
           is_local: boolean
@@ -260,6 +261,7 @@ export type Database = {
           custom_field_type?: string | null
           display_name?: Json
           etag?: string | null
+          expiration_enabled?: boolean
           id?: string
           is_deleted?: boolean
           is_local?: boolean
@@ -279,6 +281,7 @@ export type Database = {
           custom_field_type?: string | null
           display_name?: Json
           etag?: string | null
+          expiration_enabled?: boolean
           id?: string
           is_deleted?: boolean
           is_local?: boolean
@@ -300,183 +303,38 @@ export type Database = {
         ]
       }
       identities: {
+        // LGPD: shadow table. Só o link para o identity do ClearID + metadados
+        // locais (company_id, worker_type_id). Nenhuma PII nativa aqui.
         Row: {
           account_id: string | null
-          company_approvers: Json | null
-          company_department_name: string | null
           company_id: string | null
-          company_job_title: string | null
-          company_name: string | null
-          company_site_id: string | null
-          company_supervisor_name: string | null
-          company_worker_type_code: string | null
-          company_worker_type_desc: string | null
-          country_code: string | null
           created_at: string
-          created_by: string | null
-          creation_date_utc: string | null
-          creation_on_behalf: string | null
-          culture: string | null
-          description: string | null
-          display_name: string | null
-          email: string | null
           etag: string | null
-          first_name: string
-          has_licensed_vehicles: boolean | null
-          has_vehicles: boolean | null
           id: string
-          identity_id: string | null
-          identity_type: string | null
+          identity_id: string
           is_deleted: boolean
-          last_modification_date_utc: string | null
-          last_modified_by: string | null
-          last_name: string
-          middle_name: string | null
-          ordinal: number | null
-          private_birthday: string | null
-          private_city_of_residence: string | null
-          private_employee_number: string | null
-          private_phone_primary: string | null
-          private_phone_secondary: string | null
-          private_picture_blob_name: string | null
-          private_secondary_email: string | null
-          private_state_of_residence: string | null
-          private_zip_code: string | null
-          status: string
-          system_access_permission_level: number | null
-          system_activation_date_utc: string | null
-          system_antipassback_exemption: boolean | null
-          system_can_escort: boolean | null
-          system_custom_fields: Json | null
-          system_expiration_date_utc: string | null
-          system_external_id: string | null
-          system_external_sync_source_id: string | null
-          system_external_sync_time_utc: string | null
-          system_has_extended_time: boolean | null
-          system_horizon_id: string | null
-          system_provisioning_attributes: Json | null
-          system_resource_filters: Json | null
-          system_trigger_code: number | null
           updated_at: string
           worker_type_id: string | null
         }
         Insert: {
           account_id?: string | null
-          company_approvers?: Json | null
-          company_department_name?: string | null
           company_id?: string | null
-          company_job_title?: string | null
-          company_name?: string | null
-          company_site_id?: string | null
-          company_supervisor_name?: string | null
-          company_worker_type_code?: string | null
-          company_worker_type_desc?: string | null
-          country_code?: string | null
           created_at?: string
-          created_by?: string | null
-          creation_date_utc?: string | null
-          creation_on_behalf?: string | null
-          culture?: string | null
-          description?: string | null
-          display_name?: string | null
-          email?: string | null
           etag?: string | null
-          first_name: string
-          has_licensed_vehicles?: boolean | null
-          has_vehicles?: boolean | null
           id?: string
-          identity_id?: string | null
-          identity_type?: string | null
+          identity_id: string
           is_deleted?: boolean
-          last_modification_date_utc?: string | null
-          last_modified_by?: string | null
-          last_name: string
-          middle_name?: string | null
-          ordinal?: number | null
-          private_birthday?: string | null
-          private_city_of_residence?: string | null
-          private_employee_number?: string | null
-          private_phone_primary?: string | null
-          private_phone_secondary?: string | null
-          private_picture_blob_name?: string | null
-          private_secondary_email?: string | null
-          private_state_of_residence?: string | null
-          private_zip_code?: string | null
-          status?: string
-          system_access_permission_level?: number | null
-          system_activation_date_utc?: string | null
-          system_antipassback_exemption?: boolean | null
-          system_can_escort?: boolean | null
-          system_custom_fields?: Json | null
-          system_expiration_date_utc?: string | null
-          system_external_id?: string | null
-          system_external_sync_source_id?: string | null
-          system_external_sync_time_utc?: string | null
-          system_has_extended_time?: boolean | null
-          system_horizon_id?: string | null
-          system_provisioning_attributes?: Json | null
-          system_resource_filters?: Json | null
-          system_trigger_code?: number | null
           updated_at?: string
           worker_type_id?: string | null
         }
         Update: {
           account_id?: string | null
-          company_approvers?: Json | null
-          company_department_name?: string | null
           company_id?: string | null
-          company_job_title?: string | null
-          company_name?: string | null
-          company_site_id?: string | null
-          company_supervisor_name?: string | null
-          company_worker_type_code?: string | null
-          company_worker_type_desc?: string | null
-          country_code?: string | null
           created_at?: string
-          created_by?: string | null
-          creation_date_utc?: string | null
-          creation_on_behalf?: string | null
-          culture?: string | null
-          description?: string | null
-          display_name?: string | null
-          email?: string | null
           etag?: string | null
-          first_name?: string
-          has_licensed_vehicles?: boolean | null
-          has_vehicles?: boolean | null
           id?: string
-          identity_id?: string | null
-          identity_type?: string | null
+          identity_id?: string
           is_deleted?: boolean
-          last_modification_date_utc?: string | null
-          last_modified_by?: string | null
-          last_name?: string
-          middle_name?: string | null
-          ordinal?: number | null
-          private_birthday?: string | null
-          private_city_of_residence?: string | null
-          private_employee_number?: string | null
-          private_phone_primary?: string | null
-          private_phone_secondary?: string | null
-          private_picture_blob_name?: string | null
-          private_secondary_email?: string | null
-          private_state_of_residence?: string | null
-          private_zip_code?: string | null
-          status?: string
-          system_access_permission_level?: number | null
-          system_activation_date_utc?: string | null
-          system_antipassback_exemption?: boolean | null
-          system_can_escort?: boolean | null
-          system_custom_fields?: Json | null
-          system_expiration_date_utc?: string | null
-          system_external_id?: string | null
-          system_external_sync_source_id?: string | null
-          system_external_sync_time_utc?: string | null
-          system_has_extended_time?: boolean | null
-          system_horizon_id?: string | null
-          system_provisioning_attributes?: Json | null
-          system_resource_filters?: Json | null
-          system_trigger_code?: number | null
           updated_at?: string
           worker_type_id?: string | null
         }
@@ -699,7 +557,7 @@ export type Database = {
       site_custom_fields: {
         Row: {
           created_at: string
-          definition_id: string
+          definition_id: string | null
           display_index: number | null
           display_name_override: Json
           entity_type: string
@@ -707,15 +565,16 @@ export type Database = {
           id: string
           is_active: boolean
           is_required: boolean
+          native_field_key: string | null
+          profile: string
           related_identity_field_id: string | null
-          site_id: string
           updated_at: string
           value_range: Json | null
           worker_type_id: string | null
         }
         Insert: {
           created_at?: string
-          definition_id: string
+          definition_id?: string | null
           display_index?: number | null
           display_name_override?: Json
           entity_type?: string
@@ -723,15 +582,16 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_required?: boolean
+          native_field_key?: string | null
+          profile: string
           related_identity_field_id?: string | null
-          site_id: string
           updated_at?: string
           value_range?: Json | null
           worker_type_id?: string | null
         }
         Update: {
           created_at?: string
-          definition_id?: string
+          definition_id?: string | null
           display_index?: number | null
           display_name_override?: Json
           entity_type?: string
@@ -739,8 +599,9 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_required?: boolean
+          native_field_key?: string | null
+          profile?: string
           related_identity_field_id?: string | null
-          site_id?: string
           updated_at?: string
           value_range?: Json | null
           worker_type_id?: string | null

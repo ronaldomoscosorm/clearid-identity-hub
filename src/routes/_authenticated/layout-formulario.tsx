@@ -155,33 +155,56 @@ function LayoutFormularioPage() {
   });
   const allCustomDefs = (customFieldsQuery.data ?? []).filter((f) => !f.isDeleted);
 
-  // Campos customizáveis do SITE EDITADO — restringem os disponíveis. Inclui os
-  // campos LOCAIS (ex.: Anexo), que não vêm do catálogo Argus.
+  // Campos do SITE EDITADO. Buscamos as linhas com a origem (definição do
+  // catálogo OU nativo) e o worker_type_id, para derivar o POOL "permitido no
+  // site" (worker_type_id null) que limita os campos disponíveis no layout.
   type SiteDef = { custom_field_name: string; display_name: Json; is_local: boolean };
+  type SiteRow = {
+    worker_type_id: string | null;
+    native_field_key: string | null;
+    definition: SiteDef | null;
+  };
   const siteFieldsQuery = useQuery({
-    queryKey: ["layout-site-field-names", editSiteId],
-    queryFn: async (): Promise<SiteDef[]> => {
+    queryKey: ["layout-site-field-names", activeProfile],
+    queryFn: async (): Promise<SiteRow[]> => {
+      // Campos por CLIENTE (profile), não mais por site.
       const { data, error } = await supabase
         .from("site_custom_fields")
-        .select("definition:custom_field_definitions(custom_field_name, display_name, is_local)")
-        .eq("site_id", editSiteId ?? "")
+        .select(
+          "worker_type_id, native_field_key, definition:custom_field_definitions(custom_field_name, display_name, is_local)",
+        )
+        .eq("profile", activeProfile)
         .eq("entity_type", "identity")
         .eq("is_active", true)
-        .returns<{ definition: SiteDef | null }[]>();
+        .returns<SiteRow[]>();
       if (error) throw new Error(error.message);
-      return (data ?? []).map((r) => r.definition).filter((d): d is SiteDef => Boolean(d));
+      return data ?? [];
     },
-    enabled: Boolean(editSiteId),
+    enabled: Boolean(activeProfile),
     staleTime: 5 * 60 * 1000,
   });
-  const siteDefs = siteFieldsQuery.data ?? [];
+  const siteRows = siteFieldsQuery.data ?? [];
+  const siteDefs = siteRows
+    .map((r) => r.definition)
+    .filter((d): d is SiteDef => Boolean(d));
+
+  // "Permitido no site" = linhas com worker_type_id null. Se o site ainda não
+  // tem nenhum permitido configurado, mantém o pool completo (não quebra sites
+  // existentes que só usam o Layout do formulário).
+  const allowedRows = siteRows.filter((r) => r.worker_type_id === null);
+  const allowedConfigured = allowedRows.length > 0;
+  const allowedNative = new Set(
+    allowedRows.map((r) => r.native_field_key).filter((k): k is string => Boolean(k)),
+  );
+  const allowedCustomNames = new Set(
+    allowedRows
+      .map((r) => r.definition?.custom_field_name)
+      .filter((n): n is string => Boolean(n)),
+  );
 
   // Dropdowns especiais — ficam disponíveis independentemente do site.
   const { list: specialList, loaded: specialLoaded } = useSpecialFields();
 
-  // Disponíveis = TODOS os custom fields do cliente (union ClearID+Supabase) +
-  // dropdowns especiais + campos locais do site. NÃO gated por site: no layout,
-  // o cliente arruma todos os seus campos custom.
   const siteCustomDefs = allCustomDefs;
   const cfLabel = new Map(
     allCustomDefs.map((d) => [CF_PREFIX + d.customFieldName, d.displayName || d.customFieldName]),
@@ -192,11 +215,22 @@ function LayoutFormularioPage() {
   for (const d of localSiteDefs) {
     cfLabel.set(CF_PREFIX + d.custom_field_name, pickLang(d.display_name) || d.custom_field_name);
   }
-  const siteKeys = siteCustomDefs.map((d) => CF_PREFIX + d.customFieldName);
+
+  // Pool limitado ao permitido no site (quando configurado). Os campos NATIVOS
+  // obrigatórios entram sempre (o formulário precisa deles); os dropdowns
+  // especiais também (mecanismo global). O resto é gated pelo permitido.
+  const nativePool = allowedConfigured
+    ? ALL_KEYS.filter((k) => REQUIRED.has(k) || allowedNative.has(k))
+    : ALL_KEYS;
+  const catalogCustomKeys = siteCustomDefs
+    .filter((d) => !allowedConfigured || allowedCustomNames.has(d.customFieldName))
+    .map((d) => CF_PREFIX + d.customFieldName);
   const specialKeys = specialList.map((s) => CF_PREFIX + s.custom_field_name);
-  const localKeys = localSiteDefs.map((d) => CF_PREFIX + d.custom_field_name);
-  const customKeys = [...new Set([...siteKeys, ...specialKeys, ...localKeys])];
-  const pool = [...ALL_KEYS, ...customKeys];
+  const localKeys = localSiteDefs
+    .filter((d) => !allowedConfigured || allowedCustomNames.has(d.custom_field_name))
+    .map((d) => CF_PREFIX + d.custom_field_name);
+  const customKeys = [...new Set([...catalogCustomKeys, ...specialKeys, ...localKeys])];
+  const pool = [...nativePool, ...customKeys];
   const siteReady = !editSiteId || siteFieldsQuery.isSuccess;
   const ready = loaded && customFieldsQuery.isSuccess && siteReady && specialLoaded;
 

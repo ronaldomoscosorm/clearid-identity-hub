@@ -5,9 +5,10 @@ import { Plus, RefreshCw, Pencil, Trash2, SlidersHorizontal } from "lucide-react
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
+import { argusApi, useActiveProfile } from "@/lib/argus-client";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { typeOf, pickLang } from "@/lib/custom-fields";
+import { STANDARD_IDENTITY_FIELDS, useIdentityFieldLabels } from "@/lib/identity-labels";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,12 +54,30 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/campos-do-site")({
-  head: () => ({ meta: [{ title: "Campos do site — Argus ClearID" }] }),
+  head: () => ({ meta: [{ title: "Campos do cliente — Argus ClearID" }] }),
   component: CamposDoSitePage,
 });
 
 const ALL_WORKER_TYPES = "__ALL__";
+// "Permitido no site": campo do pool do site (worker_type_id null), sem vínculo
+// a um tipo de trabalhador. É o nível que alimenta o layout do formulário.
+const ALLOWED_SITE = "__ALLOWED_SITE__";
 const ALL_SECTIONS = "__ALL_SECTIONS__";
+// Campos NATIVOS do ClearID (básicos/private/company) selecionáveis no site.
+// No `selectedIds`, uma chave nativa vem prefixada para não colidir com os
+// UUIDs das definições do catálogo.
+const NATIVE_PREFIX = "native:";
+const NATIVE_SECTION = "ClearID (nativos)";
+const NATIVE_KEYS = STANDARD_IDENTITY_FIELDS.map((f) => f.key);
+const NATIVE_LABEL_KEY: Record<string, string> = {
+  company_worker_type_code: "identityForm.workerType",
+  first_name: "common.name",
+  last_name: "identityForm.lastName",
+  display_name: "identityForm.displayName",
+  email: "common.email",
+  company_site_id: "identityForm.site",
+  company_id: "identityForm.company",
+};
 
 type Definition = Database["public"]["Tables"]["custom_field_definitions"]["Row"];
 type WorkerType = Database["public"]["Tables"]["worker_types"]["Row"];
@@ -74,8 +93,9 @@ const NO_RELATION = "__NONE__";
 type FormState = {
   entity_type: string; // identity | company
   section: string; // sectionName do ClearID ou ALL_SECTIONS
-  definition_id: string; // usado na EDIÇÃO (campo único)
-  selectedIds: string[]; // usado ao ADICIONAR (múltiplos)
+  definition_id: string; // usado na EDIÇÃO (campo único do catálogo)
+  native_field_key: string; // usado na EDIÇÃO (campo único nativo do ClearID)
+  selectedIds: string[]; // usado ao ADICIONAR (múltiplos; nativo vem "native:<key>")
   worker_type_id: string;
   is_required: boolean;
   is_active: boolean;
@@ -93,6 +113,7 @@ const EMPTY_FORM: FormState = {
   entity_type: "identity",
   section: ALL_SECTIONS,
   definition_id: "",
+  native_field_key: "",
   selectedIds: [],
   worker_type_id: "",
   is_required: false,
@@ -172,8 +193,9 @@ function rangeToForm(v: Json | null): Pick<FormState, "rangeMin" | "rangeMax" | 
 
 function CamposDoSitePage() {
   const { t, lang } = useT();
-  const siteId = useDefaultSiteId();
   const qc = useQueryClient();
+  // Campos são por CLIENTE (profile), válidos em todos os sites do cliente.
+  const activeProfile = useActiveProfile();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SiteFieldRow | null>(null);
@@ -181,23 +203,22 @@ function CamposDoSitePage() {
   const [toDelete, setToDelete] = useState<SiteFieldRow | null>(null);
 
   const fieldsQuery = useQuery({
-    queryKey: ["site-custom-fields", siteId],
+    queryKey: ["site-custom-fields", activeProfile],
     queryFn: async (): Promise<SiteFieldRow[]> => {
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
           "*, definition:custom_field_definitions(custom_field_name, custom_field_type, display_name), worker_type:worker_types(name, name_i18n)",
         )
-        .eq("site_id", siteId as string)
+        .eq("profile", activeProfile)
         .order("display_index", { ascending: true, nullsFirst: false })
         .returns<SiteFieldRow[]>();
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    enabled: Boolean(siteId),
+    enabled: Boolean(activeProfile),
   });
 
-  const activeProfile = useActiveProfile();
   const workerTypesQuery = useQuery({
     queryKey: ["worker-types", activeProfile],
     queryFn: async (): Promise<WorkerType[]> => {
@@ -237,7 +258,7 @@ function CamposDoSitePage() {
   }, [sections, form.section]);
 
   const defsQuery = useQuery({
-    queryKey: ["custom-field-definitions", siteId],
+    queryKey: ["custom-field-definitions", activeProfile],
     queryFn: async (): Promise<Definition[]> => {
       // Sincroniza o catálogo direto do Argus (não depende de visitar outra tela).
       try {
@@ -258,18 +279,42 @@ function CamposDoSitePage() {
 
   // Um campo pode ser usado uma vez por (entidade, tipo de trabalhador).
   // company ignora o tipo. Filtra os já usados no escopo selecionado.
-  const usedIdsForScope = useMemo(
+  const { alias } = useIdentityFieldLabels();
+  // Rótulo de um campo nativo do ClearID (com apelido, quando houver).
+  const nativeLabel = (key: string) =>
+    alias(key, t(NATIVE_LABEL_KEY[key] ?? `identityForm.extra.${key}`));
+
+  // Escopo do seletor: "Permitido no site" → linhas com worker_type_id null;
+  // um tipo específico → linhas daquele tipo. (ALL_WORKER_TYPES não casa com
+  // nenhuma linha → mostra tudo; a duplicação é evitada no insert.)
+  const scopeWt = form.worker_type_id === ALLOWED_SITE ? null : form.worker_type_id;
+  const rowsInScope = useMemo(
     () =>
-      new Set(
-        (fieldsQuery.data ?? [])
-          .filter(
-            (f) =>
-              f.entity_type === form.entity_type &&
-              (form.entity_type === "company" || f.worker_type_id === form.worker_type_id),
-          )
-          .map((f) => f.definition_id),
+      (fieldsQuery.data ?? []).filter(
+        (f) =>
+          f.entity_type === form.entity_type &&
+          (form.entity_type === "company" || f.worker_type_id === scopeWt),
       ),
-    [fieldsQuery.data, form.entity_type, form.worker_type_id],
+    [fieldsQuery.data, form.entity_type, scopeWt],
+  );
+  const usedIdsForScope = useMemo(
+    () => new Set(rowsInScope.map((f) => f.definition_id).filter(Boolean) as string[]),
+    [rowsInScope],
+  );
+  // Chaves nativas já usadas no escopo (para não reoferecer no seletor).
+  const usedNativeForScope = useMemo(
+    () => new Set(rowsInScope.map((f) => f.native_field_key).filter(Boolean) as string[]),
+    [rowsInScope],
+  );
+  // Campos nativos disponíveis para adicionar (só identity; company não usa).
+  const availableNative = useMemo(
+    () =>
+      form.entity_type === "company"
+        ? []
+        : NATIVE_KEYS.filter(
+            (k) => editing?.native_field_key === k || !usedNativeForScope.has(k),
+          ),
+    [form.entity_type, usedNativeForScope, editing],
   );
   const availableDefs = useMemo(
     () =>
@@ -311,7 +356,7 @@ function CamposDoSitePage() {
   const upsert = useMutation({
     mutationFn: async (f: FormState) => {
       const common = {
-        site_id: siteId as string,
+        profile: activeProfile,
         entity_type: f.entity_type,
         is_required: f.is_required,
         is_active: f.is_active,
@@ -324,13 +369,20 @@ function CamposDoSitePage() {
       };
 
       if (editing) {
-        // Edição de um único campo (com override/faixa próprios).
+        // Edição de um único campo (do catálogo OU nativo do ClearID).
+        const isNative = Boolean(f.native_field_key);
         const { error } = await supabase
           .from("site_custom_fields")
           .update({
             ...common,
-            definition_id: f.definition_id,
-            worker_type_id: f.entity_type === "identity" ? f.worker_type_id : null,
+            definition_id: isNative ? null : f.definition_id,
+            native_field_key: isNative ? f.native_field_key : null,
+            worker_type_id:
+              f.entity_type === "identity"
+                ? f.worker_type_id === ALLOWED_SITE
+                  ? null
+                  : f.worker_type_id
+                : null,
             display_name_override: buildOverride(f.override),
             value_range: buildRange(kind, f),
           })
@@ -340,31 +392,41 @@ function CamposDoSitePage() {
       }
 
       // Adição em lote: múltiplos campos × tipos de trabalhador.
-      const workerTypeIds =
+      const workerTypeIds: (string | null)[] =
         f.entity_type === "company"
           ? [null]
-          : f.worker_type_id === ALL_WORKER_TYPES
-            ? workerTypes.map((w) => w.id)
-            : [f.worker_type_id];
+          : f.worker_type_id === ALLOWED_SITE
+            ? [null] // permitido no site (pool)
+            : f.worker_type_id === ALL_WORKER_TYPES
+              ? workerTypes.map((w) => w.id)
+              : [f.worker_type_id];
 
-      // (entity, definition, worker_type) já existentes — para não duplicar.
+      // (entity, campo, worker_type) já existentes — para não duplicar. A chave
+      // do campo é a definição do catálogo OU a chave nativa.
+      const keyOf = (defId: string | null, nativeKey: string | null, wt: string | null) =>
+        `${defId ?? ""}|${nativeKey ?? ""}|${wt ?? ""}`;
       const existing = new Set(
         (fieldsQuery.data ?? [])
           .filter((r) => r.entity_type === f.entity_type)
-          .map((r) => `${r.definition_id}|${r.worker_type_id ?? ""}`),
+          .map((r) => keyOf(r.definition_id, r.native_field_key, r.worker_type_id)),
       );
 
       const rows: Database["public"]["Tables"]["site_custom_fields"]["Insert"][] = [];
-      for (const defId of f.selectedIds) {
-        const def = defsById.get(defId);
+      for (const sel of f.selectedIds) {
+        const isNative = sel.startsWith(NATIVE_PREFIX);
+        const nativeKey = isNative ? sel.slice(NATIVE_PREFIX.length) : null;
+        const defId = isNative ? null : sel;
+        const def = defId ? defsById.get(defId) : undefined;
         for (const wt of workerTypeIds) {
-          if (existing.has(`${defId}|${wt ?? ""}`)) continue;
+          if (existing.has(keyOf(defId, nativeKey, wt))) continue;
           rows.push({
             ...common,
             definition_id: defId,
+            native_field_key: nativeKey,
             worker_type_id: wt,
-            // Nome de exibição = descrição do campo (display_name do catálogo).
-            display_name_override: (def?.display_name ?? {}) as Json,
+            // Nome de exibição = descrição do catálogo; nativos ficam sem override
+            // (usam o rótulo padrão do ClearID).
+            display_name_override: (isNative ? {} : (def?.display_name ?? {})) as Json,
             value_range: null,
           });
         }
@@ -375,7 +437,7 @@ function CamposDoSitePage() {
     },
     onSuccess: () => {
       toast.success(editing ? t("siteFields.toast.updated") : t("siteFields.toast.added"));
-      qc.invalidateQueries({ queryKey: ["site-custom-fields", siteId] });
+      qc.invalidateQueries({ queryKey: ["site-custom-fields", activeProfile] });
       setDialogOpen(false);
     },
     onError: (e) => toast.error((e as Error).message),
@@ -388,7 +450,7 @@ function CamposDoSitePage() {
     },
     onSuccess: () => {
       toast.success(t("siteFields.toast.removed"));
-      qc.invalidateQueries({ queryKey: ["site-custom-fields", siteId] });
+      qc.invalidateQueries({ queryKey: ["site-custom-fields", activeProfile] });
       setToDelete(null);
     },
     onError: (e) => toast.error((e as Error).message),
@@ -404,9 +466,12 @@ function CamposDoSitePage() {
     setForm({
       entity_type: row.entity_type,
       section: ALL_SECTIONS,
-      definition_id: row.definition_id,
+      definition_id: row.definition_id ?? "",
+      native_field_key: row.native_field_key ?? "",
       selectedIds: [],
-      worker_type_id: row.worker_type_id ?? "",
+      // Identity sem tipo = "permitido no site"; empresa não usa tipo.
+      worker_type_id:
+        row.worker_type_id ?? (row.entity_type === "identity" ? ALLOWED_SITE : ""),
       is_required: row.is_required,
       fillable: row.fillable,
       related_identity_field_id: row.related_identity_field_id ?? NO_RELATION,
@@ -422,7 +487,7 @@ function CamposDoSitePage() {
       toast.error(t("siteFields.validation.workerType"));
       return;
     }
-    if (editing ? !form.definition_id : form.selectedIds.length === 0) {
+    if (editing ? !form.definition_id && !form.native_field_key : form.selectedIds.length === 0) {
       toast.error(t("siteFields.validation.field"));
       return;
     }
@@ -449,8 +514,10 @@ function CamposDoSitePage() {
   const groupedItems = useMemo(() => {
     const groups = new Map<string, SiteFieldRow[]>();
     for (const row of items) {
-      const key =
-        sectionByField.get(row.definition?.custom_field_name ?? "") ?? t("siteFields.otherSection");
+      const key = row.native_field_key
+        ? NATIVE_SECTION
+        : (sectionByField.get(row.definition?.custom_field_name ?? "") ??
+          t("siteFields.otherSection"));
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(row);
     }
@@ -471,7 +538,11 @@ function CamposDoSitePage() {
 
   const renderRow = (row: SiteFieldRow) => (
     <TableRow key={row.id}>
-      <TableCell className="font-medium">{row.definition?.custom_field_name ?? "—"}</TableCell>
+      <TableCell className="font-medium">
+        {row.native_field_key
+          ? nativeLabel(row.native_field_key)
+          : (row.definition?.custom_field_name ?? "—")}
+      </TableCell>
       <TableCell>
         <Badge variant={row.entity_type === "company" ? "default" : "secondary"}>
           {row.entity_type === "company"
@@ -481,7 +552,11 @@ function CamposDoSitePage() {
       </TableCell>
       <TableCell>
         <Badge variant="outline">
-          {pickLang(row.worker_type?.name_i18n, lang) || row.worker_type?.name || "—"}
+          {row.worker_type_id
+            ? pickLang(row.worker_type?.name_i18n, lang) || row.worker_type?.name || "—"
+            : row.entity_type === "identity"
+              ? t("siteFields.allowedSite")
+              : "—"}
         </Badge>
       </TableCell>
       <TableCell className="text-muted-foreground">
@@ -536,18 +611,18 @@ function CamposDoSitePage() {
             variant="outline"
             size="sm"
             onClick={() => fieldsQuery.refetch()}
-            disabled={fieldsQuery.isFetching || !siteId}
+            disabled={fieldsQuery.isFetching || !activeProfile}
           >
             <RefreshCw className={`mr-1 h-4 w-4 ${fieldsQuery.isFetching ? "animate-spin" : ""}`} />
             {t("siteFields.refresh")}
           </Button>
-          <Button size="sm" onClick={openCreate} disabled={!siteId}>
+          <Button size="sm" onClick={openCreate} disabled={!activeProfile}>
             <Plus className="mr-1 h-4 w-4" /> {t("siteFields.addButton")}
           </Button>
         </div>
       </div>
 
-      {!siteId ? (
+      {!activeProfile ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
             {t("siteFields.noSite.prefix")}{" "}
@@ -654,6 +729,9 @@ function CamposDoSitePage() {
                     <SelectValue placeholder={t("siteFields.form.workerTypePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={ALLOWED_SITE}>
+                      {t("siteFields.form.allowedSite")}
+                    </SelectItem>
                     <SelectItem value={ALL_WORKER_TYPES}>
                       {t("siteFields.form.allWorkerTypes")}
                     </SelectItem>
@@ -725,12 +803,44 @@ function CamposDoSitePage() {
                   <p className="text-xs text-muted-foreground">
                     {t("siteFields.form.loadingFields")}
                   </p>
-                ) : availableBySection.length === 0 ? (
+                ) : availableBySection.length === 0 && availableNative.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
                     {t("siteFields.form.noFieldsAvailable")}
                   </p>
                 ) : (
                   <div className="max-h-64 space-y-3 overflow-y-auto rounded-md border p-3">
+                    {availableNative.length > 0 && (
+                      <div className="space-y-1.5">
+                        {(() => {
+                          const nids = availableNative.map((k) => NATIVE_PREFIX + k);
+                          const allSel = nids.every((id) => form.selectedIds.includes(id));
+                          return (
+                            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                              <Checkbox
+                                checked={allSel}
+                                onCheckedChange={() => toggleGroup(nids, allSel)}
+                              />
+                              {NATIVE_SECTION}
+                            </label>
+                          );
+                        })()}
+                        <div className="ml-6 space-y-1">
+                          {availableNative.map((k) => (
+                            <label
+                              key={k}
+                              className="flex cursor-pointer items-center gap-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={form.selectedIds.includes(NATIVE_PREFIX + k)}
+                                onCheckedChange={() => toggleSelected(NATIVE_PREFIX + k)}
+                              />
+                              <span>{nativeLabel(k)}</span>
+                              <span className="text-xs text-muted-foreground">· ClearID</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {availableBySection.map(([section, defs]) => {
                       const ids = defs.map((d) => d.id);
                       const allSelected = ids.every((id) => form.selectedIds.includes(id));

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, Check, ChevronsUpDown } from "lucide-react";
+import { CalendarIcon, Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useIdentityFieldLabels, STANDARD_IDENTITY_FIELDS } from "@/lib/identity-labels";
@@ -295,6 +295,34 @@ export function IdentityForm({
     queryFn: () => argusApi.listCustomFieldsUnified({ source: "all", profile: activeProfile }),
     staleTime: 5 * 60 * 1000,
   });
+  // Campos de data com o cálculo de vencimento DESLIGADO (configurado por campo
+  // em Campos personalizados). Padrão é ligado, então só listamos as exceções.
+  const expirationOffQuery = useQuery({
+    queryKey: ["cfd-expiration-off", activeProfile],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .select("custom_field_name")
+        .eq("profile", activeProfile)
+        .eq("expiration_enabled", false);
+      if (error) return [];
+      return (data ?? []).map((d) => d.custom_field_name);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const expirationOff = new Set(expirationOffQuery.data ?? []);
+  const tracksExpiration = (name: string) => !expirationOff.has(name);
+  // Foto obrigatória também na edição: verifica se a identity já tem foto no
+  // ClearID. Mesma queryKey do IdentityPicturePanel → revalida após upload lá.
+  const editIdentityId = (initial as { identityId?: string } | undefined)?.identityId;
+  const existingPictureQuery = useQuery({
+    queryKey: ["identity-picture", defaultSiteId, editIdentityId],
+    queryFn: () => argusApi.getIdentityPicture(editIdentityId!),
+    enabled: mode === "edit" && Boolean(editIdentityId),
+    retry: false,
+    staleTime: 30 * 1000,
+  });
+  const hasExistingPicture = Boolean(existingPictureQuery.data);
   const sectionQuery = useQuery({
     queryKey: ["custom-fields-section", "VylorTerceiros"],
     queryFn: () => argusApi.getCustomFieldSection("VylorTerceiros"),
@@ -352,6 +380,7 @@ export function IdentityForm({
     fillable: boolean;
     value_range: Json | null;
     display_name_override: Json | null;
+    native_field_key: string | null;
     definition: {
       id: string;
       custom_field_name: string;
@@ -362,14 +391,15 @@ export function IdentityForm({
     } | null;
   };
   const siteFieldsQuery = useQuery({
-    queryKey: ["identity-site-fields", siteId, workerTypeId],
+    queryKey: ["identity-site-fields", activeProfile, workerTypeId],
     queryFn: async (): Promise<SiteFieldLite[]> => {
+      // Campos por CLIENTE (profile) + tipo de trabalhador (não mais por site).
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
-          "id, is_required, fillable, value_range, display_name_override, definition:custom_field_definitions(id, custom_field_name, custom_field_type, attachment_accept, attachment_enabled, attachment_required)",
+          "id, is_required, fillable, value_range, display_name_override, native_field_key, definition:custom_field_definitions(id, custom_field_name, custom_field_type, attachment_accept, attachment_enabled, attachment_required)",
         )
-        .eq("site_id", siteId)
+        .eq("profile", activeProfile)
         .eq("entity_type", "identity")
         .eq("worker_type_id", workerTypeId)
         .eq("is_active", true)
@@ -378,7 +408,7 @@ export function IdentityForm({
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    enabled: Boolean(siteId && workerTypeId),
+    enabled: Boolean(activeProfile && workerTypeId),
   });
   const siteFields = siteFieldsQuery.data ?? [];
   const siteFieldLabel = (sf: SiteFieldLite) =>
@@ -531,63 +561,85 @@ export function IdentityForm({
   // Aqui, sem valor, aparece o placeholder ("Selecionar data"); com valor
   // vencido, o badge "Vencida"; e o botão de limpar permite zerar (mantendo o
   // histórico do anexo comprobatório, que não é tocado ao limpar a data).
-  const renderDatePicker = (id: string, name: string, disabled: boolean): ReactNode => {
-    const iso = toDateInputValue(customFields[name] ?? "");
+  const renderDatePicker = (
+    id: string,
+    value: string,
+    onSet: (v: string) => void,
+    disabled: boolean,
+    trackExpiration = true,
+  ): ReactNode => {
+    const iso = toDateInputValue(value);
     const selected = iso ? parse(iso, "yyyy-MM-dd", new Date()) : undefined;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const isExpired = !!selected && selected < today;
+    const isExpired = trackExpiration && !!selected && selected < today;
     return (
       <>
-        <Popover>
-          <PopoverTrigger asChild>
+        <div className="flex items-center gap-1">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                id={id}
+                type="button"
+                variant="outline"
+                disabled={disabled}
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !selected && "text-muted-foreground",
+                  isExpired &&
+                    "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selected
+                  ? format(selected, "dd/MM/yyyy", { locale: ptBR })
+                  : t("identityForm.datePlaceholder")}
+                {isExpired && (
+                  <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
+                    {t("identityForm.expiredBadge")}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                locale={ptBR}
+                selected={selected}
+                onSelect={(d) => onSet(d ? format(d, "yyyy-MM-dd") : "")}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+              {selected && !disabled && (
+                <div className="border-t p-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => onSet("")}
+                  >
+                    {t("identityForm.clear")}
+                  </Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+          {/* X sempre visível quando há data: exclui o valor (grava nulo). */}
+          {selected && !disabled && (
             <Button
-              id={id}
               type="button"
-              variant="outline"
-              disabled={disabled}
-              className={cn(
-                "w-full justify-start text-left font-normal",
-                !selected && "text-muted-foreground",
-                isExpired &&
-                  "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
-              )}
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+              title={t("identityForm.clear")}
+              aria-label={t("identityForm.clear")}
+              onClick={() => onSet("")}
             >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {selected
-                ? format(selected, "dd/MM/yyyy", { locale: ptBR })
-                : t("identityForm.datePlaceholder")}
-              {isExpired && (
-                <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
-                  {t("identityForm.expiredBadge")}
-                </span>
-              )}
+              <X className="h-4 w-4" />
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              locale={ptBR}
-              selected={selected}
-              onSelect={(d) => setField(name, d ? format(d, "yyyy-MM-dd") : "")}
-              initialFocus
-              className={cn("p-3 pointer-events-auto")}
-            />
-            {selected && !disabled && (
-              <div className="border-t p-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => setField(name, "")}
-                >
-                  {t("identityForm.clear")}
-                </Button>
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
+          )}
+        </div>
         {isExpired && (
           <p className="text-xs font-medium text-destructive">
             {t("identityForm.expiredDate")}
@@ -637,7 +689,7 @@ export function IdentityForm({
             </SelectContent>
           </Select>
         ) : kind === "date" ? (
-          renderDatePicker(`sf-${sf.id}`, name, disabled)
+          renderDatePicker(`sf-${sf.id}`, value, (v) => setField(name, v), disabled, tracksExpiration(name))
         ) : (
           <Input
             id={`sf-${sf.id}`}
@@ -703,7 +755,7 @@ export function IdentityForm({
             />
           </div>
         ) : kind === "date" ? (
-          renderDatePicker(`cf-${name}`, name, disabled)
+          renderDatePicker(`cf-${name}`, value, (v) => setField(name, v), disabled, tracksExpiration(name))
         ) : (
           <Input
             id={`cf-${name}`}
@@ -752,12 +804,16 @@ export function IdentityForm({
   const renderExtraField = (f: ExtraField) => (
     <div key={f.key} className="space-y-2">
       <Label htmlFor={`x-${f.key}`}>{alias(f.key, t(`identityForm.extra.${f.key}`))}</Label>
-      <Input
-        id={`x-${f.key}`}
-        type={f.type === "date" ? "date" : f.type === "email" ? "email" : "text"}
-        value={extra[f.key] ?? ""}
-        onChange={(e) => setExtraField(f.key, e.target.value)}
-      />
+      {f.type === "date" ? (
+        renderDatePicker(`x-${f.key}`, extra[f.key] ?? "", (v) => setExtraField(f.key, v), false, false)
+      ) : (
+        <Input
+          id={`x-${f.key}`}
+          type={f.type === "email" ? "email" : "text"}
+          value={extra[f.key] ?? ""}
+          onChange={(e) => setExtraField(f.key, e.target.value)}
+        />
+      )}
     </div>
   );
 
@@ -770,18 +826,48 @@ export function IdentityForm({
   // site. Grupos que ficam sem campos visíveis não são exibidos.
   // O formulário é 100% determinado pelo layout do tipo de trabalhador. Campos
   // customizáveis (cf:) só entram quando estão no layout E existem para o tipo.
+  // Campos EXIBIDOS para este tipo de trabalhador (de "Campos do cliente"):
+  // nativos (native_field_key) e customizáveis (via siteFieldByName). Quando o
+  // tipo tem exibidos configurados, o formulário = exibido ∩ layout (o layout
+  // só ordena/agrupa). Sem exibidos configurados, mantém o comportamento antigo
+  // (100% pelo layout), para não quebrar clientes que só usam o designer.
+  const nativeExibido = new Set(
+    siteFields
+      .map((sf) => sf.native_field_key)
+      .filter((k): k is string => Boolean(k)),
+  );
+  const exibidoConfigured = siteFields.length > 0;
   const includeKey = (k: string): boolean => {
     if (k.startsWith("cf:")) {
       const n = k.slice(3);
-      return siteFieldByName.has(n) || cfDefByName.has(n);
+      if (exibidoConfigured) return siteFieldByName.has(n) || specialByName.has(n);
+      // Dropdowns especiais também entram (renderizados como select).
+      return siteFieldByName.has(n) || cfDefByName.has(n) || specialByName.has(n);
     }
-    return true; // padrão/obrigatórios/extras seguem o layout
+    // Campo nativo/padrão: obrigatórios sempre; os demais só se exibidos.
+    if (exibidoConfigured) return requiredStd.has(k) || nativeExibido.has(k);
+    return true;
   };
   // Layout ativo conforme o tipo de trabalhador selecionado (ou o default).
   const activeLayout = layoutForWorkerType(formLayoutConfig, workerTypeId);
-  const formGroups = activeLayout.groups
+  let formGroups = activeLayout.groups
     .map((g) => ({ name: g.name, keys: g.fields.filter(includeKey) }))
     .filter((g) => g.keys.length > 0);
+  // Exibidos que não estão em nenhum grupo do layout entram num grupo final,
+  // para que a definição em "Campos do cliente" prevaleça sobre o layout.
+  if (exibidoConfigured) {
+    const inLayout = new Set(formGroups.flatMap((g) => g.keys));
+    const wanted = [
+      ...STANDARD_IDENTITY_FIELDS.map((f) => f.key).filter(
+        (k) => requiredStd.has(k) || nativeExibido.has(k),
+      ),
+      ...siteFields
+        .filter((sf) => sf.definition)
+        .map((sf) => "cf:" + sf.definition!.custom_field_name),
+    ];
+    const missing = [...new Set(wanted)].filter((k) => !inLayout.has(k) && includeKey(k));
+    if (missing.length) formGroups = [...formGroups, { name: "", keys: missing }];
+  }
   // Campos customizáveis (cf:) presentes no layout — só estes são validados/enviados.
   const consumedCf = new Set<string>();
   for (const g of formGroups)
@@ -1075,6 +1161,13 @@ export function IdentityForm({
     if (!siteId) {
       out.siteId = t("identityForm.validation.selectSite");
     }
+    // Foto obrigatória em qualquer identity: no cadastro exige o arquivo local;
+    // na edição exige que a identity já tenha foto no ClearID (enviada pelo
+    // painel de foto acima). Sem isso, o salvamento é bloqueado.
+    const photoMissing = mode === "create" ? !photo : !hasExistingPicture;
+    if (photoMissing) {
+      out.photo = t("identityForm.validation.photoRequired");
+    }
     for (const sf of siteFields) {
       // Valor obrigatório do campo do site (preenchível e no layout).
       if (!sf.fillable || !sf.definition || !consumedCf.has(sf.definition.custom_field_name)) {
@@ -1215,12 +1308,23 @@ export function IdentityForm({
       {mode === "create" && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{t("photoCapture.title")}</CardTitle>
+            <CardTitle className="text-base">
+              {t("photoCapture.title")}
+              <span className="ml-0.5 text-destructive">*</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <PhotoCapture value={photo} onChange={setPhoto} />
+            {errors.photo && <p className="mt-2 text-xs text-destructive">{errors.photo}</p>}
           </CardContent>
         </Card>
+      )}
+
+      {/* Edição: a foto fica no painel acima (fora do form). Se faltar, avisa. */}
+      {mode === "edit" && errors.photo && (
+        <p className="rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+          {errors.photo} {t("identityForm.validation.photoRequiredEditHint")}
+        </p>
       )}
 
       {statusBadge && <div className="flex justify-end">{statusBadge}</div>}
