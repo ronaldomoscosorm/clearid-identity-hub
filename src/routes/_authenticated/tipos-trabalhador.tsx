@@ -8,6 +8,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { useT } from "@/lib/i18n";
 import { pickLang } from "@/lib/custom-fields";
 import { useActiveProfile } from "@/lib/argus-client";
+import { unlinkWorkerTypeLayout } from "@/lib/form-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -166,8 +167,47 @@ function WorkerTypesPage() {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  // Conta os registros vinculados ao tipo a excluir, para exibir na confirmação.
+  const relatedQuery = useQuery({
+    queryKey: ["worker-type-related", toDelete?.id],
+    enabled: Boolean(toDelete),
+    queryFn: async () => {
+      const id = toDelete!.id;
+      const [fields, identities] = await Promise.all([
+        supabase
+          .from("site_custom_fields")
+          .select("id", { count: "exact", head: true })
+          .eq("worker_type_id", id),
+        supabase
+          .from("identities")
+          .select("id", { count: "exact", head: true })
+          .eq("worker_type_id", id),
+      ]);
+      if (fields.error) throw new Error(fields.error.message);
+      if (identities.error) throw new Error(identities.error.message);
+      return { fields: fields.count ?? 0, identities: identities.count ?? 0 };
+    },
+  });
+
+  // Exclusão EM CASCATA: remove a configuração atrelada ao tipo (campos do
+  // cliente + vínculo de layout) e DESVINCULA as identidades (worker_type_id →
+  // null, caindo no padrão Colaborador). Pessoas NÃO são apagadas.
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      const { error: scfErr } = await supabase
+        .from("site_custom_fields")
+        .delete()
+        .eq("worker_type_id", id);
+      if (scfErr) throw new Error(scfErr.message);
+
+      const { error: idErr } = await supabase
+        .from("identities")
+        .update({ worker_type_id: null })
+        .eq("worker_type_id", id);
+      if (idErr) throw new Error(idErr.message);
+
+      await unlinkWorkerTypeLayout(activeProfile, id);
+
       const { error } = await supabase.from("worker_types").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
@@ -175,6 +215,7 @@ function WorkerTypesPage() {
       toast.success(t("workerTypes.toast.deleted"));
       qc.invalidateQueries({ queryKey: ["worker-types-admin"] });
       qc.invalidateQueries({ queryKey: ["worker-types"] });
+      qc.invalidateQueries({ queryKey: ["site-custom-fields"] });
       setToDelete(null);
     },
     onError: (e) => toast.error((e as Error).message),
@@ -427,12 +468,38 @@ function WorkerTypesPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("workerTypes.delete.title")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("workerTypes.delete.confirmBefore")}
-              <span className="font-medium">
-                {toDelete ? pickLang(toDelete.name_i18n, lang) || toDelete.name : ""}
-              </span>
-              {t("workerTypes.delete.confirmAfter")}
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  {t("workerTypes.delete.confirmBefore")}
+                  <span className="font-medium">
+                    {toDelete ? pickLang(toDelete.name_i18n, lang) || toDelete.name : ""}
+                  </span>
+                  {t("workerTypes.delete.confirmAfter")}
+                </p>
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                  <p className="font-medium text-destructive">
+                    {t("workerTypes.delete.cascadeTitle")}
+                  </p>
+                  {relatedQuery.isLoading ? (
+                    <p className="mt-1 text-muted-foreground">{t("common.loading")}</p>
+                  ) : (
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
+                      <li>
+                        {t("workerTypes.delete.cascadeFields", {
+                          count: relatedQuery.data?.fields ?? 0,
+                        })}
+                      </li>
+                      <li>{t("workerTypes.delete.cascadeLayout")}</li>
+                      <li>
+                        {t("workerTypes.delete.cascadeIdentities", {
+                          count: relatedQuery.data?.identities ?? 0,
+                        })}
+                      </li>
+                    </ul>
+                  )}
+                </div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

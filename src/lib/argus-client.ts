@@ -278,6 +278,16 @@ export interface IdentityImportResult {
   rows: IdentityImportRow[];
 }
 
+export interface ImportJob {
+  id: string;
+  status: "Running" | "Completed" | "Failed";
+  fileName?: string | null;
+  result?: IdentityImportResult | null;
+  error?: string | null;
+  createdUtc?: string;
+  completedUtc?: string | null;
+}
+
 export class ArgusApiError extends Error {
   status: number;
   traceId?: string;
@@ -1834,12 +1844,15 @@ export const argusApi = {
    */
   importIdentities: async (
     file: File,
-    opts?: { dryRun?: boolean },
+    opts?: { dryRun?: boolean; updateAfastamentoOnly?: boolean },
   ): Promise<IdentityImportResult> => {
     const cfg = getConfig();
     if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
     let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import`;
-    if (opts?.dryRun) url += "?dryRun=true";
+    const qs: string[] = [];
+    if (opts?.dryRun) qs.push("dryRun=true");
+    if (opts?.updateAfastamentoOnly) qs.push("updateAfastamentoOnly=true");
+    if (qs.length) url += "?" + qs.join("&");
     const form = new FormData();
     form.append("file", file, file.name);
     const headers = new Headers();
@@ -1862,6 +1875,65 @@ export const argusApi = {
     return (body && typeof body === "object" && "data" in body
       ? (body as { data: IdentityImportResult }).data
       : (body as IdentityImportResult));
+  },
+
+  /**
+   * Inicia a importação em BACKGROUND (assíncrona). Devolve o `jobId`; consulte
+   * o andamento com `getImportJob`. Evita timeout de gateway em lotes grandes.
+   */
+  startImportAsync: async (
+    file: File,
+    opts?: { dryRun?: boolean; updateAfastamentoOnly?: boolean },
+  ): Promise<string> => {
+    const cfg = getConfig();
+    if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+    let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import`;
+    const qs: string[] = ["async=true"];
+    if (opts?.dryRun) qs.push("dryRun=true");
+    if (opts?.updateAfastamentoOnly) qs.push("updateAfastamentoOnly=true");
+    url += "?" + qs.join("&");
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const headers = new Headers();
+    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    const sys = getSystemObjectId();
+    if (sys) {
+      headers.set("X-System-Object-Id", sys);
+      url += "&systemObjectId=" + encodeURIComponent(sys);
+    }
+    const res = await fetch(url, { method: "POST", credentials: "include", headers, body: form });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message =
+        (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+      throw new ArgusApiError({ status: res.status, message, raw: body });
+    }
+    const data = (body && typeof body === "object" && "data" in body ? (body as { data: unknown }).data : body) as
+      | { jobId?: string }
+      | null;
+    if (!data?.jobId) throw new ArgusApiError({ status: 0, message: "jobId ausente na resposta." });
+    return data.jobId;
+  },
+
+  /** Consulta o status de um job de importação assíncrono. */
+  getImportJob: async (jobId: string): Promise<ImportJob> => {
+    const cfg = getConfig();
+    if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+    const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import/jobs/${encodeURIComponent(jobId)}`;
+    const headers = new Headers();
+    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    const res = await fetch(url, { method: "GET", credentials: "include", headers });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message =
+        (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+      throw new ArgusApiError({ status: res.status, message, raw: body });
+    }
+    return (body && typeof body === "object" && "data" in body
+      ? (body as { data: ImportJob }).data
+      : (body as ImportJob));
   },
 
   /**

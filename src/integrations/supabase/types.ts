@@ -219,6 +219,44 @@ export type Database = {
         }
         Relationships: []
       }
+      import_mappings: {
+        Row: {
+          created_at: string
+          default_worker_type_id: string | null
+          id: string
+          mapping: Json
+          name: string
+          profile: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_worker_type_id?: string | null
+          id?: string
+          mapping?: Json
+          name: string
+          profile: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_worker_type_id?: string | null
+          id?: string
+          mapping?: Json
+          name?: string
+          profile?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_mappings_default_worker_type_id_fkey"
+            columns: ["default_worker_type_id"]
+            isOneToOne: false
+            referencedRelation: "worker_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_custom_fields: {
         Row: {
           company_id: string

@@ -24,7 +24,18 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Lock, Hourglass, Plus, Trash2, Search, Share2 } from "lucide-react";
+import {
+  GripVertical,
+  Lock,
+  Hourglass,
+  Plus,
+  Trash2,
+  Search,
+  Share2,
+  X,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { STANDARD_IDENTITY_FIELDS, useIdentityFieldLabels } from "@/lib/identity-labels";
@@ -193,12 +204,41 @@ function LayoutFormularioPage() {
   // cliente PARA ESSE TIPO (definido logo abaixo, após carregar os tipos).
   const [editWorkerType, setEditWorkerType] = useState<string>("");
 
+  const workerTypesQuery = useQuery({
+    queryKey: ["worker-types", activeProfile],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("worker_types")
+        .select("*")
+        .eq("is_active", true)
+        .eq("profile", activeProfile)
+        .order("display_index", { ascending: true, nullsFirst: false });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const workerTypes = workerTypesQuery.data ?? [];
+  const colaboradorId =
+    workerTypes.find((w) => w.argus_worker_type_code === "Colaborador")?.id ??
+    workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL")?.id ??
+    null;
+
   // Campos disponíveis = PERMITIDO no cliente (worker_type_id null) + EXIBIDO
-  // para o tipo em edição (worker_type_id === editWorkerType). O cadastro (F6)
-  // aplica o mesmo recorte por tipo.
-  const allowedRows = siteRows.filter(
-    (r) => r.worker_type_id === null || r.worker_type_id === editWorkerType,
+  // para o tipo em edição (worker_type_id === editWorkerType) + HERDADOS do
+  // Colaborador (base) não sobrescritos pelo próprio tipo. Mesmo recorte que o
+  // cadastro (F6) aplica — por isso os customizáveis herdados também entram.
+  const rowKeyOf = (r: SiteRow) => r.native_field_key ?? r.definition?.custom_field_name ?? "";
+  const ownKeys = new Set(
+    siteRows.filter((r) => r.worker_type_id === editWorkerType).map(rowKeyOf),
   );
+  const allowedRows = siteRows.filter((r) => {
+    if (r.worker_type_id === null || r.worker_type_id === editWorkerType) return true;
+    if (colaboradorId && editWorkerType !== colaboradorId && r.worker_type_id === colaboradorId) {
+      return !ownKeys.has(rowKeyOf(r));
+    }
+    return false;
+  });
   const allowedConfigured = allowedRows.length > 0;
   const allowedNative = new Set(
     allowedRows.map((r) => r.native_field_key).filter((k): k is string => Boolean(k)),
@@ -293,22 +333,6 @@ function LayoutFormularioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, activeProfile, editSiteId]);
 
-  const workerTypesQuery = useQuery({
-    queryKey: ["worker-types", activeProfile],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("worker_types")
-        .select("*")
-        .eq("is_active", true)
-        .eq("profile", activeProfile)
-        .order("display_index", { ascending: true, nullsFirst: false });
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-  const workerTypes = workerTypesQuery.data ?? [];
-
   // Default do tipo em edição: Colaborador (matriz) ou o primeiro tipo do cliente.
   useEffect(() => {
     if (editWorkerType || !workerTypes.length) return;
@@ -366,13 +390,26 @@ function LayoutFormularioPage() {
   };
 
   const deleteLayout = () => {
-    if (layouts.length <= 1) return;
     const remaining = layouts.filter((l) => l.id !== selId);
+    // Limpa os vínculos de tipos de trabalhador que apontavam para o excluído.
     setLinks((prev) => {
       const next = { ...prev };
       for (const k of Object.keys(next)) if (next[k] === selId) delete next[k];
       return next;
     });
+    if (remaining.length === 0) {
+      // Era o único layout: recria um padrão em branco para a config não ficar
+      // vazia (segue os campos configurados do cliente).
+      const fresh: FormLayout = {
+        id: uid(),
+        name: t("formLayout.newLayoutName"),
+        groups: [{ name: "", fields: [...clientSeed] }],
+      };
+      setLayouts([fresh]);
+      setSelId(fresh.id);
+      setModel(layoutToModel(fresh, pool));
+      return;
+    }
     const next = remaining[0];
     setLayouts(remaining);
     setSelId(next.id);
@@ -464,6 +501,31 @@ function LayoutFormularioPage() {
       const opt = g.fields.filter((k) => !REQUIRED.has(k));
       rest[0] = { ...rest[0], fields: [...rest[0].fields, ...req] };
       return { available: [...m.available, ...opt], groups: rest };
+    });
+
+  // Retira um campo do formulário (volta para "Disponíveis"). Obrigatórios não
+  // podem ser retirados.
+  const removeField = (fieldId: string) =>
+    setModel((m) => {
+      if (REQUIRED.has(fieldId)) return m;
+      if (!m.groups.some((g) => g.fields.includes(fieldId))) return m;
+      const groups = m.groups.map((g) => ({
+        ...g,
+        fields: g.fields.filter((f) => f !== fieldId),
+      }));
+      return { available: [...m.available, fieldId], groups };
+    });
+
+  // Move uma seção (grupo) para cima (-1) ou para baixo (+1).
+  const moveGroup = (gid: string, dir: -1 | 1) =>
+    setModel((m) => {
+      const idx = m.groups.findIndex((g) => g.gid === gid);
+      const target = idx + dir;
+      if (idx < 0 || target < 0 || target >= m.groups.length) return m;
+      const groups = [...m.groups];
+      const [moved] = groups.splice(idx, 1);
+      groups.splice(target, 0, moved);
+      return { ...m, groups };
     });
 
   const setLink = (wtId: string, layoutId: string) =>
@@ -653,7 +715,6 @@ function LayoutFormularioPage() {
             type="button"
             variant="outline"
             className="text-muted-foreground hover:text-destructive"
-            disabled={layouts.length <= 1}
             onClick={deleteLayout}
           >
             <Trash2 className="mr-1 h-4 w-4" />
@@ -723,7 +784,7 @@ function LayoutFormularioPage() {
           </div>
 
           <div className="space-y-4">
-            {model.groups.map((g) => (
+            {model.groups.map((g, gi) => (
               <Card key={g.gid}>
                 <CardHeader className="gap-2">
                   <div className="flex items-center gap-2">
@@ -733,6 +794,28 @@ function LayoutFormularioPage() {
                       placeholder={t("formLayout.groupNamePlaceholder")}
                       className="h-8 font-medium"
                     />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground"
+                      disabled={gi === 0}
+                      title={t("formLayout.moveGroupUp")}
+                      onClick={() => moveGroup(g.gid, -1)}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground"
+                      disabled={gi === model.groups.length - 1}
+                      title={t("formLayout.moveGroupDown")}
+                      onClick={() => moveGroup(g.gid, 1)}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
                     <Button
                       type="button"
                       variant="ghost"
@@ -754,7 +837,13 @@ function LayoutFormularioPage() {
                     emptyHint={t("formLayout.emptyGroup")}
                   >
                     {g.fields.map((k) => (
-                      <FieldItem key={k} id={k} label={labelOf(k)} />
+                      <FieldItem
+                        key={k}
+                        id={k}
+                        label={labelOf(k)}
+                        onRemove={removeField}
+                        removeTitle={t("formLayout.removeField")}
+                      />
                     ))}
                   </Droppable>
                 </CardContent>
@@ -817,7 +906,17 @@ function Droppable({
   );
 }
 
-function FieldItem({ id, label }: { id: string; label: string }) {
+function FieldItem({
+  id,
+  label,
+  onRemove,
+  removeTitle,
+}: {
+  id: string;
+  label: string;
+  onRemove?: (id: string) => void;
+  removeTitle?: string;
+}) {
   const required = REQUIRED.has(id);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -840,10 +939,21 @@ function FieldItem({ id, label }: { id: string; label: string }) {
         <GripVertical className="h-4 w-4" />
       </button>
       <span className="flex-1 truncate">{label}</span>
-      {required && (
+      {required ? (
         <span title="Obrigatório" className="text-muted-foreground">
           <Lock className="h-3.5 w-3.5" />
         </span>
+      ) : (
+        onRemove && (
+          <button
+            type="button"
+            title={removeTitle}
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => onRemove(id)}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )
       )}
     </div>
   );

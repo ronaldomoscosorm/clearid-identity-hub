@@ -114,6 +114,43 @@ export async function saveIdentityCustomFields(
 }
 
 /**
+ * Lê os valores dos campos personalizados de uma identidade gravados no Supabase
+ * (identity_custom_fields), devolvendo um mapa `custom_field_name → value`. Usado
+ * para exibir no formulário os campos storage='supabase' (que não existem no
+ * ClearID) e os espelhados. Best-effort: em erro devolve mapa vazio.
+ */
+export async function loadIdentityCustomFields(
+  clearIdIdentityId: string,
+): Promise<Record<string, string>> {
+  if (!clearIdIdentityId) return {};
+  const { data: idRow, error: e1 } = await supabase
+    .from("identities")
+    .select("id")
+    .eq("identity_id", clearIdIdentityId)
+    .maybeSingle();
+  if (e1 || !idRow) return {};
+
+  const { data, error } = await supabase
+    .from("identity_custom_fields")
+    .select("value, site_custom_fields(custom_field_definitions(custom_field_name))")
+    .eq("identity_id", idRow.id);
+  if (error || !data) return {};
+
+  const rows = data as unknown as Array<{
+    value: string | null;
+    site_custom_fields: {
+      custom_field_definitions: { custom_field_name: string | null } | null;
+    } | null;
+  }>;
+  const out: Record<string, string> = {};
+  for (const r of rows) {
+    const name = r.site_custom_fields?.custom_field_definitions?.custom_field_name;
+    if (name && r.value != null) out[name] = r.value;
+  }
+  return out;
+}
+
+/**
  * DESATIVADO: o espelhamento das definições de campos para o Supabase agora é
  * responsabilidade do backend unificado (`/api/custom-fields`, source=all, via
  * SupabaseCustomFieldRepository). No-op para não escrever no Supabase pelo

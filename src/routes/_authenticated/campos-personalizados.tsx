@@ -1297,11 +1297,12 @@ function CustomFieldDialog({
       };
 
       if (mode === "edit") {
-        // Nome/tipo/storage são imutáveis; a seção não é editada aqui, então
-        // reenvia a atual para preservar o vínculo.
+        // Nome/storage permanecem; o TIPO agora é editável. A seção não é
+        // editada aqui, então reenvia a atual para preservar o vínculo.
         await argusApi.upsertCustomFieldUnified(
           {
             displayName: displayName.trim(),
+            customFieldType: type,
             storage,
             profile: activeProfile,
             sectionName: field?.sectionName ?? null,
@@ -1401,7 +1402,7 @@ function CustomFieldDialog({
 
           <div className="space-y-2">
             <Label>{t("customFields.col.type")}</Label>
-            <Select value={type} onValueChange={setType} disabled={mode === "edit"}>
+            <Select value={type} onValueChange={setType}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -1413,6 +1414,11 @@ function CustomFieldDialog({
                 ))}
               </SelectContent>
             </Select>
+            {mode === "edit" && (
+              <p className="text-xs text-muted-foreground">
+                {t("customFields.typeChangeHint")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2 border-t pt-4">

@@ -7,6 +7,7 @@ import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
 import {
   mirrorIdentities,
   saveIdentityCustomFields,
+  loadIdentityCustomFields,
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
 import { updateIdentityAtomic } from "@/lib/identity-atomic";
@@ -53,6 +54,13 @@ function IdentityDetail() {
     queryKey: ["sites"],
     queryFn: () => argusApi.listSites(),
     staleTime: 5 * 60 * 1000,
+  });
+  // Valores dos campos personalizados gravados no Supabase (inclui os
+  // storage='supabase', que não existem no ClearID). Mesclados no form.
+  const cfValuesQuery = useQuery({
+    queryKey: ["identity-cf-values", id],
+    queryFn: () => loadIdentityCustomFields(id),
+    enabled: Boolean(id),
   });
 
   // Espelha a identidade carregada para o Supabase (cobre visualização e
@@ -171,6 +179,7 @@ function IdentityDetail() {
       }
       qc.invalidateQueries({ queryKey: ["identities"] });
       qc.invalidateQueries({ queryKey: ["identity", siteId, id] });
+      qc.invalidateQueries({ queryKey: ["identity-cf-values", id] });
     },
     onError: (e) => {
       const err = e as ArgusApiError;
@@ -245,6 +254,11 @@ function IdentityDetail() {
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           {(query.error as Error).message}
         </div>
+      ) : query.data && !cfValuesQuery.isFetched ? (
+        <div className="space-y-4">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
       ) : query.data ? (
         <>
           <Card>
@@ -254,7 +268,13 @@ function IdentityDetail() {
           </Card>
           <IdentityForm
             mode="edit"
-            initial={clearIdToFormValues(query.data)}
+            initial={{
+              ...clearIdToFormValues(query.data),
+              customFields: {
+                ...(clearIdToFormValues(query.data).customFields ?? {}),
+                ...(cfValuesQuery.data ?? {}),
+              },
+            }}
             submitting={update.isPending}
             onSubmit={(data, siteFieldValues, companyId, workerTypeId, _photo, attachments) => {
               const original = query.data!;

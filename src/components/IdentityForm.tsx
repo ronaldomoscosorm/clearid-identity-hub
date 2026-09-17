@@ -288,9 +288,6 @@ export function IdentityForm({
   const setExtraField = (key: string, value: string) =>
     setExtra((prev) => ({ ...prev, [key]: value }));
   const activeProfile = useActiveProfile();
-  // DIAGNÓSTICO temporário: confirma o build com herança + obrigatório nativo.
-  // eslint-disable-next-line no-console
-  console.info("[clearid] identity-form-native-required-v1");
   // Campos customizáveis unificados (ClearID + Supabase). O layout referencia
   // campos `cf:<name>` cuja definição pode vir do Supabase — por isso `source:"all"`.
   const fieldsQuery = useQuery({
@@ -889,13 +886,6 @@ export function IdentityForm({
   // como obrigatório em "Campos do cliente" para o tipo (linha nativa is_required).
   const nativeRequired = (key: string) =>
     requiredStd.has(key) || nativeFieldByKey.get(key)?.is_required === true;
-  // eslint-disable-next-line no-console
-  console.info("[clearid] nome-social debug →", {
-    workerTypeId,
-    displayNameRequired: nativeRequired("display_name"),
-    displayNameRowRequired: nativeFieldByKey.get("display_name")?.is_required,
-    nativeKeys: [...nativeFieldByKey.keys()],
-  });
   // Valor atual de um campo nativo (para validar obrigatoriedade por tipo).
   const nativeValue = (key: string): string => {
     switch (key) {
@@ -934,13 +924,26 @@ export function IdentityForm({
       .filter((k): k is string => Boolean(k)),
   );
   const exibidoConfigured = siteFields.length > 0;
+  // Layout EXPLICITAMENTE vinculado a este tipo de trabalhador (em "Layout do
+  // formulário"). Quando existe, o layout MANDA: o formulário segue exatamente
+  // seus grupos/ordem/campos, sem intersectar com os "exibidos". Sem vínculo, o
+  // formulário é montado pelos campos do cliente (exibido) — comportamento antigo.
+  const linkedLayoutId = workerTypeId ? formLayoutConfig.links[workerTypeId] : undefined;
+  const hasExplicitLayout = Boolean(
+    linkedLayoutId && formLayoutConfig.layouts.some((l) => l.id === linkedLayoutId),
+  );
   const includeKey = (k: string): boolean => {
     if (k.startsWith("cf:")) {
       const n = k.slice(3);
+      // Com layout vinculado, o campo do layout entra se for renderizável.
+      if (hasExplicitLayout)
+        return siteFieldByName.has(n) || cfDefByName.has(n) || specialByName.has(n);
       if (exibidoConfigured) return siteFieldByName.has(n) || specialByName.has(n);
       // Dropdowns especiais também entram (renderizados como select).
       return siteFieldByName.has(n) || cfDefByName.has(n) || specialByName.has(n);
     }
+    // Nativo com layout vinculado: o layout manda (o designer já o colocou lá).
+    if (hasExplicitLayout) return true;
     // Campo nativo/padrão: obrigatórios sempre; os demais só se exibidos.
     if (exibidoConfigured) return requiredStd.has(k) || nativeExibido.has(k);
     return true;
@@ -951,8 +954,9 @@ export function IdentityForm({
     .map((g) => ({ name: g.name, keys: g.fields.filter(includeKey) }))
     .filter((g) => g.keys.length > 0);
   // Exibidos que não estão em nenhum grupo do layout entram num grupo final,
-  // para que a definição em "Campos do cliente" prevaleça sobre o layout.
-  if (exibidoConfigured) {
+  // para que a definição em "Campos do cliente" prevaleça sobre o layout. Só
+  // quando NÃO há layout vinculado ao tipo (com vínculo, o layout é soberano).
+  if (exibidoConfigured && !hasExplicitLayout) {
     const inLayout = new Set(formGroups.flatMap((g) => g.keys));
     const wanted = [
       ...STANDARD_IDENTITY_FIELDS.map((f) => f.key).filter(
@@ -1425,6 +1429,14 @@ export function IdentityForm({
       else if (f.argusKey in bag) bag[f.argusKey] = null; // limpa valor existente (edição)
     }
 
+    // Campos que vão para o ClearID: exclui os storage='supabase' (só existem no
+    // Supabase; enviá-los ao ClearID causa 400). Os valores Supabase vão via
+    // siteFieldValues. 'clearid'/'both'/desconhecido → ClearID.
+    const clearIdCf: Record<string, string> = {};
+    for (const [name, val] of Object.entries(cf)) {
+      if (cfDefByName.get(name)?.storage !== "supabase") clearIdCf[name] = val;
+    }
+
     const payload: Record<string, unknown> = {
       ...baseData,
       firstName,
@@ -1433,7 +1445,7 @@ export function IdentityForm({
       displayName: displayName.trim() || fullName.trim() || undefined,
       privateData: Object.keys(privExtra).length ? privExtra : undefined,
       companyData: Object.keys(compExtra).length ? compExtra : undefined,
-      customFields: cf,
+      customFields: clearIdCf,
       siteId: siteId || undefined,
       workerTypeCode: effectiveWorkerTypeCode || undefined,
     };
@@ -1447,9 +1459,13 @@ export function IdentityForm({
     );
   };
 
-  const dateDefs = defs.filter((f) => isDate(f.customFieldType));
-  const boolDefs = defs.filter((f) => isBool(f.customFieldType));
-  const textDefs = defs.filter((f) => !isDate(f.customFieldType) && !isBool(f.customFieldType));
+  // O card "Atributos personalizados" é apenas FALLBACK: mostra só os campos
+  // customizáveis que o layout NÃO posicionou (consumedCf). Assim o formulário
+  // obedece ao layout — nada é duplicado nem renderizado fora dos grupos.
+  const extraDefs = defs.filter((f) => !consumedCf.has(f.customFieldName));
+  const dateDefs = extraDefs.filter((f) => isDate(f.customFieldType));
+  const boolDefs = extraDefs.filter((f) => isBool(f.customFieldType));
+  const textDefs = extraDefs.filter((f) => !isDate(f.customFieldType) && !isBool(f.customFieldType));
 
   return (
     <form onSubmit={submit} className="space-y-6">

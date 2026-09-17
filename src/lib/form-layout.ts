@@ -210,6 +210,26 @@ export async function saveFormLayoutConfig(
   await persistPrefs(userId, prefs);
 }
 
+/**
+ * Remove o vínculo de layout de um tipo de trabalhador (usado na exclusão em
+ * cascata do tipo). Preserva as demais preferences e os layouts.
+ */
+export async function unlinkWorkerTypeLayout(
+  profile: string | null | undefined,
+  workerTypeId: string,
+): Promise<void> {
+  if (!profile) return;
+  const { userId, prefs } = await loadPrefs();
+  const byClient = { ...((prefs[BY_CLIENT_KEY] ?? {}) as Record<string, unknown>) };
+  const cfg = byClient[profile] as { layouts?: unknown; links?: Record<string, unknown> } | undefined;
+  if (!cfg || !cfg.links || !(workerTypeId in cfg.links)) return;
+  const links = { ...cfg.links };
+  delete links[workerTypeId];
+  byClient[profile] = { ...cfg, links };
+  prefs[BY_CLIENT_KEY] = byClient;
+  await persistPrefs(userId, prefs);
+}
+
 /** Copia a config de layout para outros clientes. */
 export async function exportFormLayoutToClients(
   config: FormLayoutConfig,

@@ -498,6 +498,38 @@ function CamposDoSitePage() {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  // Toggle de "pode ser preenchido no cadastro" (fillable) por tipo. Numa linha
+  // herdada do Colaborador, cria um OVERRIDE para o tipo; numa linha real,
+  // apenas atualiza o fillable.
+  const toggleFillable = useMutation({
+    mutationFn: async ({ row, next }: { row: ListRow; next: boolean }) => {
+      if (row._inheritedForType) {
+        const { error } = await supabase.from("site_custom_fields").insert({
+          profile: activeProfile,
+          entity_type: "identity",
+          worker_type_id: row._inheritedForType,
+          definition_id: row.definition_id,
+          native_field_key: row.native_field_key,
+          is_required: row.is_required,
+          is_active: true,
+          fillable: next,
+          display_index: row.display_index,
+          display_name_override: row.display_name_override,
+          value_range: row.value_range,
+        });
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase
+          .from("site_custom_fields")
+          .update({ fillable: next })
+          .eq("id", row.id);
+        if (error) throw new Error(error.message);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["site-custom-fields", activeProfile] }),
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
@@ -645,6 +677,18 @@ function CamposDoSitePage() {
         )}
       </TableCell>
       <TableCell>
+        {/* Pode preencher no cadastro: editável (herdado cria override). */}
+        {row.entity_type === "identity" ? (
+          <Checkbox
+            checked={row.fillable}
+            disabled={toggleFillable.isPending}
+            onCheckedChange={(c) => toggleFillable.mutate({ row, next: Boolean(c) })}
+          />
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell>
         {row.is_active ? (
           <Badge variant="secondary">{t("common.yes")}</Badge>
         ) : (
@@ -748,6 +792,7 @@ function CamposDoSitePage() {
                           <TableHead>{t("siteFields.col.type")}</TableHead>
                           <TableHead>{t("siteFields.col.display")}</TableHead>
                           <TableHead>{t("siteFields.col.required")}</TableHead>
+                          <TableHead>{t("siteFields.col.fillable")}</TableHead>
                           <TableHead>{t("siteFields.col.active")}</TableHead>
                           <TableHead className="w-[100px] text-right">
                             {t("common.actions")}

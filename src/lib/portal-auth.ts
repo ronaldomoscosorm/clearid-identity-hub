@@ -45,15 +45,27 @@ export function redirectToPortalLogin(currentUrl?: string): void {
 }
 
 /**
- * URL de logout do Portal Argus: a rota `/logout` do FRONTEND do portalargus.
- * Essa rota encerra a sessão de forma COMPLETA — limpa o token local do Portal
- * (localStorage), apaga o cookie SSO `rmtecho_token` (.rmtecho.com.br, some de todos
- * os apps) via API, e cai na tela de login. Derivada da URL de login (mesmo origin).
+ * URL de logout do Portal Argus: o ENDPOINT DA API ArthosMFA
+ * (`{API}/auth/logout?returnUrl=…`), que apaga o cookie SSO `rmtecho_token`
+ * (.rmtecho.com.br, some de todos os apps) e redireciona ao destino.
+ *
+ * IMPORTANTE: NÃO é a rota `/logout` da SPA do Portal — essa rota não existe
+ * (o catch-all da SPA cairia no dashboard, sem apagar o cookie). Só o endpoint
+ * de servidor consegue expirar o cookie HttpOnly.
+ *
+ * `returnUrl` deve ser https de domínio rmtecho.com.br (o backend valida). Por
+ * padrão volta para a origem do clearid, que ao ver a sessão encerrada
+ * redireciona sozinho para o login.
  */
-export function getPortalArgusLogoutUrl(): string {
-  const url = new URL(getPortalArgusLoginUrl());
-  url.pathname = "/logout";
-  url.search = "";
+export function getPortalArgusLogoutUrl(returnUrl?: string): string {
+  const apiBase =
+    (import.meta.env.VITE_PORTAL_ARGUS_API_URL as string | undefined)?.replace(/\/+$/, "") ??
+    "https://portal.rmtecho.com.br/api";
+  const dest =
+    returnUrl ??
+    (typeof window !== "undefined" ? window.location.origin : "https://clearid.rmtecho.com.br");
+  const url = new URL(`${apiBase}/auth/logout`);
+  url.searchParams.set("returnUrl", dest);
   return url.toString();
 }
 
