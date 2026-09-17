@@ -5,7 +5,7 @@ import { Plus, RefreshCw, Pencil, Trash2, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
-import { IDENTITY_FIELD_KEYS } from "@/lib/identity-labels";
+import { IDENTITY_FIELD_KEYS, STANDARD_IDENTITY_FIELDS } from "@/lib/identity-labels";
 import { pickLang } from "@/lib/custom-fields";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -139,6 +139,11 @@ function ApelidosPage() {
     setForm(EMPTY_FORM);
     setDialogOpen(true);
   };
+  const openCreateFor = (fieldKey: string) => {
+    setEditing(null);
+    setForm({ ...EMPTY_FORM, field_key: fieldKey });
+    setDialogOpen(true);
+  };
   const openEdit = (row: LabelRow) => {
     setEditing(row);
     setForm({
@@ -164,6 +169,17 @@ function ApelidosPage() {
   };
 
   const items = query.data ?? [];
+
+  // Mescla o catálogo canônico de propriedades da identity com os apelidos já
+  // salvos, para que TODAS as propriedades apareçam (mesmo sem apelido). Chaves
+  // salvas fora do catálogo (ex.: campos legados) entram ao final.
+  const savedByKey = new Map(items.map((r) => [r.field_key, r]));
+  const catalogKeys = STANDARD_IDENTITY_FIELDS.map((f) => f.key);
+  const extraKeys = items.map((r) => r.field_key).filter((k) => !catalogKeys.includes(k));
+  const mergedRows = [...catalogKeys, ...extraKeys].map((key) => ({
+    key,
+    saved: savedByKey.get(key) ?? null,
+  }));
 
   return (
     <div className="space-y-6">
@@ -212,7 +228,7 @@ function ApelidosPage() {
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
               {(query.error as Error).message}
             </div>
-          ) : items.length === 0 ? (
+          ) : mergedRows.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {t("aliases.emptyState")}
             </p>
@@ -228,15 +244,17 @@ function ApelidosPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-mono text-xs">{row.field_key}</TableCell>
-                    <TableCell>{pickLang(row.alias, "pt-BR") || "—"}</TableCell>
+                {mergedRows.map(({ key, saved }) => (
+                  <TableRow key={key} className={saved ? undefined : "text-muted-foreground"}>
+                    <TableCell className="font-mono text-xs">{key}</TableCell>
+                    <TableCell>{(saved && pickLang(saved.alias, "pt-BR")) || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {pickLang(row.alias, "en-US") || "—"}
+                      {(saved && pickLang(saved.alias, "en-US")) || "—"}
                     </TableCell>
                     <TableCell>
-                      {row.is_visible ? (
+                      {!saved ? (
+                        <Badge variant="outline">{t("aliases.notConfigured")}</Badge>
+                      ) : saved.is_visible ? (
                         <Badge variant="secondary">{t("common.yes")}</Badge>
                       ) : (
                         <Badge variant="outline">{t("common.no")}</Badge>
@@ -244,14 +262,19 @@ function ApelidosPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(row)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => (saved ? openEdit(saved) : openCreateFor(key))}
+                        >
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="text-destructive hover:text-destructive"
-                          onClick={() => setToDelete(row)}
+                          onClick={() => saved && setToDelete(saved)}
+                          disabled={!saved}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

@@ -189,11 +189,16 @@ function LayoutFormularioPage() {
     .map((r) => r.definition)
     .filter((d): d is SiteDef => Boolean(d));
 
-  // Campos do cliente = TODOS os configurados em "Campos do cliente" (permitido
-  // no cliente E exibido por tipo, qualquer worker_type). O layout usa isso como
-  // pool; o cadastro (F6) filtra o exibido por tipo. Assim o layout reflete o
-  // que foi configurado, sem exigir que se use especificamente o nível permitido.
-  const allowedRows = siteRows;
+  // Tipo de trabalhador em edição — a paleta do layout reflete os campos do
+  // cliente PARA ESSE TIPO (definido logo abaixo, após carregar os tipos).
+  const [editWorkerType, setEditWorkerType] = useState<string>("");
+
+  // Campos disponíveis = PERMITIDO no cliente (worker_type_id null) + EXIBIDO
+  // para o tipo em edição (worker_type_id === editWorkerType). O cadastro (F6)
+  // aplica o mesmo recorte por tipo.
+  const allowedRows = siteRows.filter(
+    (r) => r.worker_type_id === null || r.worker_type_id === editWorkerType,
+  );
   const allowedConfigured = allowedRows.length > 0;
   const allowedNative = new Set(
     allowedRows.map((r) => r.native_field_key).filter((k): k is string => Boolean(k)),
@@ -218,10 +223,10 @@ function LayoutFormularioPage() {
     cfLabel.set(CF_PREFIX + d.custom_field_name, pickLang(d.display_name) || d.custom_field_name);
   }
 
-  // Pool ESTRITO: só os campos do cliente ("permitido" em Campos do cliente).
-  // Sem fallback para todo o ClearID — sem permitido configurado, sobram apenas
-  // os obrigatórios (o formulário precisa deles) + os dropdowns especiais
-  // (mecanismo global, sempre disponíveis para adicionar).
+  // Pool do layout: NATIVOS estritos (obrigatórios + permitidos no cliente, para
+  // não trazer todo o ClearID) + TODOS os campos CUSTOMIZÁVEIS do cliente (do
+  // catálogo) + dropdowns especiais + campos locais. Custom/especiais ficam
+  // sempre disponíveis para montar o layout; os nativos é que são gated.
   const nativePool = ALL_KEYS.filter((k) => REQUIRED.has(k) || allowedNative.has(k));
   const catalogCustomKeys = siteCustomDefs
     .filter((d) => allowedCustomNames.has(d.customFieldName))
@@ -303,6 +308,27 @@ function LayoutFormularioPage() {
     staleTime: 5 * 60 * 1000,
   });
   const workerTypes = workerTypesQuery.data ?? [];
+
+  // Default do tipo em edição: Colaborador (matriz) ou o primeiro tipo do cliente.
+  useEffect(() => {
+    if (editWorkerType || !workerTypes.length) return;
+    const colaborador =
+      workerTypes.find((w) => w.argus_worker_type_code === "Colaborador") ??
+      workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL") ??
+      workerTypes[0];
+    if (colaborador) setEditWorkerType(colaborador.id);
+  }, [workerTypes, editWorkerType]);
+
+  // Ao trocar o tipo em edição, recompõe a paleta (available) com o novo pool,
+  // preservando os grupos já montados.
+  useEffect(() => {
+    if (!ready) return;
+    setModel((m) => {
+      const used = new Set(m.groups.flatMap((g) => g.fields));
+      return { ...m, available: pool.filter((k) => !used.has(k)) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editWorkerType]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -578,6 +604,23 @@ function LayoutFormularioPage() {
                 {scope.visibleProfiles.map((p) => (
                   <SelectItem key={p.code} value={p.code}>
                     {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              {t("identityForm.workerType")}
+            </Label>
+            <Select value={editWorkerType} onValueChange={setEditWorkerType}>
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder={t("identityForm.selectWorkerTypePlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {workerTypes.map((w) => (
+                  <SelectItem key={w.id} value={w.id}>
+                    {pickLang(w.name_i18n, lang) || w.name}
                   </SelectItem>
                 ))}
               </SelectContent>

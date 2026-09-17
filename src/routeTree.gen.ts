@@ -24,6 +24,7 @@ import { Route as AuthenticatedImportarRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedLayoutFormularioRouteImport } from './routes/_authenticated/layout-formulario'
 import { Route as AuthenticatedRegrasRouteImport } from './routes/_authenticated/regras'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedSitesEmployerRouteImport } from './routes/_authenticated/sites-employer'
 import { Route as AuthenticatedTiposTrabalhadorRouteImport } from './routes/_authenticated/tipos-trabalhador'
 import { Route as FotoTokenRouteImport } from './routes/foto.$token'
 import { Route as AuthenticatedIdentitiesIndexRouteImport } from './routes/_authenticated/identities.index'
@@ -114,6 +115,12 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSitesEmployerRoute =
+  AuthenticatedSitesEmployerRouteImport.update({
+    id: '/sites-employer',
+    path: '/sites-employer',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTiposTrabalhadorRoute =
   AuthenticatedTiposTrabalhadorRouteImport.update({
     id: '/tipos-trabalhador',
@@ -183,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
   '/foto/$token': typeof FotoTokenRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
@@ -207,6 +215,7 @@ export interface FileRoutesByTo {
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
   '/foto/$token': typeof FotoTokenRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
@@ -234,6 +243,7 @@ export interface FileRoutesById {
   '/_authenticated/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/_authenticated/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
   '/foto/$token': typeof FotoTokenRoute
   '/_authenticated/identities/$id': typeof AuthenticatedIdentitiesIdRoute
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/layout-formulario'
     | '/regras'
     | '/settings'
+    | '/sites-employer'
     | '/tipos-trabalhador'
     | '/foto/$token'
     | '/identities/$id'
@@ -285,6 +296,7 @@ export interface FileRouteTypes {
     | '/layout-formulario'
     | '/regras'
     | '/settings'
+    | '/sites-employer'
     | '/tipos-trabalhador'
     | '/foto/$token'
     | '/identities/$id'
@@ -311,6 +323,7 @@ export interface FileRouteTypes {
     | '/_authenticated/layout-formulario'
     | '/_authenticated/regras'
     | '/_authenticated/settings'
+    | '/_authenticated/sites-employer'
     | '/_authenticated/tipos-trabalhador'
     | '/foto/$token'
     | '/_authenticated/identities/$id'
@@ -435,6 +448,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/sites-employer': {
+      id: '/_authenticated/sites-employer'
+      path: '/sites-employer'
+      fullPath: '/sites-employer'
+      preLoaderRoute: typeof AuthenticatedSitesEmployerRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/tipos-trabalhador': {
       id: '/_authenticated/tipos-trabalhador'
       path: '/tipos-trabalhador'
@@ -533,6 +553,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedLayoutFormularioRoute: typeof AuthenticatedLayoutFormularioRoute
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedSitesEmployerRoute: typeof AuthenticatedSitesEmployerRoute
   AuthenticatedTiposTrabalhadorRoute: typeof AuthenticatedTiposTrabalhadorRoute
   AuthenticatedTerceirizadosIdRoute: typeof AuthenticatedTerceirizadosIdRoute
   AuthenticatedVisitasNovaRoute: typeof AuthenticatedVisitasNovaRoute
@@ -556,6 +577,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedLayoutFormularioRoute: AuthenticatedLayoutFormularioRoute,
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedSitesEmployerRoute: AuthenticatedSitesEmployerRoute,
   AuthenticatedTiposTrabalhadorRoute: AuthenticatedTiposTrabalhadorRoute,
   AuthenticatedTerceirizadosIdRoute: AuthenticatedTerceirizadosIdRoute,
   AuthenticatedVisitasNovaRoute: AuthenticatedVisitasNovaRoute,

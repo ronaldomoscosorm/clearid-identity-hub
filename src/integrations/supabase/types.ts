@@ -189,6 +189,36 @@ export type Database = {
         }
         Relationships: []
       }
+      employer_sites: {
+        Row: {
+          codigo: string | null
+          created_at: string
+          id: string
+          nome: string | null
+          profile: string
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          codigo?: string | null
+          created_at?: string
+          id?: string
+          nome?: string | null
+          profile: string
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          codigo?: string | null
+          created_at?: string
+          id?: string
+          nome?: string | null
+          profile?: string
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       company_custom_fields: {
         Row: {
           company_id: string

@@ -86,6 +86,9 @@ type SiteFieldRow = Database["public"]["Tables"]["site_custom_fields"]["Row"] & 
   definition: Pick<Definition, "custom_field_name" | "custom_field_type" | "display_name"> | null;
   worker_type: Pick<WorkerType, "name" | "name_i18n"> | null;
 };
+// Linha da lista: uma linha real OU um campo herdado do Colaborador para um tipo
+// (nesse caso `_inheritedForType` = id do tipo; a linha base é a do Colaborador).
+type ListRow = SiteFieldRow & { _inheritedForType?: string };
 
 type MultiLang = { "pt-BR": string; "en-US": string; "es-ES": string };
 
@@ -234,6 +237,12 @@ function CamposDoSitePage() {
     },
   });
   const workerTypes = workerTypesQuery.data ?? [];
+  // Colaborador (matriz) do cliente — base da herança de campos.
+  const colaboradorId =
+    workerTypes.find((w) => w.argus_worker_type_code === "Colaborador")?.id ??
+    workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL")?.id ??
+    workerTypes.find((w) => (w.name ?? "").toLowerCase().includes("colaborador"))?.id ??
+    null;
 
   // Seções unificadas (ClearID + Supabase) — direto do backend, com `storage`.
   const sectionsQuery = useQuery({
@@ -271,6 +280,7 @@ function CamposDoSitePage() {
       const { data, error } = await supabase
         .from("custom_field_definitions")
         .select("*")
+        .eq("profile", activeProfile)
         .eq("is_deleted", false)
         .order("custom_field_name", { ascending: true });
       if (error) throw new Error(error.message);
@@ -457,6 +467,37 @@ function CamposDoSitePage() {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  // Toggle da obrigatoriedade por tipo. Numa linha herdada do Colaborador, cria
+  // um OVERRIDE para o tipo; numa linha real, apenas atualiza o is_required.
+  const toggleRequired = useMutation({
+    mutationFn: async ({ row, next }: { row: ListRow; next: boolean }) => {
+      if (row._inheritedForType) {
+        const { error } = await supabase.from("site_custom_fields").insert({
+          profile: activeProfile,
+          entity_type: "identity",
+          worker_type_id: row._inheritedForType,
+          definition_id: row.definition_id,
+          native_field_key: row.native_field_key,
+          is_required: next,
+          is_active: true,
+          fillable: row.fillable,
+          display_index: row.display_index,
+          display_name_override: row.display_name_override,
+          value_range: row.value_range,
+        });
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase
+          .from("site_custom_fields")
+          .update({ is_required: next })
+          .eq("id", row.id);
+        if (error) throw new Error(error.message);
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["site-custom-fields", activeProfile] }),
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
@@ -511,38 +552,61 @@ function CamposDoSitePage() {
     }));
 
   const items = fieldsQuery.data ?? [];
-  // Agrupa os campos existentes por seção (ClearID), em ordem alfabética.
+  // Agrupa por TIPO DE TRABALHADOR. Cada tipo (≠ Colaborador) mostra os campos
+  // do Colaborador (base, HERDADOS) que não foram sobrescritos + os seus próprios
+  // overrides. "Permitido no cliente" (null) primeiro; "Empresa" por último.
+  const keyOf = (r: SiteFieldRow) =>
+    r.native_field_key ?? r.definition?.custom_field_name ?? r.id;
+  const fieldLabelOf = (row: SiteFieldRow) =>
+    row.native_field_key
+      ? nativeLabel(row.native_field_key)
+      : pickLang(row.definition?.display_name) || row.definition?.custom_field_name || "";
   const groupedItems = useMemo(() => {
-    const groups = new Map<string, SiteFieldRow[]>();
-    for (const row of items) {
-      const key = row.native_field_key
-        ? NATIVE_SECTION
-        : (sectionByField.get(row.definition?.custom_field_name ?? "") ??
-          t("siteFields.otherSection"));
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(row);
-    }
-    const arr = [...groups.entries()].sort((a, b) =>
-      a[0].localeCompare(b[0], "pt-BR", { sensitivity: "base" }),
-    );
-    for (const [, rows] of arr) {
-      rows.sort((a, b) =>
-        (a.definition?.custom_field_name ?? "").localeCompare(
-          b.definition?.custom_field_name ?? "",
-          "pt-BR",
-          { sensitivity: "base" },
-        ),
-      );
-    }
-    return arr;
-  }, [items, sectionByField, t]);
+    const ALLOWED = t("siteFields.allowedSite");
+    const COMPANY = t("siteFields.entity.company");
+    const identityRows = items.filter((r) => r.entity_type === "identity");
+    const companyRows = items.filter((r) => r.entity_type === "company");
+    const permitidoRows = identityRows.filter((r) => r.worker_type_id === null);
+    const colaboradorRows = colaboradorId
+      ? identityRows.filter((r) => r.worker_type_id === colaboradorId)
+      : [];
+    const sortFields = (rows: ListRow[]) =>
+      rows.sort((a, b) => fieldLabelOf(a).localeCompare(fieldLabelOf(b), "pt-BR", { sensitivity: "base" }));
 
-  const renderRow = (row: SiteFieldRow) => (
-    <TableRow key={row.id}>
+    const arr: [string, ListRow[]][] = [];
+    if (permitidoRows.length) arr.push([ALLOWED, sortFields([...permitidoRows])]);
+    for (const wt of workerTypes) {
+      const own = identityRows.filter((r) => r.worker_type_id === wt.id);
+      const ownKeys = new Set(own.map(keyOf));
+      const rows: ListRow[] = [...own];
+      if (wt.id !== colaboradorId) {
+        for (const cr of colaboradorRows) {
+          if (!ownKeys.has(keyOf(cr))) rows.push({ ...cr, _inheritedForType: wt.id });
+        }
+      }
+      if (rows.length)
+        arr.push([pickLang(wt.name_i18n, lang) || wt.name || "—", sortFields(rows)]);
+    }
+    if (companyRows.length) arr.push([COMPANY, sortFields([...companyRows])]);
+    return arr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, workerTypes, colaboradorId, lang, t]);
+
+  const renderRow = (row: ListRow) => {
+    const inherited = Boolean(row._inheritedForType);
+    return (
+    <TableRow key={`${row._inheritedForType ?? ""}-${row.id}`}>
       <TableCell className="font-medium">
-        {row.native_field_key
-          ? nativeLabel(row.native_field_key)
-          : (row.definition?.custom_field_name ?? "—")}
+        <span className="inline-flex items-center gap-2">
+          {row.native_field_key
+            ? nativeLabel(row.native_field_key)
+            : (row.definition?.custom_field_name ?? "—")}
+          {inherited && (
+            <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+              {t("siteFields.inherited")}
+            </Badge>
+          )}
+        </span>
       </TableCell>
       <TableCell>
         <Badge variant={row.entity_type === "company" ? "default" : "secondary"}>
@@ -567,7 +631,14 @@ function CamposDoSitePage() {
         {langFromJson(row.display_name_override)["pt-BR"] || "—"}
       </TableCell>
       <TableCell>
-        {row.is_required ? (
+        {/* Obrigatório: toggle por tipo. Em linha herdada, cria override. */}
+        {row.entity_type === "identity" && row.worker_type_id !== null ? (
+          <Checkbox
+            checked={row.is_required}
+            disabled={toggleRequired.isPending}
+            onCheckedChange={(c) => toggleRequired.mutate({ row, next: Boolean(c) })}
+          />
+        ) : row.is_required ? (
           <Badge>{t("common.yes")}</Badge>
         ) : (
           <Badge variant="secondary">{t("common.no")}</Badge>
@@ -581,22 +652,29 @@ function CamposDoSitePage() {
         )}
       </TableCell>
       <TableCell className="text-right">
-        <div className="flex justify-end gap-1">
-          <Button variant="ghost" size="icon" onClick={() => openEdit(row)}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setToDelete(row)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+        {inherited ? (
+          // Campo herdado do Colaborador: sem edição/exclusão própria; use o
+          // toggle de "Obrigatório" para criar um override neste tipo.
+          <span className="text-xs text-muted-foreground">{t("siteFields.inheritedHint")}</span>
+        ) : (
+          <div className="flex justify-end gap-1">
+            <Button variant="ghost" size="icon" onClick={() => openEdit(row)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setToDelete(row)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </TableCell>
     </TableRow>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">

@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle, MapPin } from "lucide-react";
 import { redirectToLogout } from "@/lib/portal-auth";
 import { getTheme, applyTheme } from "@/lib/theme";
 import { toast } from "sonner";
@@ -94,6 +94,7 @@ const NAV: NavEntry[] = [
     items: [
       { to: "/empresas", icon: Building2, key: "nav.empresas" },
       { to: "/tipos-trabalhador", icon: BriefcaseBusiness, key: "nav.tipos-trabalhador" },
+      { to: "/sites-employer", icon: MapPin, key: "nav.sites-employer" },
     ],
   },
   {

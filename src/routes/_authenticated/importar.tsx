@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useDefaultSiteId, useActiveProfile, type IdentityImportResult } from "@/lib/argus-client";
 import { useUserScope } from "@/lib/user-scope";
-import { withSiteId } from "@/lib/import-file";
+import { withSiteId, withResolvedSiteId, type EmployerSiteMap } from "@/lib/import-file";
+import { supabase } from "@/integrations/supabase/client";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,10 +44,35 @@ function ImportPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [siteId, setSiteId] = useState<string>(defaultSiteId ?? "");
+  // Origem do site: "single" = um site para todo o lote; "employer" = resolver
+  // por linha pelo código/nome do site da Employer (via employer_sites).
+  const [siteMode, setSiteMode] = useState<"single" | "employer">("single");
   const [dryRun, setDryRun] = useState(true);
   const [result, setResult] = useState<IdentityImportResult | null>(null);
 
   const importActiveProfile = useActiveProfile();
+  // Mapeamento Employer → siteId (para o modo "employer").
+  const employerSitesQuery = useQuery({
+    queryKey: ["employer-sites", importActiveProfile],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employer_sites")
+        .select("site_id, nome, codigo")
+        .eq("profile", importActiveProfile);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    enabled: Boolean(importActiveProfile),
+  });
+  const employerMap: EmployerSiteMap = useMemo(() => {
+    const byCodigo = new Map<string, string>();
+    const byNome = new Map<string, string>();
+    for (const r of employerSitesQuery.data ?? []) {
+      if (r.codigo) byCodigo.set(r.codigo.toLowerCase(), r.site_id);
+      if (r.nome) byNome.set(r.nome.toLowerCase(), r.site_id);
+    }
+    return { byCodigo, byNome };
+  }, [employerSitesQuery.data]);
   const importScope = useUserScope();
   const sitesQuery = useQuery({
     queryKey: ["sites"],
@@ -60,8 +86,18 @@ function ImportPage() {
 
   const importMut = useMutation({
     mutationFn: async (f: File) => {
-      // Injeta o site escolhido na coluna `siteId` de todas as linhas.
-      const prepared = await withSiteId(f, siteId);
+      let prepared: File;
+      if (siteMode === "employer") {
+        // Resolve o site por linha pelo código/nome da Employer (employer_sites).
+        const r = await withResolvedSiteId(f, employerMap);
+        if (r.unresolved > 0) {
+          toast.warning(t("import.employer.unresolved", { count: r.unresolved, total: r.total }));
+        }
+        prepared = r.file;
+      } else {
+        // Injeta o site escolhido na coluna `siteId` de todas as linhas.
+        prepared = await withSiteId(f, siteId);
+      }
       return argusApi.importIdentities(prepared, { dryRun });
     },
     onSuccess: (r) => {
@@ -88,7 +124,8 @@ function ImportPage() {
   };
 
   const onSubmit = () => {
-    if (!file || !siteId) return;
+    if (!file) return;
+    if (siteMode === "single" && !siteId) return;
     importMut.mutate(file);
   };
 
@@ -124,19 +161,42 @@ function ImportPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="site">{t("import.site.label")}</Label>
-            <Select value={siteId} onValueChange={setSiteId} disabled={importMut.isPending || sitesQuery.isLoading}>
-              <SelectTrigger id="site">
-                <SelectValue placeholder={sitesQuery.isLoading ? t("import.site.loading") : t("import.site.placeholder")} />
+            <Label htmlFor="siteMode">{t("import.siteMode.label")}</Label>
+            <Select
+              value={siteMode}
+              onValueChange={(v) => setSiteMode(v as "single" | "employer")}
+              disabled={importMut.isPending}
+            >
+              <SelectTrigger id="siteMode">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {sites.map((s) => (
-                  <SelectItem key={s.siteId} value={s.siteId}>{s.name}</SelectItem>
-                ))}
+                <SelectItem value="single">{t("import.siteMode.single")}</SelectItem>
+                <SelectItem value="employer">{t("import.siteMode.employer")}</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{t("import.site.hint")}</p>
           </div>
+
+          {siteMode === "single" ? (
+            <div className="space-y-2">
+              <Label htmlFor="site">{t("import.site.label")}</Label>
+              <Select value={siteId} onValueChange={setSiteId} disabled={importMut.isPending || sitesQuery.isLoading}>
+                <SelectTrigger id="site">
+                  <SelectValue placeholder={sitesQuery.isLoading ? t("import.site.loading") : t("import.site.placeholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {sites.map((s) => (
+                    <SelectItem key={s.siteId} value={s.siteId}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("import.site.hint")}</p>
+            </div>
+          ) : (
+            <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              {t("import.employer.hint", { count: employerSitesQuery.data?.length ?? 0 })}
+            </p>
+          )}
 
           <label className="flex cursor-pointer items-start gap-3">
             <Switch checked={dryRun} onCheckedChange={setDryRun} disabled={importMut.isPending} />
@@ -147,7 +207,10 @@ function ImportPage() {
           </label>
 
           <div className="flex items-center gap-3">
-            <Button onClick={onSubmit} disabled={!file || !siteId || importMut.isPending}>
+            <Button
+              onClick={onSubmit}
+              disabled={!file || (siteMode === "single" && !siteId) || importMut.isPending}
+            >
               {importMut.isPending ? (
                 <>
                   <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("import.running")}

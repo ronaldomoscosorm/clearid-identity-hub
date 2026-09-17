@@ -4,32 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { pickLang } from "./custom-fields";
 
-/** Chaves de campo sugeridas (para o editor de apelidos). */
-export const IDENTITY_FIELD_KEYS = [
-  "first_name",
-  "last_name",
-  "middle_name",
-  "display_name",
-  "email",
-  "identity_type",
-  "status",
-  "description",
-  "country_code",
-  "culture",
-  "company_name",
-  "company_job_title",
-  "company_department_name",
-  "company_supervisor_name",
-  "company_site_id",
-  "company_worker_type_code",
-  "private_birthday",
-  "private_employee_number",
-  "private_secondary_email",
-  "private_phone_primary",
-  "private_phone_secondary",
-  "system_external_id",
-] as const;
-
 /**
  * Catálogo dos campos padrão do formulário de identity, na ordem default.
  * `required` = obrigatório (não pode ser removido do formulário no designer).
@@ -61,6 +35,12 @@ export const STANDARD_IDENTITY_FIELDS: StandardIdentityField[] = [
   { key: "company_department_name", required: false },
   { key: "company_supervisor_name", required: false },
 ];
+
+/**
+ * Chaves de campo sugeridas no editor de apelidos. Derivadas do catálogo
+ * canônico para nunca divergir das propriedades reais da identity.
+ */
+export const IDENTITY_FIELD_KEYS = STANDARD_IDENTITY_FIELDS.map((f) => f.key);
 
 const DEFAULT_INDEX = new Map(STANDARD_IDENTITY_FIELDS.map((f, i) => [f.key, i]));
 

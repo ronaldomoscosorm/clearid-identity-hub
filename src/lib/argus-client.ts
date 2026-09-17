@@ -1552,8 +1552,11 @@ export const argusApi = {
         params?.department ||
         params?.status,
     );
-    const effectiveQuery =
-      params?.query ?? (params?.allSites && !hasCriterion ? "*" : undefined);
+    // Sem critério de texto, usa um coringa para trazer um conjunto base — tanto
+    // em "todos os sites" quanto ao filtrar por um site específico (o backend
+    // varre esse conjunto e mantém os do site). Sem isso, o filtro por site sem
+    // nome não retornava nada.
+    const effectiveQuery = params?.query ?? (!hasCriterion ? "*" : undefined);
     if (effectiveQuery) q.set("query", effectiveQuery);
     if (params?.firstName) q.set("firstName", params.firstName);
     if (params?.lastName) q.set("lastName", params.lastName);

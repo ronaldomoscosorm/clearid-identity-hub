@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { format, parse } from "date-fns";
@@ -288,6 +288,9 @@ export function IdentityForm({
   const setExtraField = (key: string, value: string) =>
     setExtra((prev) => ({ ...prev, [key]: value }));
   const activeProfile = useActiveProfile();
+  // DIAGNÓSTICO temporário: confirma o build com herança + obrigatório nativo.
+  // eslint-disable-next-line no-console
+  console.info("[clearid] identity-form-native-required-v1");
   // Campos customizáveis unificados (ClearID + Supabase). O layout referencia
   // campos `cf:<name>` cuja definição pode vir do Supabase — por isso `source:"all"`.
   const fieldsQuery = useQuery({
@@ -366,11 +369,24 @@ export function IdentityForm({
   });
   const workerTypes = workerTypesQuery.data ?? [];
 
-  // Na edição, pré-seleciona o tipo cujo código Argus bate com o inicial.
+  // Pré-seleção do tipo de trabalhador: 1) tenta pelo código Argus do inicial;
+  // 2) se não houver código OU ele não casar com nenhum tipo do cliente, cai no
+  // Colaborador (tipo padrão). O tipo local EXATO (Supabase), quando existir,
+  // sobrescreve depois (efeito abaixo). Assim, pessoa sem tipo abre em Colaborador.
   useEffect(() => {
-    if (workerTypeId || !initial?.workerTypeCode || !workerTypes.length) return;
-    const match = workerTypes.find((w) => w.argus_worker_type_code === initial.workerTypeCode);
-    if (match) setWorkerTypeId(match.id);
+    if (workerTypeId || !workerTypes.length) return;
+    const byCode = initial?.workerTypeCode
+      ? workerTypes.find((w) => w.argus_worker_type_code === initial.workerTypeCode)
+      : undefined;
+    if (byCode) {
+      setWorkerTypeId(byCode.id);
+      return;
+    }
+    const colaborador =
+      workerTypes.find((w) => w.argus_worker_type_code === "Colaborador") ??
+      workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL") ??
+      workerTypes.find((w) => (w.name ?? "").toLowerCase().includes("colaborador"));
+    if (colaborador) setWorkerTypeId(colaborador.id);
   }, [workerTypes, initial?.workerTypeCode, workerTypeId]);
 
   // Campos personalizados do site para o tipo de trabalhador selecionado.
@@ -381,6 +397,7 @@ export function IdentityForm({
     value_range: Json | null;
     display_name_override: Json | null;
     native_field_key: string | null;
+    worker_type_id: string | null;
     definition: {
       id: string;
       custom_field_name: string;
@@ -390,27 +407,46 @@ export function IdentityForm({
       attachment_required: boolean;
     } | null;
   };
+  // Busca TODAS as linhas de identity do cliente (todos os tipos). O efetivo do
+  // tipo em edição é derivado por herança: base = Colaborador, override = tipo.
   const siteFieldsQuery = useQuery({
-    queryKey: ["identity-site-fields", activeProfile, workerTypeId],
+    queryKey: ["identity-site-fields", activeProfile],
     queryFn: async (): Promise<SiteFieldLite[]> => {
-      // Campos por CLIENTE (profile) + tipo de trabalhador (não mais por site).
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
-          "id, is_required, fillable, value_range, display_name_override, native_field_key, definition:custom_field_definitions(id, custom_field_name, custom_field_type, attachment_accept, attachment_enabled, attachment_required)",
+          "id, is_required, fillable, value_range, display_name_override, native_field_key, worker_type_id, definition:custom_field_definitions(id, custom_field_name, custom_field_type, attachment_accept, attachment_enabled, attachment_required)",
         )
         .eq("profile", activeProfile)
         .eq("entity_type", "identity")
-        .eq("worker_type_id", workerTypeId)
         .eq("is_active", true)
         .order("display_index", { ascending: true, nullsFirst: false })
         .returns<SiteFieldLite[]>();
       if (error) throw new Error(error.message);
       return data ?? [];
     },
-    enabled: Boolean(activeProfile && workerTypeId),
+    enabled: Boolean(activeProfile),
   });
-  const siteFields = siteFieldsQuery.data ?? [];
+  // Colaborador (matriz) do cliente — base da herança.
+  const colaboradorId =
+    workerTypes.find((w) => w.argus_worker_type_code === "Colaborador")?.id ??
+    workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL")?.id ??
+    workerTypes.find((w) => (w.name ?? "").toLowerCase().includes("colaborador"))?.id ??
+    null;
+  // Efetivo do tipo: campos do Colaborador (base) sobrepostos pelos do próprio
+  // tipo (override de obrigatoriedade / campos específicos). Chave = nativo ou
+  // nome da definição. A linha do tipo prevalece sobre a do Colaborador.
+  const siteFields = useMemo(() => {
+    const rows = siteFieldsQuery.data ?? [];
+    const keyOf = (r: SiteFieldLite) =>
+      r.native_field_key ?? r.definition?.custom_field_name ?? r.id;
+    const byKey = new Map<string, SiteFieldLite>();
+    if (colaboradorId)
+      for (const r of rows) if (r.worker_type_id === colaboradorId) byKey.set(keyOf(r), r);
+    for (const r of rows) if (r.worker_type_id === workerTypeId) byKey.set(keyOf(r), r);
+    return [...byKey.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteFieldsQuery.data, colaboradorId, workerTypeId]);
   const siteFieldLabel = (sf: SiteFieldLite) =>
     pickLang(sf.display_name_override) ||
     sf.definition?.custom_field_name ||
@@ -547,6 +583,19 @@ export function IdentityForm({
   const siteFieldByName = new Map(
     siteFields.filter((sf) => sf.definition).map((sf) => [sf.definition!.custom_field_name, sf]),
   );
+  // Campos NATIVOS configurados no cliente, por chave (para checar fillable).
+  const nativeFieldByKey = new Map(
+    siteFields
+      .filter((sf) => sf.native_field_key)
+      .map((sf) => [sf.native_field_key as string, sf]),
+  );
+  // Somente-leitura no cadastro quando o campo existe em "Campos do cliente"
+  // com "pode ser preenchido no cadastro" DESMARCADO (fillable=false). Vale para
+  // nativos e customizáveis. (A foto é gerida à parte e sempre pode ser alterada.)
+  const isReadOnlyField = (key: string): boolean => {
+    if (key.startsWith("cf:")) return siteFieldByName.get(key.slice(3))?.fillable === false;
+    return nativeFieldByKey.get(key)?.fillable === false;
+  };
   // Definições dos campos customizáveis (ClearID) por nome — permite renderizar
   // no layout campos que não são campos do site do tipo, respeitando o tipo.
   const cfDefByName = new Map(
@@ -736,7 +785,7 @@ export function IdentityForm({
     const name = def.customFieldName;
     const kind = siteFieldKind(def.customFieldType);
     const value = customFields[name] ?? "";
-    const disabled = !!def.isReadOnly;
+    const disabled = !!def.isReadOnly || isReadOnlyField(`cf:${name}`);
     return (
       <div key={`cf-${name}`} className="space-y-1.5">
         <Label htmlFor={`cf-${name}`} className="text-xs text-muted-foreground">
@@ -777,14 +826,18 @@ export function IdentityForm({
     // Obrigatoriedade vem do campo do site (quando o campo também é do site).
     const sf = siteFieldByName.get(name);
     const required = !!(sf && sf.is_required && sf.fillable);
+    const disabled = sf?.fillable === false;
     const err = sf ? errors[`sf-${sf.id}`] : undefined;
     return (
       <div key={`cf-${name}`} className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">
           {label}
           {required && <span className="ml-0.5 text-destructive">*</span>}
+          {disabled && (
+            <span className="ml-1 text-muted-foreground">{t("identityForm.readOnly")}</span>
+          )}
         </Label>
-        <Select value={value} onValueChange={(v) => setField(name, v)}>
+        <Select value={value} onValueChange={(v) => setField(name, v)} disabled={disabled}>
           <SelectTrigger id={`cf-${name}`} className={cn(err && "border-destructive")}>
             <SelectValue placeholder={t("identityForm.selectPlaceholder")} />
           </SelectTrigger>
@@ -801,25 +854,69 @@ export function IdentityForm({
     );
   };
 
-  const renderExtraField = (f: ExtraField) => (
-    <div key={f.key} className="space-y-2">
-      <Label htmlFor={`x-${f.key}`}>{alias(f.key, t(`identityForm.extra.${f.key}`))}</Label>
-      {f.type === "date" ? (
-        renderDatePicker(`x-${f.key}`, extra[f.key] ?? "", (v) => setExtraField(f.key, v), false, false)
-      ) : (
-        <Input
-          id={`x-${f.key}`}
-          type={f.type === "email" ? "email" : "text"}
-          value={extra[f.key] ?? ""}
-          onChange={(e) => setExtraField(f.key, e.target.value)}
-        />
-      )}
-    </div>
-  );
+  const renderExtraField = (f: ExtraField) => {
+    const disabled = isReadOnlyField(f.key);
+    const err = errors[`nat-${f.key}`];
+    return (
+      <div key={f.key} className="space-y-2">
+        <Label htmlFor={`x-${f.key}`}>
+          {alias(f.key, t(`identityForm.extra.${f.key}`))}
+          {nativeRequired(f.key) && <span className="ml-0.5 text-destructive">*</span>}
+          {disabled && (
+            <span className="ml-1 text-muted-foreground">{t("identityForm.readOnly")}</span>
+          )}
+        </Label>
+        {f.type === "date" ? (
+          renderDatePicker(`x-${f.key}`, extra[f.key] ?? "", (v) => setExtraField(f.key, v), disabled, false)
+        ) : (
+          <Input
+            id={`x-${f.key}`}
+            type={f.type === "email" ? "email" : "text"}
+            value={extra[f.key] ?? ""}
+            onChange={(e) => setExtraField(f.key, e.target.value)}
+            disabled={disabled}
+          />
+        )}
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </div>
+    );
+  };
 
   // ---- Layout configurável dos campos padrão (designer de layout) ----
   const extraByKey = new Map(EXTRA_FIELDS.map((f) => [f.key, f]));
   const requiredStd = new Set(STANDARD_IDENTITY_FIELDS.filter((f) => f.required).map((f) => f.key));
+  // Obrigatoriedade EFETIVA de um campo nativo: obrigatório do sistema OU marcado
+  // como obrigatório em "Campos do cliente" para o tipo (linha nativa is_required).
+  const nativeRequired = (key: string) =>
+    requiredStd.has(key) || nativeFieldByKey.get(key)?.is_required === true;
+  // eslint-disable-next-line no-console
+  console.info("[clearid] nome-social debug →", {
+    workerTypeId,
+    displayNameRequired: nativeRequired("display_name"),
+    displayNameRowRequired: nativeFieldByKey.get("display_name")?.is_required,
+    nativeKeys: [...nativeFieldByKey.keys()],
+  });
+  // Valor atual de um campo nativo (para validar obrigatoriedade por tipo).
+  const nativeValue = (key: string): string => {
+    switch (key) {
+      case "first_name":
+        return fullName;
+      case "display_name":
+        return displayName;
+      case "email":
+        return email;
+      case "external_id":
+        return externalId;
+      case "company_id":
+        return companyId;
+      case "company_site_id":
+        return siteId ?? "";
+      case "company_worker_type_code":
+        return workerTypeId;
+      default:
+        return extra[key] ?? "";
+    }
+  };
 
   // Grupos (seções) do formulário, conforme o designer de layout. Obrigatórios
   // sempre; extras (privateData/companyData) somem quando o tipo tem campos do
@@ -870,8 +967,13 @@ export function IdentityForm({
   }
   // Campos customizáveis (cf:) presentes no layout — só estes são validados/enviados.
   const consumedCf = new Set<string>();
+  // Campos NATIVOS presentes no formulário (para validar obrigatoriedade por tipo).
+  const consumedStd = new Set<string>();
   for (const g of formGroups)
-    for (const k of g.keys) if (k.startsWith("cf:")) consumedCf.add(k.slice(3));
+    for (const k of g.keys) {
+      if (k.startsWith("cf:")) consumedCf.add(k.slice(3));
+      else consumedStd.add(k);
+    }
 
   const renderStandardField = (k: string): ReactNode => {
     if (k.startsWith("cf:")) {
@@ -899,7 +1001,7 @@ export function IdentityForm({
         field
       );
     }
-    const req = requiredStd.has(k);
+    const req = nativeRequired(k);
     const star = req ? <span className="ml-0.5 text-destructive">*</span> : null;
     switch (k) {
       case "company_worker_type_code":
@@ -912,7 +1014,7 @@ export function IdentityForm({
             <Select
               value={workerTypeId}
               onValueChange={(id) => setWorkerTypeId(id)}
-              disabled={lockWorkerType}
+              disabled={lockWorkerType || isReadOnlyField(k)}
             >
               <SelectTrigger className={cn(errors.workerTypeCode && "border-destructive")}>
                 <SelectValue placeholder={t("identityForm.selectWorkerTypePlaceholder")} />
@@ -937,7 +1039,12 @@ export function IdentityForm({
               {alias("first_name", t("common.name"))}
               {star}
             </Label>
-            <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Input
+              id="fullName"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              disabled={isReadOnlyField(k)}
+            />
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
         );
@@ -952,6 +1059,7 @@ export function IdentityForm({
               id="externalId"
               value={externalId}
               onChange={(e) => setExternalId(e.target.value)}
+              disabled={isReadOnlyField(k)}
             />
             {errors.externalId && (
               <p className="text-xs text-destructive">{errors.externalId}</p>
@@ -965,13 +1073,18 @@ export function IdentityForm({
           <div key={k} className="space-y-2 sm:col-span-2">
             <Label htmlFor="displayName">
               {alias("display_name", t("identityForm.displayName"))}
+              {star}
             </Label>
             <Input
               id="displayName"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t("identityForm.displayNamePlaceholder")}
+              disabled={isReadOnlyField(k)}
             />
+            {errors["nat-display_name"] && (
+              <p className="text-xs text-destructive">{errors["nat-display_name"]}</p>
+            )}
           </div>
         );
       case "email":
@@ -986,6 +1099,7 @@ export function IdentityForm({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={isReadOnlyField(k)}
             />
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
           </div>
@@ -997,7 +1111,7 @@ export function IdentityForm({
               {alias("company_site_id", t("identityForm.site"))}
               {star}
             </Label>
-            <Select value={siteId} onValueChange={setSiteId}>
+            <Select value={siteId} onValueChange={setSiteId} disabled={isReadOnlyField(k)}>
               <SelectTrigger className={cn(errors.siteId && "border-destructive")}>
                 <SelectValue
                   placeholder={
@@ -1022,7 +1136,10 @@ export function IdentityForm({
         const selected = companies.find((c) => c.id === companyId);
         return (
           <div key={k} className="space-y-2">
-            <Label>{alias("company_id", t("identityForm.company"))}</Label>
+            <Label>
+              {alias("company_id", t("identityForm.company"))}
+              {star}
+            </Label>
             <Popover open={companyOpen} onOpenChange={setCompanyOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -1031,6 +1148,7 @@ export function IdentityForm({
                   role="combobox"
                   aria-expanded={companyOpen}
                   className="w-full justify-between font-normal"
+                  disabled={isReadOnlyField(k)}
                 >
                   <span className={cn("truncate", !selected && "text-muted-foreground")}>
                     {selected ? companyLabel(selected) : t("identityForm.none")}
@@ -1192,6 +1310,21 @@ export function IdentityForm({
       }
       if (sf.is_required && isBlank(customFields[sf.definition.custom_field_name])) {
         out[`sf-${sf.id}`] = t("identityForm.validation.requiredField");
+      }
+    }
+    // Campos NATIVOS obrigatórios por tipo (ex.: "Nome Social"/display_name marcado
+    // como obrigatório em Campos do cliente). first_name/email/tipo/site já têm
+    // validação própria acima; os demais são checados aqui.
+    const stdHandled = new Set([
+      "first_name",
+      "email",
+      "company_worker_type_code",
+      "company_site_id",
+    ]);
+    for (const k of consumedStd) {
+      if (stdHandled.has(k)) continue;
+      if (nativeRequired(k) && isBlank(nativeValue(k))) {
+        out[`nat-${k}`] = t("identityForm.validation.requiredField");
       }
     }
     // Anexo comprobatório obrigatório (qualquer campo do layout com anexo exigido):

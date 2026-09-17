@@ -98,55 +98,6 @@ function toForm(w: WorkerType): FormState {
   };
 }
 
-/**
- * F5 — Herança do Colaborador (matriz): copia os campos EXIBIDOS do tipo
- * "Colaborador" do cliente para um tipo de trabalhador recém-criado, de modo que
- * qualquer novo tipo já contenha todos os campos por padrão. Falha silenciosa:
- * se der erro, o tipo é criado mesmo assim (sem herança).
- */
-async function inheritFieldsFromColaborador(profile: string, newTypeId: string) {
-  try {
-    const { data: matrix } = await supabase
-      .from("worker_types")
-      .select("id")
-      .eq("profile", profile)
-      .eq("argus_worker_type_code", "Colaborador")
-      .limit(1);
-    const matrixId = matrix?.[0]?.id;
-    if (!matrixId || matrixId === newTypeId) return;
-
-    const { data: rows } = await supabase
-      .from("site_custom_fields")
-      .select(
-        "definition_id, native_field_key, is_required, is_active, fillable, display_index, display_name_override, value_range",
-      )
-      .eq("profile", profile)
-      .eq("entity_type", "identity")
-      .eq("worker_type_id", matrixId);
-    if (!rows?.length) return;
-
-    const clone: Database["public"]["Tables"]["site_custom_fields"]["Insert"][] = rows.map(
-      (r) => ({
-        profile,
-        entity_type: "identity",
-        worker_type_id: newTypeId,
-        definition_id: r.definition_id,
-        native_field_key: r.native_field_key,
-        is_required: r.is_required,
-        is_active: r.is_active,
-        fillable: r.fillable,
-        display_index: r.display_index,
-        display_name_override: r.display_name_override,
-        value_range: r.value_range,
-        related_identity_field_id: null,
-      }),
-    );
-    await supabase.from("site_custom_fields").insert(clone);
-  } catch {
-    // Herança é conveniência; não bloqueia a criação do tipo.
-  }
-}
-
 function WorkerTypesPage() {
   const { t, lang } = useT();
   const qc = useQueryClient();
@@ -195,18 +146,13 @@ function WorkerTypesPage() {
           .eq("id", editing.id);
         if (error) throw new Error(error.message);
       } else {
-        // Vincula o novo tipo ao cliente ativo.
-        const { data: created, error } = await supabase
+        // Vincula o novo tipo ao cliente ativo. Não copia campos do Colaborador:
+        // a herança é VIVA (o formulário e Campos do cliente derivam do Colaborador
+        // em tempo de leitura; cada tipo só grava overrides de obrigatoriedade).
+        const { error } = await supabase
           .from("worker_types")
-          .insert({ ...payload, profile: activeProfile })
-          .select("id, argus_worker_type_code")
-          .single();
+          .insert({ ...payload, profile: activeProfile });
         if (error) throw new Error(error.message);
-        // F5 — "Colaborador" é a matriz: um tipo novo herda os campos EXIBIDOS
-        // do Colaborador do mesmo cliente (se existir e se o novo não for ele).
-        if (created && created.argus_worker_type_code !== "Colaborador") {
-          await inheritFieldsFromColaborador(activeProfile, created.id);
-        }
       }
     },
     onSuccess: () => {

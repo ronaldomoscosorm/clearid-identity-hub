@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
@@ -81,23 +81,9 @@ function IdentitiesList() {
   const [fCompany, setFCompany] = useState(persistedSearch?.fCompany ?? "");
   const [fStatus, setFStatus] = useState<string>(persistedSearch?.fStatus ?? "all");
   const [fWorkerType, setFWorkerType] = useState<string>(persistedSearch?.fWorkerType ?? "all");
-  // Site do filtro: um siteId específico ou ALL_SITES. Vazio só ocorre antes de o
-  // site padrão resolver — uma pesquisa restaurada sempre tem site definido.
-  const [fSite, setFSite] = useState<string>(persistedSearch?.fSite ?? "");
-  // O filtro SEGUE o site padrão da topbar até o usuário escolher manualmente
-  // (ou até restaurar uma pesquisa). Sem isso, se o site padrão fosse aplicado
-  // DEPOIS do primeiro render (ou o localStorage tivesse um site antigo), o
-  // filtro ficava travado no valor errado / vazio na primeira carga.
-  // Começa SEMPRE false: só o clique do usuário (onValueChange) marca como
-  // manual. NÃO derivar de persistedSearch — o site persistido foi auto-
-  // preenchido por este efeito, não escolhido; tratá-lo como manual travava o
-  // filtro vazio ao remontar a tela (troca de cliente no login).
-  const siteManuallySet = useRef<boolean>(false);
-  useEffect(() => {
-    if (siteManuallySet.current) return;
-    if (siteId) setFSite(siteId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteId]);
+  // Site do filtro: começa em "Todos os sites" por padrão (não segue mais o site
+  // da topbar). Uma pesquisa restaurada mantém o site que estava.
+  const [fSite, setFSite] = useState<string>(persistedSearch?.fSite ?? ALL_SITES);
 
   // Sites do filtro vêm do CorporateData (mesma fonte da topbar), não do
   // /api/sites do ClearID (que retorna vazio para este usuário). Resolve o
@@ -231,15 +217,51 @@ function IdentitiesList() {
     staleTime: 60 * 1000,
   });
 
+  // Sites do cliente logado (para restringir "Todos os sites").
+  const clientSiteIds = useMemo(() => new Set(sites.map((s) => s.siteId)), [sites]);
+  // Colaborador é o tipo padrão: pessoas SEM worker_type_id contam como Colaborador.
+  const colaboradorId = useMemo(
+    () => workerTypes.find((w) => w.argus_worker_type_code === "Colaborador")?.id ?? null,
+    [workerTypes],
+  );
+
   const items = useMemo(() => {
-    if (!filterByType) return rawItems;
-    const allowed = new Set(
-      (localTypesQuery.data ?? [])
-        .filter((r) => r.worker_type_id === applied.workerTypeId)
-        .map((r) => r.identity_id),
+    // "Todos os sites" = apenas os sites permitidos ao cliente logado. O ClearID
+    // sem site retorna o tenant inteiro; filtramos pelo site do cadastro (o hit
+    // traz `siteId` no topo). Só aplica quando os sites do cliente já carregaram.
+    let base = rawItems;
+    if (applied.allSites && clientSiteIds.size > 0) {
+      // Restringe aos sites do cliente. Tolerante: mantém quem não tem site
+      // identificável no retorno (o hit nem sempre traz o site). Fail-open: se
+      // o filtro zerar tudo (site do hit em formato diferente do externalId),
+      // mantém a lista original para não quebrar a busca.
+      const filtered = base.filter((i) => {
+        const s = (i as { siteId?: string }).siteId;
+        return !s || clientSiteIds.has(s);
+      });
+      base = filtered.length > 0 ? filtered : base;
+    }
+    if (!filterByType) return base;
+    const localById = new Map(
+      (localTypesQuery.data ?? []).map((r) => [r.identity_id, r.worker_type_id]),
     );
-    return rawItems.filter((i) => allowed.has(i.identityId));
-  }, [rawItems, filterByType, localTypesQuery.data, applied.workerTypeId]);
+    const isColaboradorFilter = applied.workerTypeId === colaboradorId;
+    return base.filter((i) => {
+      const wt = localById.get(i.identityId); // undefined (sem linha) ou null (sem tipo)
+      if (wt === applied.workerTypeId) return true;
+      // Sem tipo definido → default Colaborador.
+      if (isColaboradorFilter && wt == null) return true;
+      return false;
+    });
+  }, [
+    rawItems,
+    applied.allSites,
+    clientSiteIds,
+    filterByType,
+    localTypesQuery.data,
+    applied.workerTypeId,
+    colaboradorId,
+  ]);
 
   // Aguardando o cruzamento local quando há filtro de tipo ativo.
   const typeFilterLoading = filterByType && rawItems.length > 0 && localTypesQuery.isLoading;
@@ -358,7 +380,7 @@ function IdentitiesList() {
             </Select>
           </Field>
           <Field label={t("identities.filter.site")}>
-            <Select value={fSite} onValueChange={(v) => { siteManuallySet.current = true; setFSite(v); resetResults(); }}>
+            <Select value={fSite} onValueChange={(v) => { setFSite(v); resetResults(); }}>
               <SelectTrigger><SelectValue placeholder={t("identities.filter.sitePlaceholder")} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_SITES}>{t("identities.filter.allSites")}</SelectItem>
