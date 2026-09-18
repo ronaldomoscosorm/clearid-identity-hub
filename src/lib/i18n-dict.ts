@@ -120,6 +120,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.branding": "Identidade",
     "nav.properties": "Propriedades",
     "nav.tables": "Tabelas",
+    "menu.noProfile.title": "Sem menus liberados",
+    "menu.noProfile.desc": "Seu perfil não tem menus configurados. Contate o administrador para atribuir um perfil de acesso no Portal Argus.",
     "nav.configGroup": "Configurações",
     "nav.utilities": "Utilidades",
 
@@ -340,6 +342,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.branding": "Branding",
     "nav.properties": "Properties",
     "nav.tables": "Tables",
+    "menu.noProfile.title": "No menus available",
+    "menu.noProfile.desc": "Your profile has no configured menus. Contact the administrator to assign an access profile in Portal Argus.",
     "nav.configGroup": "Settings",
     "nav.utilities": "Utilities",
 
@@ -557,6 +561,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "nav.branding": "Identidad",
     "nav.properties": "Propiedades",
     "nav.tables": "Tablas",
+    "menu.noProfile.title": "Sin menús habilitados",
+    "menu.noProfile.desc": "Su perfil no tiene menús configurados. Contacte al administrador para asignar un perfil de acceso en Portal Argus.",
     "nav.configGroup": "Configuración",
     "nav.utilities": "Utilidades",
 

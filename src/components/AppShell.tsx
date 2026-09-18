@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle, MapPin } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle, MapPin, AlertTriangle } from "lucide-react";
 import { redirectToLogout } from "@/lib/portal-auth";
 import { getTheme, applyTheme } from "@/lib/theme";
 import { toast } from "sonner";
@@ -331,7 +331,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   // --- Escopo pelo usuário logado (Portal Argus). Fallback gracioso: quando o
   // backend não retorna dados (ex.: dev/CORS), não há restrição. ---
   const { data: currentUser } = useCurrentUser();
-  const { data: menuData } = useMenuTree();
+  const { data: menuData, isError: menuError } = useMenuTree();
   const userSites = currentUser?.sites ?? [];
   const { restrictByUser, allowedClientCodes, visibleProfiles, filterSites } = useUserScope();
   useEnsureActiveSite(restrictByUser ? userSites : undefined);
@@ -383,8 +383,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [clientDefaults.data, activeProfile]);
 
   // Menus exibidos: filtrados pelas keys permitidas ao usuário (do backend).
-  const allowedMenuKeys = menuData ? collectMenuKeys(menuData.tree) : null;
+  // FAIL-CLOSED: bypass só no dev/sem-auth (accessProfileId === "0"). Usuário real
+  // sem AccessProfile (null), erro ou carregando → NADA de menu (não vaza tudo).
+  const devBypass = currentUser?.accessProfileId === "0";
+  const noProfile = !!currentUser && !currentUser.accessProfileId;
+  const allowedMenuKeys = devBypass
+    ? null // dev/sem-auth → sem restrição (mostra tudo)
+    : menuData
+      ? collectMenuKeys(menuData.tree) // perfil real → filtrado (pode ser vazio)
+      : new Set<string>(); // carregando/erro → nada (fail-closed)
   const visibleNav = filterNav(NAV, allowedMenuKeys);
+  // Aviso quando o usuário está logado mas não tem menus liberados: sem
+  // AccessProfile no Portal, ou falha ao consultar as permissões do perfil.
+  const showMenuWarning = !devBypass && (noProfile || menuError);
 
   // Se o cliente ATIVO não faz parte do grant do usuário, troca para o primeiro
   // permitido (evita operar num cliente sem acesso).
@@ -492,6 +503,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SidebarContent>
             <SidebarGroup>
               <SidebarGroupContent>
+                {showMenuWarning && (
+                  <div className="mx-2 mb-2 rounded-md border border-[var(--rm-inactive-ink)]/30 bg-[var(--rm-inactive-ink)]/5 p-3 text-xs text-muted-foreground">
+                    <div className="mb-1 flex items-center gap-1.5 font-medium text-foreground">
+                      <AlertTriangle className="h-3.5 w-3.5 text-[var(--rm-inactive-ink)]" />
+                      {t("menu.noProfile.title")}
+                    </div>
+                    {t("menu.noProfile.desc")}
+                  </div>
+                )}
                 <SidebarMenu>
                   {visibleNav.map((entry) =>
                     entry.kind === "item" ? (

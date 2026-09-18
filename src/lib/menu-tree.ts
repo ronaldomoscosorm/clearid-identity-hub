@@ -173,7 +173,10 @@ function injectDynamicChildren(tree: MenuNode[], workerTypes: WorkerType[]): Men
 export function useMenuTree() {
   const { data: user } = useCurrentUser();
   const profileId = user?.accessProfileId ?? null;
-  const bypass = profileId === "0" || profileId === null;
+  // Bypass APENAS no dev/sem-auth (accessProfileId === "0"). Um usuário real SEM
+  // AccessProfile (profileId null) NÃO faz bypass: sem operações, a árvore fica
+  // vazia (fail-closed) e o AppShell exibe o aviso "perfil sem menus".
+  const bypass = profileId === "0";
 
   return useQuery({
     queryKey: ["menu-tree", profileId ?? "anonymous"],
