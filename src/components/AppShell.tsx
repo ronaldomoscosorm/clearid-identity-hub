@@ -22,14 +22,14 @@ import { useUserScope } from "@/lib/user-scope";
 import { useUserClientDefaults, useUserDefaultProfile } from "@/lib/user-defaults";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
 import { useArgusConfig, saveConfig, getConfig } from "@/lib/argus-env";
-import { useBranding, useApplyBranding } from "@/lib/branding";
+import { useEffectiveBranding, useApplyEffectiveBranding } from "@/lib/branding";
 import { useT, LANGS } from "@/lib/i18n";
 import { FlagIcon } from "@/components/FlagIcon";
 import { Button } from "@/components/ui/button";
 import { PoweredBy } from "@/components/PoweredBy";
 import { CurrentUserBadge } from "@/components/CurrentUserBadge";
 import { useCurrentUser } from "@/lib/current-user";
-import { useMenuTree, type MenuNode } from "@/lib/menu-tree";
+import { useMenuTree, useResolvedProfileId, type MenuNode } from "@/lib/menu-tree";
 import { setActiveSite, useEnsureActiveSite } from "@/lib/active-site";
 import {
   DropdownMenu,
@@ -332,9 +332,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   // backend não retorna dados (ex.: dev/CORS), não há restrição. ---
   const { data: currentUser } = useCurrentUser();
   const { data: menuData, isError: menuError } = useMenuTree();
-  const userSites = currentUser?.sites ?? [];
-  const { restrictByUser, allowedClientCodes, visibleProfiles, filterSites } = useUserScope();
-  useEnsureActiveSite(restrictByUser ? userSites : undefined);
+  // Perfil de acesso resolvido pelo Portal /api/me (fonte de verdade), com
+  // fallback na claim do JWT. É este id que decide bypass (dev) × fail-closed.
+  const { profileId: resolvedProfileId, resolved: profileResolved } = useResolvedProfileId();
+  // Grants de site mesclados (Portal reativo + claim do JWT), no formato
+  // `cliente:site` — o mesmo do site ativo.
+  const { restrictByUser, allowedClientCodes, visibleProfiles, filterSites, siteGrants } =
+    useUserScope();
+  useEnsureActiveSite(restrictByUser ? siteGrants : undefined);
   const visibleSites = filterSites(sitesQuery.data ?? [], activeProfile);
 
   // Defaults por usuário real (chave = username do /me).
@@ -385,8 +390,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Menus exibidos: filtrados pelas keys permitidas ao usuário (do backend).
   // FAIL-CLOSED: bypass só no dev/sem-auth (accessProfileId === "0"). Usuário real
   // sem AccessProfile (null), erro ou carregando → NADA de menu (não vaza tudo).
-  const devBypass = currentUser?.accessProfileId === "0";
-  const noProfile = !!currentUser && !currentUser.accessProfileId;
+  const devBypass = resolvedProfileId === "0";
+  // Sem AccessProfile só é conclusivo DEPOIS de o Portal /api/me responder.
+  const noProfile = !!currentUser && profileResolved && !resolvedProfileId;
   const allowedMenuKeys = devBypass
     ? null // dev/sem-auth → sem restrição (mostra tudo)
     : menuData
@@ -399,7 +405,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Se o cliente ATIVO não faz parte do grant do usuário, troca para o primeiro
   // permitido (evita operar num cliente sem acesso).
-  const grantKey = userSites.join(",");
+  const grantKey = siteGrants.join(",");
   useEffect(() => {
     if (!restrictByUser) return;
     if (allowedClientCodes.has(activeProfile.toLowerCase())) return;
@@ -411,8 +417,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grantKey, activeProfile, restrictByUser]);
 
-  const branding = useBranding();
-  useApplyBranding();
+  // Logo/nome na sidebar seguem a identidade efetiva (própria → cliente → padrão).
+  const branding = useEffectiveBranding(activeProfile);
+  // Identidade efetiva: própria (localStorage) → básica do cliente → padrão.
+  useApplyEffectiveBranding(activeProfile);
   const { t, lang, setLang } = useT();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);

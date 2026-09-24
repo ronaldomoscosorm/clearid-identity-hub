@@ -3,7 +3,8 @@ import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Power, PowerOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, ArgusApiError, useActiveProfile, useDefaultSiteId } from "@/lib/argus-client";
+import { useUserScope } from "@/lib/user-scope";
 import {
   mirrorIdentities,
   saveIdentityCustomFields,
@@ -83,6 +84,13 @@ function IdentityDetail() {
     : undefined;
   // Escopo para sincronização/times: site do registro ou, na falta, o padrão.
   const scopeSiteId = identitySiteId ?? siteId ?? undefined;
+  // Sites do cliente ativo que o usuário logado pode acessar (fail-closed):
+  // o catálogo de regras da pessoa cobre todos eles, não só o site de lotação.
+  const activeProfile = useActiveProfile();
+  const scope = useUserScope();
+  const ruleSites = scope
+    .filterSites(sitesQuery.data ?? [], activeProfile)
+    .map((s) => ({ siteId: s.siteId, name: s.name }));
   const siteName = identitySiteId
     ? sitesQuery.data?.find((s) => s.siteId === identitySiteId)?.name
     : undefined;
@@ -318,7 +326,7 @@ function IdentityDetail() {
             }
             extraActions={
               <>
-                <TeamsDialog identityId={id} siteId={scopeSiteId} />
+                <TeamsDialog identityId={id} siteId={scopeSiteId} sites={ruleSites} />
                 <CredentialsDialog identityId={id} />
                 <AlertDialog>
                   <AlertDialogTrigger asChild>

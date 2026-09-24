@@ -1,4 +1,6 @@
 import { useSyncExternalStore, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface BrandingConfig {
   clientName: string;
@@ -47,6 +49,93 @@ export function resetBranding() {
   if (!isBrowser()) return;
   localStorage.removeItem(KEY);
   notify();
+}
+
+/** O usuário tem configuração PRÓPRIA (salva neste navegador)? */
+export function hasOwnBranding(): boolean {
+  if (!isBrowser()) return false;
+  try {
+    return localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+// ---------- Configuração BÁSICA por cliente (tabela client_branding) ----------
+// Definida pelo administrador; vale para todos os usuários do cliente que não
+// tenham configuração própria. Resolução: própria → básica do cliente → padrão.
+
+/** Lê a configuração básica do cliente (ou null se não definida). */
+export async function loadClientBranding(profile: string): Promise<BrandingConfig | null> {
+  if (!profile) return null;
+  const { data, error } = await supabase
+    .from("client_branding")
+    .select("client_name, client_logo, primary_color, accent_color")
+    .eq("profile", profile)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    clientName: data.client_name ?? "",
+    clientLogo: data.client_logo ?? "",
+    primaryColor: data.primary_color || DEFAULT_BRANDING.primaryColor,
+    accentColor: data.accent_color || DEFAULT_BRANDING.accentColor,
+  };
+}
+
+/** Grava (upsert) a configuração básica do cliente. Só o administrador deve chamar. */
+export async function saveClientBranding(
+  profile: string,
+  cfg: BrandingConfig,
+  updatedBy?: string | null,
+): Promise<void> {
+  if (!profile) throw new Error("Cliente não definido.");
+  const { error } = await supabase.from("client_branding").upsert(
+    {
+      profile,
+      client_name: cfg.clientName,
+      client_logo: cfg.clientLogo,
+      primary_color: cfg.primaryColor,
+      accent_color: cfg.accentColor,
+      updated_by: updatedBy ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "profile" },
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Query da configuração básica do cliente ativo. */
+export function useClientBranding(profile: string | null | undefined) {
+  return useQuery({
+    queryKey: ["client-branding", profile ?? null],
+    queryFn: () => loadClientBranding(profile ?? ""),
+    enabled: Boolean(profile),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Configuração EFETIVA: a própria do usuário (localStorage), se existir; senão a
+ * básica do cliente; senão o padrão R&M. É o que deve valer ao logar.
+ */
+export function useEffectiveBranding(profile: string | null | undefined): BrandingConfig {
+  const own = useBranding();
+  const client = useClientBranding(profile);
+  const ownSet = useSyncExternalStore(
+    subscribe,
+    () => hasOwnBranding(),
+    () => false,
+  );
+  if (ownSet) return own;
+  return client.data ?? DEFAULT_BRANDING;
+}
+
+/** Aplica a configuração efetiva (própria → cliente → padrão) nas CSS vars. */
+export function useApplyEffectiveBranding(profile: string | null | undefined) {
+  const b = useEffectiveBranding(profile);
+  useEffect(() => {
+    applyBranding(b);
+  }, [b]);
 }
 
 const listeners = new Set<() => void>();

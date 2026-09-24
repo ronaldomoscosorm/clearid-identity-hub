@@ -13,6 +13,7 @@ import {
   normalizeHeader,
   EMPLOYER_CODE_TARGET,
   EMPLOYER_NAME_TARGET,
+  CLEARID_SITE_NAME_TARGET,
   NATIVE_TARGET_PREFIX,
   CF_TARGET_PREFIX,
   type EmployerSiteMap,
@@ -53,6 +54,7 @@ const NO_WT = "__none__";
 const NATIVE_TARGETS: { key: string; label: string }[] = [
   { key: "firstName", label: "Nome" },
   { key: "lastName", label: "Sobrenome" },
+  { key: "middleName", label: "Nome do meio" },
   { key: "displayName", label: "Nome social" },
   { key: "email", label: "E-mail" },
   { key: "employeeNumber", label: "Matrícula" },
@@ -64,9 +66,37 @@ const NATIVE_TARGETS: { key: string; label: string }[] = [
   { key: "siteId", label: "Site (ID ClearID)" },
   { key: "birthday", label: "Nascimento" },
   { key: "phoneNumberPrimary", label: "Telefone" },
+  { key: "phoneNumberSecondary", label: "Telefone secundário" },
   { key: "secondaryEmail", label: "E-mail secundário" },
+  { key: "countryCode", label: "País (código)" },
+  { key: "activationDate", label: "Data de ativação" },
+  { key: "expirationDate", label: "Data de expiração" },
+  { key: "description", label: "Descrição" },
   { key: "status", label: "Status" },
 ];
+
+// Aliases de cabeçalho → alvo nativo (normalizados). Cobrem o template oficial
+// "ClearID Identity Request CSV" da Genetec e variações comuns.
+const NATIVE_ALIASES: Record<string, string> = {
+  company: "companyName",
+  empresa: "companyName",
+  employeeid: "employeeNumber",
+  matricula: "employeeNumber",
+  department: "departmentName",
+  departamento: "departmentName",
+  mobilephonenumber: "phoneNumberPrimary",
+  phone: "phoneNumberPrimary",
+  telefone: "phoneNumberPrimary",
+  celular: "phoneNumberPrimary",
+  preferredname: "displayName",
+  nomesocial: "displayName",
+  country: "countryCode",
+  pais: "countryCode",
+  cargo: "jobTitle",
+  supervisor: "supervisorName",
+  sobrenome: "lastName",
+  nascimento: "birthday",
+};
 
 type ImportRow = IdentityImportResult["rows"][number];
 
@@ -280,6 +310,13 @@ function ImportPage() {
       const h = normalizeHeader(header);
       if (["filial", "nome (employer)"].includes(h)) return EMPLOYER_NAME_TARGET;
       if (["codigo", "cod", "codigo (employer)"].includes(h)) return EMPLOYER_CODE_TARGET;
+      // "Site" com o NOME do site (template Genetec) → resolve pelo catálogo ClearID.
+      if (["site", "site name", "sitename", "nome do site", "nomesite"].includes(h)) {
+        return CLEARID_SITE_NAME_TARGET;
+      }
+      // Aliases do template Genetec / variações comuns (company, employeeId, department…).
+      const alias = NATIVE_ALIASES[h.replace(/\s+/g, "")];
+      if (alias) return NATIVE_TARGET_PREFIX + alias;
       return cfByNorm.get(h) ?? natByNorm.get(h) ?? "";
     };
   }, [cfTargets]);
@@ -328,9 +365,15 @@ function ImportPage() {
         // padrão só é injetado quando a planilha não trouxer o tipo.
         const defaultWorkerTypeCode =
           workerTypes.find((w) => w.id === defaultWorkerTypeId)?.argus_worker_type_code ?? "";
+        // Catálogo COMPLETO de sites do ClearID (nome normalizado → siteId) para o
+        // alvo "Site · Nome (ClearID)"; o backend valida o acesso ao site.
+        const clearIdSiteMap = new Map(
+          (sitesQuery.data ?? []).map((s) => [(s.name ?? "").trim().toLowerCase(), s.siteId] as const),
+        );
         const r = await applyColumnMapping(f, mapping, employerMap, {
           defaultWorkerTypeCode,
           defaultWorkerTypeId,
+          clearIdSiteMap,
         });
         if (r.unresolved > 0) {
           toast.warning(t("import.employer.unresolved", { count: r.unresolved, total: r.total }));
@@ -397,6 +440,7 @@ function ImportPage() {
         (tgt) =>
           tgt === EMPLOYER_CODE_TARGET ||
           tgt === EMPLOYER_NAME_TARGET ||
+          tgt === CLEARID_SITE_NAME_TARGET ||
           tgt === NATIVE_TARGET_PREFIX + "siteId",
       ),
     [mapping],
@@ -591,6 +635,9 @@ function ImportPage() {
                                   </SelectItem>
                                   <SelectItem value={EMPLOYER_NAME_TARGET}>
                                     {t("import.map.employerName")}
+                                  </SelectItem>
+                                  <SelectItem value={CLEARID_SITE_NAME_TARGET}>
+                                    {t("import.map.clearIdSiteName")}
                                   </SelectItem>
                                   {NATIVE_TARGETS.map((n) => (
                                     <SelectItem key={n.key} value={NATIVE_TARGET_PREFIX + n.key}>

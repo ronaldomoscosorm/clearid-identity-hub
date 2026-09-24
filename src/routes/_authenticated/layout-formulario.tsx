@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { findColaboradorId } from "@/lib/worker-types";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -219,10 +220,7 @@ function LayoutFormularioPage() {
     staleTime: 5 * 60 * 1000,
   });
   const workerTypes = workerTypesQuery.data ?? [];
-  const colaboradorId =
-    workerTypes.find((w) => w.argus_worker_type_code === "Colaborador")?.id ??
-    workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL")?.id ??
-    null;
+  const colaboradorId = findColaboradorId(workerTypes);
 
   // Campos disponíveis = PERMITIDO no cliente (worker_type_id null) + EXIBIDO
   // para o tipo em edição (worker_type_id === editWorkerType) + HERDADOS do
@@ -336,10 +334,8 @@ function LayoutFormularioPage() {
   // Default do tipo em edição: Colaborador (matriz) ou o primeiro tipo do cliente.
   useEffect(() => {
     if (editWorkerType || !workerTypes.length) return;
-    const colaborador =
-      workerTypes.find((w) => w.argus_worker_type_code === "Colaborador") ??
-      workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL") ??
-      workerTypes[0];
+    const matrizId = findColaboradorId(workerTypes);
+    const colaborador = workerTypes.find((w) => w.id === matrizId) ?? workerTypes[0];
     if (colaborador) setEditWorkerType(colaborador.id);
   }, [workerTypes, editWorkerType]);
 

@@ -3,11 +3,12 @@ import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { format, parse } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, Check, ChevronsUpDown, X } from "lucide-react";
+import { AlertTriangle, CalendarIcon, Check, CheckCircle2, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useIdentityFieldLabels, STANDARD_IDENTITY_FIELDS } from "@/lib/identity-labels";
 import { useFormLayoutConfig, layoutForWorkerType } from "@/lib/form-layout";
+import { findColaboradorId } from "@/lib/worker-types";
 import { useSpecialFields, type DropdownOption } from "@/lib/special-fields";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
@@ -62,7 +63,14 @@ const makeBaseSchema = (t: TFunc) =>
     externalId: z.string().trim().max(120).optional().default(""),
     // Nome completo — o primeiro token vira firstName e o restante lastName.
     name: z.string().trim().min(1, t("identityForm.validation.required")).max(200),
-    email: z.string().trim().email(t("identityForm.validation.invalidEmail")).max(255),
+    email: z
+      .string()
+      .trim()
+      .max(255)
+      .refine(
+        (v) => v === "" || z.string().email().safeParse(v).success,
+        t("identityForm.validation.invalidEmail"),
+      ),
     status: z.enum(["Active", "Inactive"]),
   });
 
@@ -367,9 +375,10 @@ export function IdentityForm({
   const workerTypes = workerTypesQuery.data ?? [];
 
   // Pré-seleção do tipo de trabalhador: 1) tenta pelo código Argus do inicial;
-  // 2) se não houver código OU ele não casar com nenhum tipo do cliente, cai no
-  // Colaborador (tipo padrão). O tipo local EXATO (Supabase), quando existir,
-  // sobrescreve depois (efeito abaixo). Assim, pessoa sem tipo abre em Colaborador.
+  // 2) no CADASTRO NOVO, sem código ou sem casar, cai no Colaborador (tipo
+  // padrão). Na EDIÇÃO, pessoa sem tipo vinculado fica SEM seleção (placeholder
+  // "Selecione um tipo de trabalhador"), para o usuário escolher explicitamente.
+  // O tipo local EXATO (Supabase), quando existir, sobrescreve depois.
   useEffect(() => {
     if (workerTypeId || !workerTypes.length) return;
     const byCode = initial?.workerTypeCode
@@ -379,12 +388,13 @@ export function IdentityForm({
       setWorkerTypeId(byCode.id);
       return;
     }
+    if (mode !== "create") return;
     const colaborador =
       workerTypes.find((w) => w.argus_worker_type_code === "Colaborador") ??
       workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL") ??
       workerTypes.find((w) => (w.name ?? "").toLowerCase().includes("colaborador"));
     if (colaborador) setWorkerTypeId(colaborador.id);
-  }, [workerTypes, initial?.workerTypeCode, workerTypeId]);
+  }, [workerTypes, initial?.workerTypeCode, workerTypeId, mode]);
 
   // Campos personalizados do site para o tipo de trabalhador selecionado.
   type SiteFieldLite = {
@@ -425,11 +435,8 @@ export function IdentityForm({
     enabled: Boolean(activeProfile),
   });
   // Colaborador (matriz) do cliente — base da herança.
-  const colaboradorId =
-    workerTypes.find((w) => w.argus_worker_type_code === "Colaborador")?.id ??
-    workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL")?.id ??
-    workerTypes.find((w) => (w.name ?? "").toLowerCase().includes("colaborador"))?.id ??
-    null;
+  // Matriz (Colaborador) — detecção robusta a códigos Argus repetidos entre tipos.
+  const colaboradorId = findColaboradorId(workerTypes);
   // Efetivo do tipo: campos do Colaborador (base) sobrepostos pelos do próprio
   // tipo (override de obrigatoriedade / campos específicos). Chave = nativo ou
   // nome da definição. A linha do tipo prevalece sobre a do Colaborador.
@@ -882,10 +889,19 @@ export function IdentityForm({
   // ---- Layout configurável dos campos padrão (designer de layout) ----
   const extraByKey = new Map(EXTRA_FIELDS.map((f) => [f.key, f]));
   const requiredStd = new Set(STANDARD_IDENTITY_FIELDS.filter((f) => f.required).map((f) => f.key));
-  // Obrigatoriedade EFETIVA de um campo nativo: obrigatório do sistema OU marcado
-  // como obrigatório em "Campos do cliente" para o tipo (linha nativa is_required).
-  const nativeRequired = (key: string) =>
-    requiredStd.has(key) || nativeFieldByKey.get(key)?.is_required === true;
+  // Piso que NÃO pode ser relaxado: o ClearID rejeita identidade sem nome, e o
+  // app precisa de site e tipo de trabalhador para montar o cadastro.
+  const HARD_REQUIRED = new Set(["first_name", "company_site_id", "company_worker_type_code"]);
+  // Obrigatoriedade EFETIVA de um campo nativo: quando há linha em "Campos do
+  // cliente" para o campo (própria ou herdada do Colaborador), o `is_required`
+  // dela MANDA — inclusive para relaxar um obrigatório do catálogo (ex.: email).
+  // Sem linha, vale o catálogo. O piso HARD_REQUIRED vale sempre.
+  const nativeRequired = (key: string) => {
+    if (HARD_REQUIRED.has(key)) return true;
+    const row = nativeFieldByKey.get(key);
+    if (row) return row.is_required === true;
+    return requiredStd.has(key);
+  };
   // Valor atual de um campo nativo (para validar obrigatoriedade por tipo).
   const nativeValue = (key: string): string => {
     switch (key) {
@@ -1300,6 +1316,9 @@ export function IdentityForm({
     if (!siteId) {
       out.siteId = t("identityForm.validation.selectSite");
     }
+    if (nativeRequired("email") && isBlank(email)) {
+      out.email = t("identityForm.validation.requiredField");
+    }
     // Foto obrigatória em qualquer identity: no cadastro exige o arquivo local;
     // na edição exige que a identity já tenha foto no ClearID (enviada pelo
     // painel de foto acima). Sem isso, o salvamento é bloqueado.
@@ -1467,8 +1486,84 @@ export function IdentityForm({
   const boolDefs = extraDefs.filter((f) => isBool(f.customFieldType));
   const textDefs = extraDefs.filter((f) => !isDate(f.customFieldType) && !isBool(f.customFieldType));
 
+  // Rótulo de um campo nativo, igual ao exibido no formulário.
+  const nativeLabel = (key: string): string => {
+    switch (key) {
+      case "first_name":
+        return alias("first_name", t("common.name"));
+      case "display_name":
+        return alias("display_name", t("identityForm.displayName"));
+      case "email":
+        return alias("email", t("common.email"));
+      case "external_id":
+        return alias("external_id", t("identityForm.externalId"));
+      case "company_site_id":
+        return alias("company_site_id", t("identityForm.site"));
+      case "company_worker_type_code":
+        return alias("company_worker_type_code", t("identityForm.workerType"));
+      case "company_id":
+        return alias("company_id", t("identityForm.company"));
+      default:
+        return alias(key, t(`identityForm.extra.${key}`));
+    }
+  };
+  // Obrigatórios ainda em branco — espelha exatamente as checagens do submit,
+  // para o usuário ver o que falta ANTES de tentar salvar.
+  const missingRequired: string[] = [];
+  if (mode === "create" ? !photo : existingPictureQuery.isFetched && !hasExistingPicture) {
+    missingRequired.push(t("photoCapture.title"));
+  }
+  if (!workerTypeId) missingRequired.push(nativeLabel("company_worker_type_code"));
+  if (!siteId) missingRequired.push(nativeLabel("company_site_id"));
+  if (isBlank(fullName)) missingRequired.push(nativeLabel("first_name"));
+  if (nativeRequired("email") && isBlank(email)) missingRequired.push(nativeLabel("email"));
+  for (const k of consumedStd) {
+    if (["first_name", "email", "company_worker_type_code", "company_site_id"].includes(k)) continue;
+    if (nativeRequired(k) && isBlank(nativeValue(k))) missingRequired.push(nativeLabel(k));
+  }
+  for (const sf of siteFields) {
+    if (!sf.fillable || !sf.definition || !consumedCf.has(sf.definition.custom_field_name)) continue;
+    if (sf.is_required && isBlank(customFields[sf.definition.custom_field_name])) {
+      missingRequired.push(siteFieldLabel(sf));
+    }
+  }
+  for (const [name, att] of attachmentByName) {
+    if (!att.required || !consumedCf.has(name)) continue;
+    if (!attachments[att.id] && !existingAttachmentIds.has(att.id)) {
+      const sf = siteFieldByName.get(name);
+      const label = sf ? siteFieldLabel(sf) : alias(name, cfDefByName.get(name)?.displayName || name);
+      missingRequired.push(`${label} (${t("attachment.evidenceLabel")})`);
+    }
+  }
+
   return (
     <form onSubmit={submit} className="space-y-6">
+      {missingRequired.length > 0 ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          <p className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            {t("identityForm.pending.title", { count: missingRequired.length })}
+          </p>
+          <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 pl-6 text-xs">
+            {missingRequired.map((label, i) => (
+              <li key={`${label}-${i}`} className="list-disc">
+                {label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p
+          role="status"
+          className="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
+        >
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {t("identityForm.pending.none")}
+        </p>
+      )}
       {/* Foto — só no cadastro novo (a edição tem o IdentityPicturePanel). O
           upload é feito após a criação, quando já existe o identityId. */}
       {mode === "create" && (

@@ -26,24 +26,77 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type Row = { teamId: string; name: string };
+type Row = { teamId: string; name: string; hint?: string };
+type SiteRef = { siteId: string; name: string };
 
 export function TeamsDialog({
   identityId,
   siteId,
+  sites,
 }: {
   identityId: string;
+  /** Site de lotação da pessoa (escopo padrão das chamadas). */
   siteId?: string | null;
+  /**
+   * Sites cujas regras entram no catálogo (os sites do cliente que o usuário
+   * logado pode acessar). Sem a lista, usa só `siteId`.
+   */
+  sites?: SiteRef[];
 }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
 
+  // Sites consultados: a lista informada, garantindo o site da pessoa; ou só ele.
+  const querySites = useMemo<SiteRef[]>(() => {
+    const list = (sites ?? []).filter((x) => !!x.siteId);
+    if (siteId && !list.some((x) => x.siteId === siteId)) {
+      list.push({ siteId, name: list.length ? siteId.slice(0, 8) : "" });
+    }
+    return list;
+  }, [sites, siteId]);
+  const sitesKey = querySites.map((x) => x.siteId).join(",");
+
+  // Catálogo = união das regras de cada site (uma chamada por site), com o(s)
+  // site(s) de cada regra para exibição e para escopar incluir/remover.
   const allQuery = useQuery({
-    queryKey: ["teams-all", siteId ?? "default"],
-    queryFn: () => argusApi.listTeams({ take: 1000, siteId }),
+    queryKey: ["teams-all", sitesKey || "default"],
+    queryFn: async () => {
+      const teams = new Map<string, { teamId: string; name: string }>();
+      const teamSites = new Map<string, SiteRef[]>();
+      if (querySites.length === 0) {
+        for (const tm of await argusApi.listTeams({ take: 1000, siteId })) {
+          teams.set(tm.teamId, { teamId: tm.teamId, name: tm.name });
+        }
+        return { teams: [...teams.values()], teamSites };
+      }
+      const results = await Promise.all(
+        querySites.map(async (st) => ({
+          site: st,
+          teams: await argusApi.listTeams({ take: 1000, siteId: st.siteId }).catch(() => []),
+        })),
+      );
+      for (const r of results) {
+        for (const tm of r.teams) {
+          if (!teams.has(tm.teamId)) teams.set(tm.teamId, { teamId: tm.teamId, name: tm.name });
+          const arr = teamSites.get(tm.teamId) ?? [];
+          if (!arr.some((x) => x.siteId === r.site.siteId)) arr.push(r.site);
+          teamSites.set(tm.teamId, arr);
+        }
+      }
+      return { teams: [...teams.values()], teamSites };
+    },
     enabled: open,
     staleTime: 5 * 60 * 1000,
   });
+  const teamSites = allQuery.data?.teamSites;
+  // Site usado nas chamadas de incluir/remover: o do catálogo da regra, senão o da pessoa.
+  const siteForTeam = (teamId: string): string | null | undefined =>
+    teamSites?.get(teamId)?.[0]?.siteId ?? siteId;
+  const hintForTeam = (teamId: string): string | undefined => {
+    if (querySites.length < 2) return undefined;
+    const names = (teamSites?.get(teamId) ?? []).map((x) => x.name).filter(Boolean);
+    return names.length ? names.join(", ") : undefined;
+  };
   const assignedQuery = useQuery({
     queryKey: ["identity-teams", identityId, siteId ?? "default"],
     queryFn: () => argusApi.getIdentityTeams(identityId, { siteId }),
@@ -70,18 +123,21 @@ export function TeamsDialog({
 
   const nameById = useMemo(() => {
     const m = new Map<string, string>();
-    (allQuery.data ?? []).forEach((tm) => m.set(tm.teamId, tm.name));
+    (allQuery.data?.teams ?? []).forEach((tm) => m.set(tm.teamId, tm.name));
     (assignedQuery.data ?? []).forEach((x) => {
       if (!m.has(x.teamId)) m.set(x.teamId, x.teamName ?? x.teamId);
     });
     return m;
   }, [allQuery.data, assignedQuery.data]);
 
-  const catalogIds = useMemo(() => (allQuery.data ?? []).map((tm) => tm.teamId), [allQuery.data]);
+  const catalogIds = useMemo(
+    () => (allQuery.data?.teams ?? []).map((tm) => tm.teamId),
+    [allQuery.data],
+  );
 
   const sortRows = (ids: string[]): Row[] =>
     ids
-      .map((id) => ({ teamId: id, name: nameById.get(id) ?? id }))
+      .map((id) => ({ teamId: id, name: nameById.get(id) ?? id, hint: hintForTeam(id) }))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   const available = sortRows(catalogIds.filter((id) => !assignedIds.has(id)));
@@ -94,7 +150,9 @@ export function TeamsDialog({
   const include = useMutation({
     mutationFn: (ids: string[]) =>
       Promise.all(
-        ids.map((tid) => argusApi.addTeamMembers(tid, { identityIds: [identityId], siteId })),
+        ids.map((tid) =>
+          argusApi.addTeamMembers(tid, { identityIds: [identityId], siteId: siteForTeam(tid) }),
+        ),
       ),
     onSuccess: (_r, ids) => {
       toast.success(t("teams.included", { n: ids.length }));
@@ -107,7 +165,9 @@ export function TeamsDialog({
   const remove = useMutation({
     mutationFn: (ids: string[]) =>
       Promise.all(
-        ids.map((tid) => argusApi.removeTeamMembers(tid, { identityIds: [identityId], siteId })),
+        ids.map((tid) =>
+          argusApi.removeTeamMembers(tid, { identityIds: [identityId], siteId: siteForTeam(tid) }),
+        ),
       ),
     onSuccess: (_r, ids) => {
       toast.success(t("teams.removed", { n: ids.length }));
@@ -314,7 +374,12 @@ function ListColumn({
                 >
                   {isSel && <Check className="h-3 w-3" />}
                 </span>
-                <span className="truncate">{r.name}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{r.name}</span>
+                  {r.hint && (
+                    <span className="block truncate text-[11px] text-muted-foreground">{r.hint}</span>
+                  )}
+                </span>
               </button>
             );
           })

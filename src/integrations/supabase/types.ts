@@ -219,6 +219,42 @@ export type Database = {
         }
         Relationships: []
       }
+      client_branding: {
+        Row: {
+          accent_color: string
+          client_logo: string
+          client_name: string
+          created_at: string
+          id: string
+          primary_color: string
+          profile: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          accent_color?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          id?: string
+          primary_color?: string
+          profile: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          accent_color?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          id?: string
+          primary_color?: string
+          profile?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       import_mappings: {
         Row: {
           created_at: string

@@ -158,6 +158,8 @@ export async function mapEmployerImport(
 export const IGNORE_TARGET = ""; // coluna ignorada
 export const EMPLOYER_CODE_TARGET = "__employer_code__"; // resolve site pelo código
 export const EMPLOYER_NAME_TARGET = "__employer_name__"; // resolve site pelo nome
+/** Resolve o site pelo NOME no catálogo do ClearID (ex.: "LA-BR-Itumbiara (ITU1)"). */
+export const CLEARID_SITE_NAME_TARGET = "__clearid_site_name__";
 /** Prefixos dos alvos: campo nativo do ClearID (coluna do import) e customizável. */
 export const NATIVE_TARGET_PREFIX = "native:";
 export const CF_TARGET_PREFIX = "cf:";
@@ -197,7 +199,12 @@ export async function applyColumnMapping(
   file: File,
   mapping: Record<string, string>,
   employerMap: EmployerSiteMap,
-  opts?: { defaultWorkerTypeCode?: string; defaultWorkerTypeId?: string },
+  opts?: {
+    defaultWorkerTypeCode?: string;
+    defaultWorkerTypeId?: string;
+    /** Nome do site (normalizado: minúsculo/trim) → siteId do ClearID. */
+    clearIdSiteMap?: Map<string, string>;
+  },
 ): Promise<{ file: File; unresolved: number; total: number }> {
   const XLSX = await import("xlsx");
   const buf = await file.arrayBuffer();
@@ -211,6 +218,9 @@ export async function applyColumnMapping(
   const usesEmployer = Object.values(mapping).some(
     (t) => t === EMPLOYER_CODE_TARGET || t === EMPLOYER_NAME_TARGET,
   );
+  // Resolução pelo NOME do site no catálogo ClearID (template Genetic "Site").
+  const usesClearIdSite = Object.values(mapping).some((t) => t === CLEARID_SITE_NAME_TARGET);
+  const clearIdSiteMap = opts?.clearIdSiteMap ?? new Map<string, string>();
   const defaultWtCode = (opts?.defaultWorkerTypeCode ?? "").trim();
   const defaultWtId = (opts?.defaultWorkerTypeId ?? "").trim();
 
@@ -219,6 +229,7 @@ export async function applyColumnMapping(
     const next: Record<string, unknown> = {};
     let codigo = "";
     let nome = "";
+    let siteName = "";
     for (const [key, value] of Object.entries(row)) {
       const target = mapping[key];
       if (!target) continue; // ignorada
@@ -229,6 +240,10 @@ export async function applyColumnMapping(
       if (target === EMPLOYER_NAME_TARGET) {
         nome = String(value ?? "").trim();
         continue;
+      }
+      if (target === CLEARID_SITE_NAME_TARGET) {
+        siteName = String(value ?? "").trim();
+        continue; // consumida para resolver o site; não vai para o import
       }
       if (target.startsWith(NATIVE_TARGET_PREFIX)) {
         next[target.slice(NATIVE_TARGET_PREFIX.length)] = value;
@@ -245,6 +260,11 @@ export async function applyColumnMapping(
         (codigo && employerMap.byCodigo.get(codigo.toLowerCase())) ||
         (nome && employerMap.byNome.get(nome.toLowerCase())) ||
         "";
+      if (!siteId) unresolved++;
+      next.siteId = siteId;
+    } else if (usesClearIdSite) {
+      // Nome do site → siteId pelo catálogo ClearID (normalizado).
+      const siteId = (siteName && clearIdSiteMap.get(siteName.toLowerCase())) || "";
       if (!siteId) unresolved++;
       next.siteId = siteId;
     }

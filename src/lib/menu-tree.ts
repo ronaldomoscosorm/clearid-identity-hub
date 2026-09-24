@@ -47,9 +47,88 @@ interface ApiEnvelope<T> {
 }
 
 // ---------- Config ----------
-const PORTAL_BASE =
+export const PORTAL_BASE =
   (import.meta.env.VITE_PORTAL_ARGUS_API_URL as string | undefined) ??
   "https://portal.rmtecho.com.br/api";
+
+// ---------- Perfil de acesso (fonte de verdade: Portal /api/me) ----------
+/**
+ * Resposta relevante de `GET {Portal}/api/me` (ver docs/INTEGRATION_ClearID_Menus.md §2):
+ * para cada app do usuário, `accessProfileId` numérico — o id usado em
+ * `GET /api/access-profiles/{id}/menus`. Fica `null` quando o usuário tem o app
+ * mas ainda não tem perfil atribuído.
+ */
+export interface PortalMe {
+  /** Id do usuário no Portal (usado em GET /api/users/{id}/sites). */
+  id?: number | null;
+  apps?: Array<{ code?: string | null; accessProfileId?: number | null }> | null;
+  /** Sites do próprio usuário, `cliente:site` (reativo; ver MeDTO.Sites no Portal). */
+  sites?: string[] | null;
+}
+
+/**
+ * `GET {Portal}/api/me` cacheado (mesma queryKey do resolvedor de perfil).
+ * Exposto para outros escopos por usuário (ex.: sites permitidos).
+ */
+export function usePortalMe(enabled = true) {
+  return useQuery({
+    queryKey: ["portal-me"],
+    queryFn: fetchPortalMe,
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+async function fetchPortalMe(): Promise<PortalMe> {
+  // Timeout: sem ele, um /api/me pendurado deixaria o menu vazio sem aviso
+  // (o menu só monta depois que o perfil resolve).
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  let res: Response;
+  try {
+    res = await fetch(`${PORTAL_BASE.replace(/\/+$/, "")}/me`, {
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!res.ok) throw new Error(`GET portal /api/me falhou (${res.status})`);
+  const body = (await res.json()) as PortalMe | { data?: PortalMe | null };
+  // Aceita tanto o objeto direto quanto envelope { data: {...} }.
+  const unwrapped =
+    body && typeof body === "object" && "data" in body && !("apps" in body)
+      ? ((body as { data?: PortalMe | null }).data ?? {})
+      : (body as PortalMe);
+  return unwrapped;
+}
+
+/**
+ * Resolve o `accessProfileId` do usuário no app ClearID.
+ *
+ * Ordem: (1) Portal `/api/me` → `apps[code="clearid"].accessProfileId` — lê o banco
+ * AGORA, então reflete o perfil mesmo que o JWT tenha sido emitido antes da
+ * atribuição; (2) fallback na claim `argus_profile_id` do JWT (via ClearID
+ * `/api/auth/me`), que cobre o bypass de dev (`"0"`) e o caso do Portal indisponível.
+ *
+ * `resolved` = usuário conhecido E consulta ao Portal já encerrada (sucesso ou
+ * erro) — evita montar o menu com um perfil ainda indeterminado.
+ */
+export function useResolvedProfileId() {
+  const { data: user } = useCurrentUser();
+  const portalMe = usePortalMe(!!user);
+  const claimProfileId = user?.accessProfileId ?? null;
+  const clearidApp = portalMe.data?.apps?.find(
+    (a) => (a.code ?? "").toLowerCase() === "clearid",
+  );
+  const portalProfileId =
+    clearidApp?.accessProfileId != null ? String(clearidApp.accessProfileId) : null;
+  const profileId = portalProfileId ?? claimProfileId;
+  const resolved = !!user && (portalMe.isSuccess || portalMe.isError);
+  return { user, profileId, resolved };
+}
 
 // ---------- Fetches ----------
 async function fetchMenus(): Promise<MenuNode[]> {
@@ -171,8 +250,8 @@ function injectDynamicChildren(tree: MenuNode[], workerTypes: WorkerType[]): Men
 
 // ---------- Hook público ----------
 export function useMenuTree() {
-  const { data: user } = useCurrentUser();
-  const profileId = user?.accessProfileId ?? null;
+  // Perfil resolvido pelo Portal /api/me (fonte de verdade), com fallback na claim.
+  const { user, profileId, resolved } = useResolvedProfileId();
   // Bypass APENAS no dev/sem-auth (accessProfileId === "0"). Um usuário real SEM
   // AccessProfile (profileId null) NÃO faz bypass: sem operações, a árvore fica
   // vazia (fail-closed) e o AppShell exibe o aviso "perfil sem menus".
@@ -180,7 +259,8 @@ export function useMenuTree() {
 
   return useQuery({
     queryKey: ["menu-tree", profileId ?? "anonymous"],
-    enabled: !!user,
+    // Só monta quando o perfil já foi determinado — evita árvore vazia transitória.
+    enabled: !!user && resolved,
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const [menus, workerTypes, operations] = await Promise.all([

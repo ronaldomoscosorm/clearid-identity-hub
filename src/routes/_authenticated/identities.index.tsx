@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { findColaboradorId } from "@/lib/worker-types";
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { mirrorIdentities } from "@/lib/supabase-mirror";
 import { Plus, RefreshCw, Search, MoreHorizontal, Eye, Camera, Users, UserCheck, UserX, ArrowRight, Paperclip, ExternalLink } from "lucide-react";
-import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId, useActiveProfile, type ClearIdIdentity } from "@/lib/argus-client";
 import { corporateData } from "@/lib/corporatedata-client";
 import { useCurrentAttachments, signedUrlFor } from "@/lib/attachments";
 import { pickLang } from "@/lib/custom-fields";
@@ -220,10 +221,21 @@ function IdentitiesList() {
   // Sites do cliente logado (para restringir "Todos os sites").
   const clientSiteIds = useMemo(() => new Set(sites.map((s) => s.siteId)), [sites]);
   // Colaborador é o tipo padrão: pessoas SEM worker_type_id contam como Colaborador.
-  const colaboradorId = useMemo(
-    () => workerTypes.find((w) => w.argus_worker_type_code === "Colaborador")?.id ?? null,
-    [workerTypes],
-  );
+  const colaboradorId = useMemo(() => findColaboradorId(workerTypes), [workerTypes]);
+
+  // Nome do site de cada hit: o Search Service traz `siteId` no topo do hit
+  // (às vezes só em companyData.siteId); resolvido pelo catálogo do cliente.
+  const siteNameById = useMemo(() => new Map(sites.map((s) => [s.siteId, s.name])), [sites]);
+  const hitSiteId = (i: ClearIdIdentity): string | null => {
+    const top = (i as { siteId?: string | null }).siteId;
+    const cd = (i.companyData as { siteId?: string | null } | null | undefined)?.siteId;
+    return top || cd || null;
+  };
+  const hitSiteName = (i: ClearIdIdentity): string => {
+    const id = hitSiteId(i);
+    if (!id) return "—";
+    return siteNameById.get(id) ?? id.slice(0, 8);
+  };
 
   const items = useMemo(() => {
     // "Todos os sites" = apenas os sites permitidos ao cliente logado. O ClearID
@@ -408,8 +420,8 @@ function IdentitiesList() {
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className={cn(panel, "overflow-hidden")}>
           {/* cabeçalho de colunas */}
-          <div className="grid grid-cols-[12px_40px_1fr_110px_64px_36px] items-center gap-3 border-b border-[var(--rm-line)] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-[var(--rm-faint)]">
-            <div></div><div></div><div>{t("identities.col.identity")}</div><div>{t("common.status")}</div><div className="text-right">{t("identities.col.relevance")}</div><div></div>
+          <div className="grid grid-cols-[12px_40px_1fr_150px_110px_64px_36px] items-center gap-3 border-b border-[var(--rm-line)] px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.11em] text-[var(--rm-faint)]">
+            <div></div><div></div><div>{t("identities.col.identity")}</div><div>{t("identityForm.site")}</div><div>{t("common.status")}</div><div className="text-right">{t("identities.col.relevance")}</div><div></div>
           </div>
 
           {!hasSearched ? (
@@ -448,7 +460,7 @@ function IdentitiesList() {
                     key={it.identityId}
                     onClick={() => setSel(it.identityId)}
                     className={cn(
-                      "grid cursor-pointer grid-cols-[12px_40px_1fr_110px_64px_36px] items-center gap-3 border-b border-[var(--rm-line-soft)] px-4 py-3 transition-colors",
+                      "grid cursor-pointer grid-cols-[12px_40px_1fr_150px_110px_64px_36px] items-center gap-3 border-b border-[var(--rm-line-soft)] px-4 py-3 transition-colors",
                       on ? "bg-[color-mix(in_srgb,var(--rm-brand)_9%,transparent)]" : "hover:bg-[var(--rm-panel-2)]",
                     )}
                     style={on ? { boxShadow: "inset 2px 0 0 var(--rm-brand)" } : undefined}
@@ -470,6 +482,9 @@ function IdentitiesList() {
                       <div className="truncate text-xs text-[var(--rm-dim)] tnum">
                         <span className="text-[var(--rm-faint)]">{it.identityId.slice(0, 8)}</span> · {it.email ?? "—"}
                       </div>
+                    </div>
+                    <div className="truncate text-xs text-[var(--rm-dim)]" title={hitSiteName(it)}>
+                      {hitSiteName(it)}
                     </div>
                     <div className="text-[11px] font-semibold tracking-wide" style={{ color: active ? "var(--rm-active-ink)" : "var(--rm-inactive-ink)" }}>
                       {active ? "● " + t("identities.status.active") : "○ " + (String(it.status ?? "") || "—")}
@@ -525,6 +540,7 @@ function IdentitiesList() {
                   </span>
                 </InspRow>
                 <InspRow k={t("common.email")}><span className="text-[var(--rm-ink)]">{selected.email ?? "—"}</span></InspRow>
+                <InspRow k={t("identityForm.site")}><span className="text-[var(--rm-ink)]">{hitSiteName(selected)}</span></InspRow>
                 <InspRow k={t("identities.col.relevance")}><span className="text-[var(--rm-ink)] tnum">{typeof selected.score === "number" ? selected.score.toFixed(2) : "—"}</span></InspRow>
               </dl>
               <InspectorAttachments identityId={selected.identityId} />

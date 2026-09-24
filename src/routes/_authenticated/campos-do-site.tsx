@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { findColaboradorId } from "@/lib/worker-types";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, RefreshCw, Pencil, Trash2, SlidersHorizontal } from "lucide-react";
+import { Plus, RefreshCw, Pencil, Trash2, SlidersHorizontal, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
@@ -238,11 +239,7 @@ function CamposDoSitePage() {
   });
   const workerTypes = workerTypesQuery.data ?? [];
   // Colaborador (matriz) do cliente — base da herança de campos.
-  const colaboradorId =
-    workerTypes.find((w) => w.argus_worker_type_code === "Colaborador")?.id ??
-    workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL")?.id ??
-    workerTypes.find((w) => (w.name ?? "").toLowerCase().includes("colaborador"))?.id ??
-    null;
+  const colaboradorId = findColaboradorId(workerTypes);
 
   // Seções unificadas (ClearID + Supabase) — direto do backend, com `storage`.
   const sectionsQuery = useQuery({
@@ -252,6 +249,8 @@ function CamposDoSitePage() {
     staleTime: 5 * 60 * 1000,
   });
   const sections = sectionsQuery.data ?? [];
+  // Busca na lista (nome do campo, chave nativa ou nome de exibição).
+  const [search, setSearch] = useState("");
   // custom_field_name -> nome de exibição da seção
   const sectionByField = useMemo(() => {
     const m = new Map<string, string>();
@@ -593,20 +592,75 @@ function CamposDoSitePage() {
     row.native_field_key
       ? nativeLabel(row.native_field_key)
       : pickLang(row.definition?.display_name) || row.definition?.custom_field_name || "";
-  const groupedItems = useMemo(() => {
+  // Sub-grupo (categoria) de uma linha: nativos do ClearID primeiro; depois a
+  // seção do campo personalizado; sem seção por último.
+  const NATIVE_GROUP = " native";
+  const NO_SECTION_GROUP = "nosection";
+  const subGroupOf = (r: ListRow): string => {
+    if (r.native_field_key) return NATIVE_GROUP;
+    const name = r.definition?.custom_field_name;
+    return (name && sectionByField.get(name)) || NO_SECTION_GROUP;
+  };
+  const subGroupLabel = (key: string) =>
+    key === NATIVE_GROUP
+      ? t("siteFields.group.native")
+      : key === NO_SECTION_GROUP
+        ? t("siteFields.group.noSection")
+        : key;
+  // Texto pesquisável da linha (nome, chave nativa, nome de exibição, seção).
+  const searchText = (r: ListRow) =>
+    [
+      fieldLabelOf(r),
+      r.native_field_key ?? "",
+      r.definition?.custom_field_name ?? "",
+      langFromJson(r.display_name_override)["pt-BR"],
+      subGroupLabel(subGroupOf(r)),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+  // Grupo (tipo de trabalhador / permitido / empresa) → sub-grupos (categoria) → linhas.
+  type SubGroup = [label: string, rows: ListRow[]];
+  const groupedItems = useMemo((): [string, SubGroup[]][] => {
     const ALLOWED = t("siteFields.allowedSite");
     const COMPANY = t("siteFields.entity.company");
+    const q = search.trim().toLowerCase();
+    const matches = (r: ListRow) => !q || searchText(r).includes(q);
+
     const identityRows = items.filter((r) => r.entity_type === "identity");
     const companyRows = items.filter((r) => r.entity_type === "company");
     const permitidoRows = identityRows.filter((r) => r.worker_type_id === null);
     const colaboradorRows = colaboradorId
       ? identityRows.filter((r) => r.worker_type_id === colaboradorId)
       : [];
-    const sortFields = (rows: ListRow[]) =>
-      rows.sort((a, b) => fieldLabelOf(a).localeCompare(fieldLabelOf(b), "pt-BR", { sensitivity: "base" }));
+    const byLabel = (a: ListRow, b: ListRow) =>
+      fieldLabelOf(a).localeCompare(fieldLabelOf(b), "pt-BR", { sensitivity: "base" });
 
-    const arr: [string, ListRow[]][] = [];
-    if (permitidoRows.length) arr.push([ALLOWED, sortFields([...permitidoRows])]);
+    // Divide as linhas de um grupo em sub-grupos ordenados; aplica a busca.
+    const toSubGroups = (rows: ListRow[]): SubGroup[] => {
+      const m = new Map<string, ListRow[]>();
+      for (const r of rows) {
+        if (!matches(r)) continue;
+        const k = subGroupOf(r);
+        if (!m.has(k)) m.set(k, []);
+        m.get(k)!.push(r);
+      }
+      const keys = [...m.keys()].sort((a, b) => {
+        if (a === NATIVE_GROUP) return -1;
+        if (b === NATIVE_GROUP) return 1;
+        if (a === NO_SECTION_GROUP) return 1;
+        if (b === NO_SECTION_GROUP) return -1;
+        return a.localeCompare(b, "pt-BR", { sensitivity: "base" });
+      });
+      return keys.map((k) => [subGroupLabel(k), m.get(k)!.sort(byLabel)]);
+    };
+
+    const arr: [string, SubGroup[]][] = [];
+    const push = (label: string, rows: ListRow[]) => {
+      const subs = toSubGroups(rows);
+      if (subs.length) arr.push([label, subs]);
+    };
+    push(ALLOWED, permitidoRows);
     for (const wt of workerTypes) {
       const own = identityRows.filter((r) => r.worker_type_id === wt.id);
       const ownKeys = new Set(own.map(keyOf));
@@ -616,13 +670,12 @@ function CamposDoSitePage() {
           if (!ownKeys.has(keyOf(cr))) rows.push({ ...cr, _inheritedForType: wt.id });
         }
       }
-      if (rows.length)
-        arr.push([pickLang(wt.name_i18n, lang) || wt.name || "—", sortFields(rows)]);
+      push(pickLang(wt.name_i18n, lang) || wt.name || "—", rows);
     }
-    if (companyRows.length) arr.push([COMPANY, sortFields([...companyRows])]);
+    push(COMPANY, companyRows);
     return arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, workerTypes, colaboradorId, lang, t]);
+  }, [items, workerTypes, colaboradorId, lang, t, search, sectionByField]);
 
   const renderRow = (row: ListRow) => {
     const inherited = Boolean(row._inheritedForType);
@@ -780,27 +833,49 @@ function CamposDoSitePage() {
               </p>
             ) : (
               <div className="space-y-6">
-                {groupedItems.map(([section, rows]) => (
-                  <div key={section} className="space-y-2">
-                    <p className="text-sm font-medium text-foreground">{section}</p>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>{t("siteFields.col.field")}</TableHead>
-                          <TableHead>{t("siteFields.col.entity")}</TableHead>
-                          <TableHead>{t("siteFields.col.worker")}</TableHead>
-                          <TableHead>{t("siteFields.col.type")}</TableHead>
-                          <TableHead>{t("siteFields.col.display")}</TableHead>
-                          <TableHead>{t("siteFields.col.required")}</TableHead>
-                          <TableHead>{t("siteFields.col.fillable")}</TableHead>
-                          <TableHead>{t("siteFields.col.active")}</TableHead>
-                          <TableHead className="w-[100px] text-right">
-                            {t("common.actions")}
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>{rows.map(renderRow)}</TableBody>
-                    </Table>
+                <div className="relative max-w-md">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={t("siteFields.search.placeholder")}
+                    className="h-9 pl-8"
+                  />
+                </div>
+                {groupedItems.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    {t("siteFields.search.empty")}
+                  </p>
+                )}
+                {groupedItems.map(([section, subgroups]) => (
+                  <div key={section} className="space-y-3">
+                    <p className="border-b pb-1 text-sm font-semibold text-foreground">{section}</p>
+                    {subgroups.map(([sub, rows]) => (
+                      <div key={sub} className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {sub}{" "}
+                          <span className="font-normal normal-case">({rows.length})</span>
+                        </p>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>{t("siteFields.col.field")}</TableHead>
+                              <TableHead>{t("siteFields.col.entity")}</TableHead>
+                              <TableHead>{t("siteFields.col.worker")}</TableHead>
+                              <TableHead>{t("siteFields.col.type")}</TableHead>
+                              <TableHead>{t("siteFields.col.display")}</TableHead>
+                              <TableHead>{t("siteFields.col.required")}</TableHead>
+                              <TableHead>{t("siteFields.col.fillable")}</TableHead>
+                              <TableHead>{t("siteFields.col.active")}</TableHead>
+                              <TableHead className="w-[100px] text-right">
+                                {t("common.actions")}
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>{rows.map(renderRow)}</TableBody>
+                        </Table>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>

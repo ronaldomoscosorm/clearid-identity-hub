@@ -14,12 +14,14 @@ import {
   X,
   Loader2,
   User,
+  Trash2,
 } from "lucide-react";
 import { z } from "zod";
 import {
   argusApi,
   useDefaultSiteId,
   type ClearIdIdentity,
+  type ClearIdTeamMember,
 } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -57,6 +59,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { IdentityThumb } from "@/components/IdentityThumb";
 import { IdentityPictureDialog } from "@/components/IdentityPictureDialog";
 import { useT } from "@/lib/i18n";
@@ -80,6 +92,9 @@ function RegrasPage() {
   const siteId = useDefaultSiteId();
   const [addOpen, setAddOpen] = useState(false);
   const [pictureFor, setPictureFor] = useState<{ id: string; name: string } | null>(null);
+  const [memberFilter, setMemberFilter] = useState("");
+  const [toRemove, setToRemove] = useState<{ id: string; name: string } | null>(null);
+  const queryClient = useQueryClient();
 
   const teamsQuery = useQuery({
     queryKey: ["teams", siteId],
@@ -123,6 +138,48 @@ function RegrasPage() {
     queryFn: () => argusApi.listTeamMembers(teamId!, { count: 500 }),
     enabled: !!teamId,
     retry: false,
+  });
+
+  // Pesquisa local (nome, e-mail, identityId) sobre os membros já carregados.
+  const filteredMembers = useMemo(() => {
+    const all = (membersQuery.data ?? []).slice().sort((a, b) => {
+      const an = (a.identityName ?? "").trim();
+      const bn = (b.identityName ?? "").trim();
+      return an.localeCompare(bn, "pt-BR", { sensitivity: "base" });
+    });
+    const q = memberFilter.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter((m) =>
+      [m.identityName, m.identityEmail, m.identityId].some((v) => (v ?? "").toLowerCase().includes(q)),
+    );
+  }, [membersQuery.data, memberFilter]);
+
+  const removeMember = useMutation({
+    mutationFn: (identityId: string) => {
+      if (!teamId) throw new Error(t("rules.selectTeamFirst"));
+      return argusApi.removeTeamMembers(teamId, { identityIds: [identityId], siteId });
+    },
+    onSuccess: (_d, identityId) => {
+      toast.success(t("rules.memberRemoved"));
+      setToRemove(null);
+      const membersKey = ["team-members", siteId, teamId] as const;
+      // Some da lista NA HORA; o índice do ClearID pode demorar a refletir a
+      // remoção, então reconsulta até a pessoa não voltar (ou esgotar tentativas).
+      const drop = (rows: ClearIdTeamMember[] | undefined) =>
+        (rows ?? []).filter((m) => m.identityId !== identityId);
+      queryClient.setQueryData<ClearIdTeamMember[]>(membersKey, drop);
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      (async () => {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          if (attempt > 0) await wait(1500 * attempt);
+          const fresh = await argusApi.listTeamMembers(teamId!, { count: 500 });
+          const gone = !fresh.some((m) => m.identityId === identityId);
+          queryClient.setQueryData<ClearIdTeamMember[]>(membersKey, () => (gone ? fresh : drop(fresh)));
+          if (gone) break;
+        }
+      })().catch(() => undefined);
+    },
+    onError: (e: Error) => toast.error(e.message || t("rules.memberRemoveError")),
   });
 
   const setTeam = (id: string) => {
@@ -216,8 +273,33 @@ function RegrasPage() {
             <p className="text-xs text-muted-foreground">
               {membersQuery.isLoading
                 ? t("common.loading")
-                : t("rules.memberCount", { count: membersQuery.data?.length ?? 0 })}
+                : memberFilter.trim()
+                  ? t("rules.memberCountFiltered", {
+                      shown: filteredMembers.length,
+                      count: membersQuery.data?.length ?? 0,
+                    })
+                  : t("rules.memberCount", { count: membersQuery.data?.length ?? 0 })}
             </p>
+            <div className="relative mt-3 max-w-sm">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={memberFilter}
+                onChange={(e) => setMemberFilter(e.target.value)}
+                placeholder={t("rules.searchMembers")}
+                className="pl-8 pr-8"
+                aria-label={t("rules.searchMembers")}
+              />
+              {memberFilter && (
+                <button
+                  type="button"
+                  onClick={() => setMemberFilter("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={t("common.clear")}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
           <Table>
             <TableHeader>
@@ -246,21 +328,14 @@ function RegrasPage() {
                     {(membersQuery.error as Error).message}
                   </TableCell>
                 </TableRow>
-              ) : (membersQuery.data ?? []).length === 0 ? (
+              ) : filteredMembers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                    {t("rules.noMembers")}
+                    {memberFilter.trim() ? t("rules.noMembersMatch") : t("rules.noMembers")}
                   </TableCell>
                 </TableRow>
               ) : (
-                (membersQuery.data ?? [])
-                  .slice()
-                  .sort((a, b) => {
-                    const an = (a.identityName ?? "").trim();
-                    const bn = (b.identityName ?? "").trim();
-                    return an.localeCompare(bn, "pt-BR", { sensitivity: "base" });
-                  })
-                  .map((m) => (
+                filteredMembers.map((m) => (
                     <TableRow key={m.identityId} className="cursor-pointer" onClick={() => openView(m.identityId)}>
                       <TableCell>
                         <IdentityThumb identityId={m.identityId} />
@@ -303,6 +378,17 @@ function RegrasPage() {
                                 </a>
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() =>
+                                setToRemove({
+                                  id: m.identityId,
+                                  name: m.identityName?.trim() || m.identityId,
+                                })
+                              }
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> {t("rules.removeMember")}
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -313,6 +399,37 @@ function RegrasPage() {
           </Table>
         </Card>
       )}
+
+      <AlertDialog
+        open={Boolean(toRemove)}
+        onOpenChange={(o) => !o && !removeMember.isPending && setToRemove(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("rules.removeMember.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("rules.removeMember.description", {
+                name: toRemove?.name ?? "",
+                team: selectedTeam?.name ?? "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMember.isPending}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={removeMember.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (toRemove) removeMember.mutate(toRemove.id);
+              }}
+            >
+              {removeMember.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t("rules.removeMember.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ViewIdentityDialog identityId={view ?? null} onClose={closeView} />
       <AddMembersDialog
@@ -540,7 +657,23 @@ function AddMembersDialog({
     },
     onSuccess: (_d, ids) => {
       toast.success(t("rules.membersAdded", { count: ids.length }));
-      queryClient.invalidateQueries({ queryKey: ["team-members"] });
+      const membersKey = ["team-members", siteId, teamId] as const;
+      // Linhas otimistas: o índice do ClearID demora a refletir a inclusão, então
+      // a lista mostra as pessoas NA HORA com os dados que já temos da busca.
+      const optimistic: ClearIdTeamMember[] = ids
+        .map((id) => selected[id])
+        .filter((i): i is ClearIdIdentity => !!i)
+        .map((i) => ({
+          teamId: teamId ?? "",
+          identityId: i.identityId,
+          identityName: `${i.firstName ?? ""} ${i.lastName ?? ""}`.trim() || i.identityId,
+          identityEmail: i.email ?? null,
+        }));
+      const mergeOptimistic = (rows: ClearIdTeamMember[] | undefined): ClearIdTeamMember[] => {
+        const have = new Set((rows ?? []).map((m) => m.identityId));
+        return [...(rows ?? []), ...optimistic.filter((m) => !have.has(m.identityId))];
+      };
+      queryClient.setQueryData<ClearIdTeamMember[]>(membersKey, (prev) => mergeOptimistic(prev));
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       setSelected({});
       setSearchInput("");
@@ -548,13 +681,24 @@ function AddMembersDialog({
       setStartAt(currentLocalDateTimeValue());
       setEndAt("");
       onClose();
+      // Reconsulta o servidor até TODAS as inclusões aparecerem (ou esgotar as
+      // tentativas); enquanto isso, mantém as linhas otimistas na lista.
       const toastId = toast.loading(t("rules.updatingMembers"));
-      queryClient
-        .refetchQueries({ queryKey: ["team-members", siteId, teamId] })
-        .then(() => toast.success(t("rules.membersUpdated"), { id: toastId }))
-        .catch((e: Error) =>
-          toast.error(e.message || t("rules.membersUpdateError"), { id: toastId }),
-        );
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      (async () => {
+        const pending = new Set(ids);
+        for (let attempt = 0; attempt < 6 && pending.size > 0; attempt++) {
+          if (attempt > 0) await wait(1500 * attempt);
+          const fresh = await argusApi.listTeamMembers(teamId!, { count: 500 });
+          for (const m of fresh) pending.delete(m.identityId);
+          queryClient.setQueryData<ClearIdTeamMember[]>(membersKey, () =>
+            pending.size > 0 ? mergeOptimistic(fresh) : fresh,
+          );
+        }
+        toast.success(t("rules.membersUpdated"), { id: toastId });
+      })().catch((e: Error) =>
+        toast.error(e.message || t("rules.membersUpdateError"), { id: toastId }),
+      );
     },
     onError: (e: Error) => {
       toast.error(e.message || t("rules.addMembersError"));

@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Upload, Trash2, RotateCcw, Sun, Moon } from "lucide-react";
+import { Upload, Trash2, RotateCcw, Sun, Moon, ShieldCheck } from "lucide-react";
+import { useActiveProfile } from "@/lib/argus-client";
+import { useCurrentUser, isAdmin } from "@/lib/current-user";
 import { cn } from "@/lib/utils";
 import { getTheme, setTheme, type Theme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,9 @@ import {
   saveBranding,
   resetBranding,
   applyBranding,
+  hasOwnBranding,
+  saveClientBranding,
+  useClientBranding,
   DEFAULT_BRANDING,
   type BrandingConfig,
 } from "@/lib/branding";
@@ -33,9 +38,36 @@ export const Route = createFileRoute("/_authenticated/branding")({
 
 function BrandingPage() {
   const { t } = useT();
+  const activeProfile = useActiveProfile();
+  const { data: currentUser } = useCurrentUser();
+  const admin = isAdmin(currentUser);
+  // Configuração BÁSICA do cliente (definida pelo administrador).
+  const clientBranding = useClientBranding(activeProfile);
   const [cfg, setCfg] = useState<BrandingConfig>(() => getBranding());
   const [theme, setThemeState] = useState<Theme>(() => getTheme());
   const fileRef = useRef<HTMLInputElement>(null);
+  const [savingClient, setSavingClient] = useState(false);
+
+  // Sem configuração própria, o formulário parte da básica do cliente quando
+  // ela carrega (é o que o usuário vê ao logar).
+  useEffect(() => {
+    if (clientBranding.data && !hasOwnBranding()) setCfg(clientBranding.data);
+  }, [clientBranding.data]);
+
+  // Administrador: grava a configuração atual como BÁSICA do cliente.
+  const handleSaveAsClientDefault = async () => {
+    if (!admin) return;
+    setSavingClient(true);
+    try {
+      await saveClientBranding(activeProfile, cfg, currentUser?.username ?? null);
+      await clientBranding.refetch();
+      toast.success(t("branding.toast.clientSaved"));
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingClient(false);
+    }
+  };
 
   const changeTheme = (v: Theme) => {
     setThemeState(v);
@@ -63,10 +95,13 @@ function BrandingPage() {
       .catch(() => toast.warning(t("branding.toast.syncFail")));
   };
 
+  // Restaurar = descarta a configuração PRÓPRIA e volta à básica do cliente
+  // (se houver); sem básica, cai no padrão R&M.
   const handleReset = () => {
     resetBranding();
-    setCfg(DEFAULT_BRANDING);
-    applyBranding(DEFAULT_BRANDING);
+    const fallback = clientBranding.data ?? DEFAULT_BRANDING;
+    setCfg(fallback);
+    applyBranding(fallback);
     void pushSettings();
     toast.success(t("branding.toast.restored"));
   };
@@ -226,6 +261,12 @@ function BrandingPage() {
           <RotateCcw className="mr-2 h-4 w-4" />
           {t("branding.resetButton")}
         </Button>
+        {admin && (
+          <Button variant="secondary" onClick={handleSaveAsClientDefault} disabled={savingClient}>
+            <ShieldCheck className="mr-1 h-4 w-4" />
+            {savingClient ? t("common.saving") : t("branding.clientDefaultButton")}
+          </Button>
+        )}
         <Button onClick={handleSave}>{t("branding.saveButton")}</Button>
       </div>
 

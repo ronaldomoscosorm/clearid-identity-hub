@@ -94,14 +94,29 @@ function NovaVisitaPage() {
   // O perfil do site define os motivos aceitos: o ClearID rejeita (400) qualquer
   // motivo fora de `visitReasons`.
   const profilesQuery = useQuery({
-    queryKey: ["visit-profiles"],
-    queryFn: () => argusApi.listVisitProfiles(),
+    queryKey: ["visit-profiles", siteId],
+    queryFn: () => argusApi.listVisitProfiles(siteId),
+    enabled: Boolean(siteId),
     staleTime: 5 * 60 * 1000,
   });
+  // A lista já vem filtrada pelo site; o ClearID nem sempre devolve `siteId` em cada perfil.
+  const siteProfiles = (profilesQuery.data ?? []).filter((p) => !p.siteId || p.siteId === siteId);
+  // Prefere o perfil que permite visita planejada (o "Default profile" do
+  // ClearID costuma vir com plannedVisitAllowed=false e só o motivo "Business");
+  // entre eles, o padrão. Sem nenhum, cai no padrão/primeiro da lista.
+  const plannedProfiles = siteProfiles.filter((p) => p.plannedVisitAllowed === true);
   const profile =
-    (profilesQuery.data ?? []).find((p) => p.siteId === siteId && p.isDefault) ??
-    (profilesQuery.data ?? []).find((p) => p.siteId === siteId);
+    plannedProfiles.find((p) => p.isDefault) ??
+    plannedProfiles[0] ??
+    siteProfiles.find((p) => p.isDefault) ??
+    siteProfiles[0];
   const reasons = profile?.plannedVisitSettings?.visitReasons ?? [];
+  // Ao trocar de site/perfil, descarta o motivo que não existe na nova lista.
+  const reasonsKey = reasons.join("|");
+  useEffect(() => {
+    if (reasons.length > 0 && reason && !reasons.includes(reason)) setReason("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reasonsKey]);
 
   const validate = () => {
     const e: Record<string, string> = {};

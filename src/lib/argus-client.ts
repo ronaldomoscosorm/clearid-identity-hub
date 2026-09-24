@@ -1646,9 +1646,9 @@ export const argusApi = {
    * Perfis de visita do site. O perfil define os motivos permitidos
    * (`visitReasons`) — o ClearID rejeita motivos fora dessa lista.
    */
-  listVisitProfiles: async (): Promise<VisitProfile[]> => {
+  listVisitProfiles: async (siteId: string): Promise<VisitProfile[]> => {
     const data = await unwrap<{ visitProfiles?: VisitProfile[] } | VisitProfile[]>(
-      argusFetch(`/api/visit-profiles`),
+      argusFetch(`/api/visit-profiles?siteId=${encodeURIComponent(siteId)}`),
     );
     if (Array.isArray(data)) return data;
     return data?.visitProfiles ?? [];
