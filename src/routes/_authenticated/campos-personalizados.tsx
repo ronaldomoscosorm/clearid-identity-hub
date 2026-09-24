@@ -1,11 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
-import { argusApi, ArgusApiError } from "@/lib/argus-client";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type {
+  UnifiedCustomFieldDef,
+  UnifiedCustomFieldSection,
+} from "@/lib/argus-client";
+import { RefreshCw, Plus, Pencil, Trash2, Search, ListChecks, Paperclip } from "lucide-react";
+import { toast } from "sonner";
+import { argusApi, ArgusApiError, useActiveProfile } from "@/lib/argus-client";
+import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
+import { useClientSettings, type CustomFieldStorage } from "@/lib/client-settings";
+import { SpecialFieldsDialog } from "@/components/SpecialFieldsDialog";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database, Json } from "@/integrations/supabase/types";
+import { ATTACHMENT_FIELD_TYPE, pickLang } from "@/lib/custom-fields";
+import { useT } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -14,11 +38,64 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+// Tipos aceitos pela API (CreateIdentityCustomFieldRequest.customFieldType).
+const FIELD_TYPES = ["Text", "Numeric", "Boolean", "DateTime", "Decimal", "Date"] as const;
+
+// Grupo dos campos que não pertencem a nenhuma seção.
+const OTHER_SECTION = "__other__";
+// Valor do dropdown de seção quando o campo não fica em nenhuma.
+const NO_SECTION = "__none__";
+
+// Limites da API (swagger custom-fields).
+const SECTION_NAME_MAX = 30;
+const FIELD_NAME_MAX = 50;
+const DISPLAY_NAME_MAX = 100;
+
+// Definição local de um campo de Anexo (existe só no sistema, nunca no Argus).
+type LocalAttachmentDef = Pick<
+  Database["public"]["Tables"]["custom_field_definitions"]["Row"],
+  "id" | "custom_field_name" | "display_name" | "attachment_accept"
+>;
+
+// Opções de restrição de tipo de arquivo do anexo.
+const ACCEPT_OPTIONS = [
+  { value: "image/*,application/pdf", key: "attachmentDef.acceptBoth" },
+  { value: "image/*", key: "attachmentDef.acceptImage" },
+  { value: "application/pdf", key: "attachmentDef.acceptPdf" },
+] as const;
 
 export const Route = createFileRoute("/_authenticated/campos-personalizados")({
   head: () => ({ meta: [{ title: "Campos personalizados — Argus ClearID" }] }),
   component: CustomFieldsPage,
 });
+
+/** Minúsculas sem acento, para a busca casar "apolice" com "Apólice". */
+function normalize(s?: string | null) {
+  return (s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
 
 function formatDate(iso?: string | null) {
   if (!iso) return "—";
@@ -30,41 +107,305 @@ function formatDate(iso?: string | null) {
 }
 
 function CustomFieldsPage() {
+  const { t } = useT();
+  const qc = useQueryClient();
+  const activeProfile = useActiveProfile();
+  const [editing, setEditing] = useState<UnifiedCustomFieldDef | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<UnifiedCustomFieldDef | null>(null);
+  const [editingSection, setEditingSection] = useState<UnifiedCustomFieldSection | null>(null);
+  const [creatingSection, setCreatingSection] = useState(false);
+  const [specialOpen, setSpecialOpen] = useState(false);
+  const [deletingSection, setDeletingSection] = useState<UnifiedCustomFieldSection | null>(null);
+  const [attachmentDialog, setAttachmentDialog] = useState<{
+    mode: "create" | "edit";
+    def?: LocalAttachmentDef;
+  } | null>(null);
+  const [deletingAttachment, setDeletingAttachment] = useState<LocalAttachmentDef | null>(null);
+  // Configuração do anexo comprobatório de um campo (complemento).
+  const [attSettings, setAttSettings] = useState<UnifiedCustomFieldDef | null>(null);
+
+  const [search, setSearch] = useState("");
+
+  // Endpoint UNIFICADO: o backend retorna a união ClearID + Supabase com o
+  // `storage` explícito em cada item. O frontend não fala mais com o Supabase
+  // para custom fields/seções (exceto anexos locais — is_local).
   const query = useQuery({
-    queryKey: ["custom-fields"],
-    queryFn: () => argusApi.listCustomFields(),
+    queryKey: ["custom-fields", "unified", activeProfile],
+    queryFn: () => argusApi.listCustomFieldsUnified({ source: "all", profile: activeProfile }),
     retry: false,
   });
 
-  const items = (query.data ?? []).filter((f) => !f.isDeleted);
+  const reload = () => {
+    qc.invalidateQueries({ queryKey: ["custom-fields"] });
+  };
+  const reloadSections = () => qc.invalidateQueries({ queryKey: ["custom-field-sections"] });
+
+  // Campos de Anexo (locais — só do sistema).
+  const attachmentsQuery = useQuery({
+    queryKey: ["local-attachment-fields"],
+    queryFn: async (): Promise<LocalAttachmentDef[]> => {
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .select("id, custom_field_name, display_name, attachment_accept")
+        .eq("is_local", true)
+        .eq("is_deleted", false)
+        .order("custom_field_name", { ascending: true });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+  });
+  const reloadAttachments = () => qc.invalidateQueries({ queryKey: ["local-attachment-fields"] });
+  const attachmentDefs = attachmentsQuery.data ?? [];
+
+  const delAttachment = useMutation({
+    mutationFn: async (def: LocalAttachmentDef) => {
+      // Cascata remove os vínculos por site (site_custom_fields) e os anexos
+      // já enviados (identity_attachments) via FK on delete cascade.
+      const { error } = await supabase.from("custom_field_definitions").delete().eq("id", def.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success(t("attachmentDef.deleted"));
+      setDeletingAttachment(null);
+      reloadAttachments();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const delSection = useMutation({
+    mutationFn: async (sec: UnifiedCustomFieldSection) => {
+      // O backend roteia por storage (o desvínculo de campos no ClearID é feito lá).
+      await argusApi.deleteCustomFieldSectionUnified(sec.sectionName, {
+        storage: sec.storage,
+        profile: activeProfile,
+      });
+    },
+    onSuccess: () => {
+      toast.success(t("customFields.sectionDeleted"));
+      setDeletingSection(null);
+      reloadSections();
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message),
+  });
+
+  const del = useMutation({
+    mutationFn: async (f: UnifiedCustomFieldDef) => {
+      // O backend roteia por storage e cuida do desvínculo da seção no ClearID.
+      await argusApi.deleteCustomFieldUnified(f.customFieldName, {
+        storage: f.storage,
+        profile: activeProfile,
+      });
+    },
+    onSuccess: () => {
+      toast.success(t("customFields.deleted"));
+      setDeleting(null);
+      reload();
+      reloadSections(); // o campo pode ter sido desvinculado de uma seção
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message),
+  });
+
+  const q = normalize(search);
+
+  // A união ClearID + Supabase já vem do backend unificado, com `storage`.
+  const allItems = useMemo(
+    () => (query.data ?? []).filter((f) => !f.isDeleted),
+    [query.data],
+  );
+  // Busca por nome de exibição ou identificador, ignorando acentos/caixa.
+  const items = useMemo(
+    () =>
+      q
+        ? allItems.filter(
+            (f) => normalize(f.displayName).includes(q) || normalize(f.customFieldName).includes(q),
+          )
+        : allItems,
+    [allItems, q],
+  );
+
+  // Seções unificadas (ClearID + Supabase) — direto do backend, com `storage`.
+  const sectionsQuery = useQuery({
+    queryKey: ["custom-field-sections", "unified", activeProfile],
+    queryFn: () =>
+      argusApi.listCustomFieldSectionsUnified({ source: "all", profile: activeProfile }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // custom_field_name -> sectionName. Cada item já traz `sectionName`; completa
+  // com os `fieldNames` das seções (agrupamento que só vem do ClearID).
+  const sectionOfField = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of query.data ?? []) {
+      if (f.sectionName) m.set(f.customFieldName, f.sectionName);
+    }
+    for (const sec of sectionsQuery.data ?? []) {
+      for (const name of sec.fieldNames) if (!m.has(name)) m.set(name, sec.sectionName);
+    }
+    return m;
+  }, [query.data, sectionsQuery.data]);
+
+  const sectionByName = useMemo(() => {
+    const m = new Map<string, UnifiedCustomFieldSection>();
+    for (const s of sectionsQuery.data ?? []) m.set(s.sectionName, s);
+    return m;
+  }, [sectionsQuery.data]);
+
+  // custom_field_name -> storage (vem em cada item unificado).
+  const storageOfField = useMemo(() => {
+    const m = new Map<string, CustomFieldStorage>();
+    for (const f of query.data ?? []) m.set(f.customFieldName, f.storage);
+    return m;
+  }, [query.data]);
+
+  /** Etiqueta em parênteses para exibir junto do nome. */
+  const storageLabel = (s: CustomFieldStorage | undefined | null) =>
+    s === "supabase" ? "(supabase)" : s === "both" ? "(ambos)" : "(clearid)";
+
+  const labelOf = (key: string) =>
+    key === OTHER_SECTION
+      ? t("customFields.sectionOther")
+      : sectionByName.get(key)?.displayName || key;
+
+  // Agrupa os campos por seção. Sem busca, seções vazias também aparecem (para
+  // poderem ser editadas/excluídas); com busca, só grupos com resultado.
+  const groupedItems = useMemo(() => {
+    const groups = new Map<string, UnifiedCustomFieldDef[]>();
+    if (!q) for (const s of sectionsQuery.data ?? []) groups.set(s.sectionName, []);
+    for (const f of items) {
+      const key = sectionOfField.get(f.customFieldName) ?? OTHER_SECTION;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(f);
+    }
+    if (groups.get(OTHER_SECTION)?.length === 0) groups.delete(OTHER_SECTION);
+    const name = (k: string) =>
+      k === OTHER_SECTION ? t("customFields.sectionOther") : sectionByName.get(k)?.displayName || k;
+    const arr = [...groups.entries()].sort((a, b) =>
+      name(a[0]).localeCompare(name(b[0]), "pt-BR", { sensitivity: "base" }),
+    );
+    for (const [, fs] of arr) {
+      fs.sort((a, b) =>
+        (a.displayName || a.customFieldName).localeCompare(
+          b.displayName || b.customFieldName,
+          "pt-BR",
+          { sensitivity: "base" },
+        ),
+      );
+    }
+    return arr;
+  }, [items, sectionOfField, sectionByName, sectionsQuery.data, q, t]);
+
+  // Espelha as definições de campos para o Supabase (cache local, best-effort).
+  useEffect(() => {
+    if (query.data?.length) void mirrorCustomFieldDefs(query.data);
+  }, [query.data]);
+
+  const renderRow = (f: UnifiedCustomFieldDef) => (
+    <TableRow key={f.customFieldName}>
+      <TableCell className="font-medium">
+        {f.displayName || f.customFieldName}
+        <span className="ml-1 text-xs font-normal text-muted-foreground">
+          {storageLabel(storageOfField.get(f.customFieldName))}
+        </span>
+      </TableCell>
+      <TableCell className="font-mono text-xs text-muted-foreground">{f.customFieldName}</TableCell>
+      <TableCell>
+        <Badge variant="secondary">{f.customFieldType ?? "—"}</Badge>
+      </TableCell>
+      <TableCell>
+        {f.synchronizationEnabled ? (
+          <Badge>{t("customFields.syncActive")}</Badge>
+        ) : (
+          <Badge variant="outline">{t("customFields.syncInactive")}</Badge>
+        )}
+      </TableCell>
+      <TableCell className="text-sm text-muted-foreground">
+        {f.isReadOnly ? t("common.yes") : t("common.no")}
+      </TableCell>
+      <TableCell className="text-sm text-muted-foreground">
+        {formatDate(null)}
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            title={t("attachmentField.settingsTitle")}
+            onClick={() => setAttSettings(f)}
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title={t("common.edit")}
+            onClick={() => setEditing(f)}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title={t("common.delete")}
+            className="text-destructive hover:text-destructive"
+            onClick={() => setDeleting(f)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Campos personalizados
+            {t("customFields.title")}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Definições de campos personalizados disponíveis para as identities.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("customFields.subtitle")}</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => query.refetch()}
-          disabled={query.isFetching}
-        >
-          <RefreshCw className={`mr-1 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => query.refetch()}
+            disabled={query.isFetching}
+          >
+            <RefreshCw className={`mr-1 h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} />
+            {t("customFields.refresh")}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setCreatingSection(true)}>
+            <Plus className="mr-1 h-4 w-4" /> {t("customFields.newSection")}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setSpecialOpen(true)}>
+            <ListChecks className="mr-1 h-4 w-4" /> {t("specialFields.button")}
+          </Button>
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus className="mr-1 h-4 w-4" /> {t("customFields.newField")}
+          </Button>
+        </div>
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
           <CardTitle className="text-base">
-            {query.data ? `${items.length} ${items.length === 1 ? "campo" : "campos"}` : "Campos"}
+            {query.data
+              ? items.length === 1
+                ? t("customFields.countSingular", { count: items.length })
+                : t("customFields.countPlural", { count: items.length })
+              : t("customFields.fieldsLabel")}
           </CardTitle>
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("customFields.searchPlaceholder")}
+              className="pl-8"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {query.isLoading ? (
@@ -79,44 +420,145 @@ function CustomFieldsPage() {
             </div>
           ) : items.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum campo personalizado encontrado.
+              {q
+                ? t("customFields.noSearchResults", { query: search.trim() })
+                : t("customFields.emptyState")}
+            </p>
+          ) : (
+            <div className="space-y-6">
+              {groupedItems.map(([sectionKey, fields]) => {
+                const sec = sectionKey === OTHER_SECTION ? null : sectionByName.get(sectionKey);
+                return (
+                  <div key={sectionKey} className="space-y-2">
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm font-medium text-foreground">
+                        {labelOf(sectionKey)}
+                        {sec && (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            {storageLabel(sec.storage)}
+                          </span>
+                        )}
+                      </p>
+                      {sec && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            title={t("customFields.editSection")}
+                            onClick={() => setEditingSection(sec)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive hover:text-destructive"
+                            title={t("customFields.deleteSection")}
+                            onClick={() => setDeletingSection(sec)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    {fields.length === 0 ? (
+                      <p className="py-2 text-xs text-muted-foreground">
+                        {t("customFields.sectionEmpty")}
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>{t("customFields.col.displayName")}</TableHead>
+                            <TableHead>{t("customFields.col.identifier")}</TableHead>
+                            <TableHead>{t("customFields.col.type")}</TableHead>
+                            <TableHead>{t("customFields.col.synchronization")}</TableHead>
+                            <TableHead>{t("customFields.col.readOnly")}</TableHead>
+                            <TableHead>{t("customFields.col.lastModified")}</TableHead>
+                            <TableHead className="w-[100px] text-right">
+                              {t("common.actions")}
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>{fields.map(renderRow)}</TableBody>
+                      </Table>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Campos de Anexo LEGADOS (standalone) — o modelo atual é anexo como
+          complemento de um campo. Só aparece se ainda houver algum legado. */}
+      {attachmentDefs.length > 0 && (
+      <Card>
+        <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Paperclip className="h-4 w-4" /> {t("attachmentDef.sectionTitle")}
+            </CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">{t("attachmentDef.sectionHint")}</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {attachmentsQuery.isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : attachmentDefs.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {t("attachmentDef.emptyState")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome de exibição</TableHead>
-                  <TableHead>Identificador</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Sincronização</TableHead>
-                  <TableHead>Somente leitura</TableHead>
-                  <TableHead>Última alteração</TableHead>
+                  <TableHead>{t("customFields.col.displayName")}</TableHead>
+                  <TableHead>{t("customFields.col.identifier")}</TableHead>
+                  <TableHead>{t("attachmentDef.acceptCol")}</TableHead>
+                  <TableHead className="w-[100px] text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((f) => (
-                  <TableRow key={f.customFieldName}>
+                {attachmentDefs.map((def) => (
+                  <TableRow key={def.id}>
                     <TableCell className="font-medium">
-                      {f.displayName || f.customFieldName}
+                      {pickLang(def.display_name) || def.custom_field_name}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
-                      {f.customFieldName}
+                      {def.custom_field_name}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{f.customFieldType ?? "—"}</Badge>
+                      <Badge variant="secondary">
+                        {t(
+                          ACCEPT_OPTIONS.find(
+                            (o) => o.value === (def.attachment_accept ?? "image/*,application/pdf"),
+                          )?.key ?? "attachmentDef.acceptBoth",
+                        )}
+                      </Badge>
                     </TableCell>
-                    <TableCell>
-                      {f.synchronizationEnabled ? (
-                        <Badge>Ativa</Badge>
-                      ) : (
-                        <Badge variant="outline">Inativa</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {f.isReadOnly ? "Sim" : "Não"}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(f.lastModificationDateUtc)}
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={t("common.edit")}
+                          onClick={() => setAttachmentDialog({ mode: "edit", def })}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={t("common.delete")}
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeletingAttachment(def)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -125,6 +567,987 @@ function CustomFieldsPage() {
           )}
         </CardContent>
       </Card>
+      )}
+
+      <CustomFieldDialog
+        mode="create"
+        sections={sectionsQuery.data ?? []}
+        open={creating}
+        onClose={() => setCreating(false)}
+        onSaved={() => {
+          setCreating(false);
+          reload();
+          reloadSections(); // o campo pode ter sido vinculado a uma seção
+        }}
+      />
+      <CustomFieldDialog
+        mode="edit"
+        field={editing ?? undefined}
+        sections={sectionsQuery.data ?? []}
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        onSaved={() => {
+          setEditing(null);
+          reload();
+        }}
+      />
+
+      <FieldAttachmentDialog
+        field={attSettings}
+        onClose={() => setAttSettings(null)}
+        onSaved={() => setAttSettings(null)}
+      />
+
+      <SpecialFieldsDialog
+        open={specialOpen}
+        onOpenChange={setSpecialOpen}
+        fields={(query.data ?? []).filter((f) => !f.isDeleted)}
+      />
+
+      <SectionDialog
+        mode="create"
+        sections={sectionsQuery.data ?? []}
+        open={creatingSection}
+        onClose={() => setCreatingSection(false)}
+        onSaved={() => {
+          setCreatingSection(false);
+          reloadSections();
+        }}
+      />
+      <SectionDialog
+        mode="edit"
+        section={editingSection ?? undefined}
+        sections={sectionsQuery.data ?? []}
+        open={Boolean(editingSection)}
+        onClose={() => setEditingSection(null)}
+        onSaved={() => {
+          setEditingSection(null);
+          reloadSections();
+        }}
+      />
+
+      <AlertDialog
+        open={Boolean(deletingSection)}
+        onOpenChange={(v) => !v && setDeletingSection(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("customFields.confirmDeleteSectionTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("customFields.confirmDeleteSectionDesc", {
+                name: deletingSection?.displayName || deletingSection?.sectionName || "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={delSection.isPending}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={delSection.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deletingSection) delSection.mutate(deletingSection);
+              }}
+            >
+              {delSection.isPending ? t("common.saving") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(deleting)} onOpenChange={(v) => !v && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("customFields.confirmDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("customFields.confirmDeleteDesc", {
+                name: deleting?.displayName || deleting?.customFieldName || "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={del.isPending}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={del.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleting) del.mutate(deleting);
+              }}
+            >
+              {del.isPending ? t("common.saving") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AttachmentDefDialog
+        open={Boolean(attachmentDialog)}
+        mode={attachmentDialog?.mode ?? "create"}
+        def={attachmentDialog?.def}
+        existingNames={attachmentDefs.map((d) => d.custom_field_name)}
+        onClose={() => setAttachmentDialog(null)}
+        onSaved={() => {
+          setAttachmentDialog(null);
+          reloadAttachments();
+        }}
+      />
+
+      <AlertDialog
+        open={Boolean(deletingAttachment)}
+        onOpenChange={(v) => !v && setDeletingAttachment(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("attachmentDef.confirmDeleteTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("attachmentDef.confirmDeleteDesc", {
+                name:
+                  (deletingAttachment && pickLang(deletingAttachment.display_name)) ||
+                  deletingAttachment?.custom_field_name ||
+                  "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={delAttachment.isPending}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={delAttachment.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deletingAttachment) delAttachment.mutate(deletingAttachment);
+              }}
+            >
+              {delAttachment.isPending ? t("common.saving") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+/** Criação/edição de um campo de Anexo (local — só do sistema). */
+/**
+ * Configura o ANEXO COMPROBATÓRIO de um campo (complemento): permitir, exigir e
+ * o tipo de arquivo aceito. Grava os flags na definição (por custom_field_name),
+ * funcionando para campos do Argus (mirrados) e locais.
+ */
+function FieldAttachmentDialog({
+  field,
+  onClose,
+  onSaved,
+}: {
+  field: UnifiedCustomFieldDef | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useT();
+  const open = Boolean(field);
+  const [enabled, setEnabled] = useState(false);
+  const [required, setRequired] = useState(false);
+  const [accept, setAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
+
+  const current = useQuery({
+    queryKey: ["cfd-attachment", field?.customFieldName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .select("id, attachment_enabled, attachment_required, attachment_accept")
+        .eq("custom_field_name", field!.customFieldName)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    enabled: open && Boolean(field?.customFieldName),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const d = current.data;
+    setEnabled(d?.attachment_enabled ?? false);
+    setRequired(d?.attachment_required ?? false);
+    setAccept(d?.attachment_accept ?? ACCEPT_OPTIONS[0].value);
+  }, [open, current.data]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const patch = {
+        attachment_enabled: enabled,
+        attachment_required: enabled ? required : false,
+        attachment_accept: enabled ? accept : null,
+      };
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .update(patch)
+        .eq("custom_field_name", field!.customFieldName)
+        .select("id");
+      if (error) throw new Error(error.message);
+      // Definição ainda não catalogada (não mirrada): cria uma mínima.
+      if (!data || data.length === 0) {
+        const { error: eIns } = await supabase.from("custom_field_definitions").insert({
+          custom_field_name: field!.customFieldName,
+          display_name: (field!.displayName ? { default: field!.displayName } : {}) as Json,
+          custom_field_type: field!.customFieldType ?? null,
+          ...patch,
+        });
+        if (eIns) throw new Error(eIns.message);
+      }
+    },
+    onSuccess: () => {
+      toast.success(t("attachmentField.saved"));
+      onSaved();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>{t("attachmentField.settingsTitle")}</DialogTitle>
+          <DialogDescription>
+            {t("attachmentField.settingsHint", {
+              field: field?.displayName || field?.customFieldName || "",
+            })}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox checked={enabled} onCheckedChange={(c) => setEnabled(Boolean(c))} />
+            {t("attachmentField.enable")}
+          </label>
+          <label
+            className={cn("flex items-center gap-2 text-sm", !enabled && "opacity-50")}
+          >
+            <Checkbox
+              checked={required}
+              disabled={!enabled}
+              onCheckedChange={(c) => setRequired(Boolean(c))}
+            />
+            {t("attachmentField.require")}
+          </label>
+          <div className={cn("space-y-2", !enabled && "opacity-50")}>
+            <Label>{t("attachmentDef.acceptCol")}</Label>
+            <Select value={accept} onValueChange={setAccept} disabled={!enabled}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACCEPT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {t(o.key)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => save.mutate()} disabled={save.isPending || current.isLoading}>
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AttachmentDefDialog({
+  open,
+  mode,
+  def,
+  existingNames,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  mode: "create" | "edit";
+  def?: LocalAttachmentDef;
+  existingNames: string[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useT();
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [accept, setAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(def?.custom_field_name ?? "");
+    setDisplayName(pickLang(def?.display_name) || "");
+    setAccept(def?.attachment_accept ?? ACCEPT_OPTIONS[0].value);
+  }, [open, def]);
+
+  // Sanitiza o identificador (letras, números e _), como os campos do ClearID.
+  const cleanName = name
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "");
+  const nameTaken =
+    mode === "create" && existingNames.some((n) => n.toLowerCase() === cleanName.toLowerCase());
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const display_name = { default: displayName.trim() } as Json;
+      if (mode === "edit") {
+        const { error } = await supabase
+          .from("custom_field_definitions")
+          .update({ display_name, attachment_accept: accept })
+          .eq("id", def!.id);
+        if (error) throw new Error(error.message);
+        return;
+      }
+      const { error } = await supabase.from("custom_field_definitions").insert({
+        custom_field_name: cleanName,
+        display_name,
+        custom_field_type: ATTACHMENT_FIELD_TYPE,
+        is_local: true,
+        synchronization_enabled: false,
+        attachment_accept: accept,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success(mode === "create" ? t("attachmentDef.created") : t("attachmentDef.updated"));
+      onSaved();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const canSave =
+    displayName.trim().length > 0 &&
+    (mode === "edit" || (cleanName.length > 0 && !nameTaken)) &&
+    !save.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "create" ? t("attachmentDef.newTitle") : t("attachmentDef.editTitle")}
+          </DialogTitle>
+          <DialogDescription>{t("attachmentDef.dialogHint")}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="att-name">{t("customFields.col.identifier")}</Label>
+            <Input
+              id="att-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={mode === "edit"}
+              maxLength={FIELD_NAME_MAX}
+              placeholder="ex.: contrato_assinado"
+              className={cn(nameTaken && "border-destructive")}
+            />
+            {mode === "create" && (
+              <p className="text-xs text-muted-foreground">
+                {nameTaken
+                  ? t("attachmentDef.nameTaken")
+                  : cleanName
+                    ? `${t("attachmentDef.identifierPreview")}: ${cleanName}`
+                    : `${name.length}/${FIELD_NAME_MAX}`}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="att-display">{t("customFields.col.displayName")}</Label>
+            <Input
+              id="att-display"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={DISPLAY_NAME_MAX}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t("attachmentDef.acceptCol")}</Label>
+            <Select value={accept} onValueChange={setAccept}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACCEPT_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {t(o.key)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => save.mutate()} disabled={!canSave}>
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Criação/edição de seção. O nome e o storage são imutáveis na edição. */
+function SectionDialog({
+  mode,
+  section,
+  sections,
+  open,
+  onClose,
+  onSaved,
+}: {
+  mode: "create" | "edit";
+  section?: UnifiedCustomFieldSection;
+  sections: UnifiedCustomFieldSection[];
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useT();
+  const activeProfile = useActiveProfile();
+  const clientSettings = useClientSettings(activeProfile);
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [index, setIndex] = useState("0");
+  const [storage, setStorage] = useState<CustomFieldStorage>("both");
+
+  useEffect(() => {
+    if (!open) return;
+    setName(section?.sectionName ?? "");
+    setDisplayName(section?.displayName ?? "");
+    // O índice precisa ser único: no create, já sugere o próximo livre.
+    const next = sections.length ? Math.max(...sections.map((s) => s.index)) + 1 : 0;
+    setIndex(String(section?.index ?? next));
+    setStorage(
+      mode === "edit"
+        ? (section?.storage ?? "both")
+        : (clientSettings.data?.defaultCustomFieldStorage ?? "both"),
+    );
+  }, [open, section, sections, mode, clientSettings.data?.defaultCustomFieldStorage]);
+
+  const idxNum = Number.parseInt(index, 10);
+  const indexTaken =
+    Number.isFinite(idxNum) &&
+    sections.some((s) => s.index === idxNum && s.sectionName !== section?.sectionName);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const idx = Number.parseInt(index, 10);
+      const safeIdx = Number.isFinite(idx) ? idx : 0;
+      // O backend roteia por storage (ClearID e/ou Supabase) e preserva o
+      // agrupamento de campos no ClearID.
+      await argusApi.upsertCustomFieldSectionUnified(
+        {
+          sectionName: name.trim(),
+          displayName: displayName.trim(),
+          index: safeIdx,
+          storage,
+          profile: activeProfile,
+          eTag: section?.eTag,
+        },
+        mode === "edit" ? "PUT" : "POST",
+        section?.sectionName,
+      );
+    },
+    onSuccess: () => {
+      toast.success(
+        mode === "create" ? t("customFields.sectionCreated") : t("customFields.sectionUpdated"),
+      );
+      onSaved();
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message),
+  });
+
+  const canSave =
+    displayName.trim().length > 0 &&
+    (mode === "edit" || name.trim().length > 0) &&
+    !indexTaken &&
+    !save.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "create" ? t("customFields.newSection") : t("customFields.editSection")}
+          </DialogTitle>
+          <DialogDescription>{t("customFields.sectionHint")}</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="sec-name">{t("customFields.sectionIdentifier")}</Label>
+            <Input
+              id="sec-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={mode === "edit"}
+              maxLength={SECTION_NAME_MAX}
+              placeholder="ex.: DocumentosEmpresa"
+            />
+            {mode === "create" && (
+              <p className="text-xs text-muted-foreground">
+                {name.length}/{SECTION_NAME_MAX}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="sec-display">{t("customFields.col.displayName")}</Label>
+            <Input
+              id="sec-display"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={DISPLAY_NAME_MAX}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="sec-index">{t("customFields.sectionIndex")}</Label>
+            <Input
+              id="sec-index"
+              type="number"
+              value={index}
+              onChange={(e) => setIndex(e.target.value)}
+              className={cn(indexTaken && "border-destructive")}
+            />
+            {indexTaken && (
+              <p className="text-xs text-destructive">{t("customFields.sectionIndexTaken")}</p>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t pt-4">
+            <Label>Armazenar em</Label>
+            <Select
+              value={storage}
+              onValueChange={(v) => setStorage(v as CustomFieldStorage)}
+              disabled={mode === "edit"}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="clearid">ClearID (SaaS)</SelectItem>
+                <SelectItem value="supabase">Local (Supabase)</SelectItem>
+                <SelectItem value="both">Ambos</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Padrão do cliente {activeProfile}:{" "}
+              <span className="font-medium">
+                {clientSettings.data?.defaultCustomFieldStorage ?? "both"}
+              </span>
+              . Só configurável na criação.
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => save.mutate()} disabled={!canSave}>
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Criação/edição de campo personalizado. Nome e tipo são imutáveis na edição. */
+function CustomFieldDialog({
+  mode,
+  field,
+  sections,
+  open,
+  onClose,
+  onSaved,
+}: {
+  mode: "create" | "edit";
+  field?: UnifiedCustomFieldDef;
+  sections: UnifiedCustomFieldSection[];
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useT();
+  const activeProfile = useActiveProfile();
+  const clientSettings = useClientSettings(activeProfile);
+  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [type, setType] = useState<string>("Text");
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  const [sync, setSync] = useState(true);
+  // Seção agora é obrigatória: começa vazia e o usuário precisa escolher.
+  const [sectionName, setSectionName] = useState<string>("");
+  // Onde persistir a definição (ClearID / Supabase / ambos). Só configurável
+  // na criação; na edição refletimos o valor já gravado no Supabase.
+  const [storage, setStorage] = useState<CustomFieldStorage>("both");
+  // Anexo comprobatório (complemento do campo).
+  const [attEnabled, setAttEnabled] = useState(false);
+  const [attRequired, setAttRequired] = useState(false);
+  const [attAccept, setAttAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
+  // Calcular vencimento (só faz sentido em campos de data). Padrão: ligado.
+  const [expiration, setExpiration] = useState(true);
+  const isDateType = type === "Date" || type === "DateTime";
+  const expirationQuery = useQuery({
+    queryKey: ["cfd-expiration", field?.customFieldName, activeProfile],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("custom_field_definitions")
+        .select("expiration_enabled")
+        .eq("custom_field_name", field!.customFieldName)
+        .eq("profile", activeProfile)
+        .maybeSingle();
+      return data?.expiration_enabled ?? true;
+    },
+    enabled: open && mode === "edit" && Boolean(field?.customFieldName),
+  });
+  useEffect(() => {
+    if (!open) return;
+    if (mode === "create") {
+      setExpiration(true);
+      return;
+    }
+    if (expirationQuery.data != null) setExpiration(expirationQuery.data);
+  }, [open, mode, expirationQuery.data]);
+
+  useEffect(() => {
+    if (!open) return;
+    setName(field?.customFieldName ?? "");
+    setDisplayName(field?.displayName ?? "");
+    setType(field?.customFieldType ?? "Text");
+    setIsReadOnly(Boolean(field?.isReadOnly));
+    setSync(field?.synchronizationEnabled ?? true);
+    setSectionName("");
+    // Default do storage: no create usa o padrão do cliente; no edit fica em
+    // "both" enquanto o valor real não é carregado (ver useEffect abaixo).
+    setStorage(
+      mode === "create"
+        ? (clientSettings.data?.defaultCustomFieldStorage ?? "both")
+        : "both",
+    );
+  }, [open, field, mode, clientSettings.data?.defaultCustomFieldStorage]);
+
+  // Flags de anexo + storage (edição): vêm no próprio item unificado.
+  useEffect(() => {
+    if (!open) return;
+    if (mode === "create") {
+      setAttEnabled(false);
+      setAttRequired(false);
+      setAttAccept(ACCEPT_OPTIONS[0].value);
+      return;
+    }
+    setAttEnabled(field?.attachmentEnabled ?? false);
+    setAttRequired(field?.attachmentRequired ?? false);
+    setAttAccept(field?.attachmentAccept ?? ACCEPT_OPTIONS[0].value);
+    const s = (field?.storage ?? "both") as CustomFieldStorage;
+    setStorage(s === "clearid" || s === "supabase" || s === "both" ? s : "both");
+  }, [open, mode, field]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      // O backend unificado roteia por storage (ClearID/Supabase/ambos) e cuida
+      // do vínculo com a seção (via sectionName) e dos flags de anexo.
+      const attPatch = {
+        attachmentEnabled: attEnabled,
+        attachmentRequired: attEnabled ? attRequired : false,
+        attachmentAccept: attEnabled ? attAccept : null,
+      };
+
+      // Flag de vencimento: só para campos de data e persistido direto no
+      // Supabase (o backend unificado não conhece essa coluna). Update por
+      // (custom_field_name + profile); se ainda não houver linha catalogada,
+      // cria uma mínima (mesmo padrão do diálogo de anexo).
+      const persistExpiration = async (cfName: string) => {
+        if (!isDateType) return;
+        const { data: upd, error } = await supabase
+          .from("custom_field_definitions")
+          .update({ expiration_enabled: expiration })
+          .eq("custom_field_name", cfName)
+          .eq("profile", activeProfile)
+          .select("id");
+        if (error) throw new Error(error.message);
+        if (!upd || upd.length === 0) {
+          const { error: eIns } = await supabase.from("custom_field_definitions").insert({
+            custom_field_name: cfName,
+            profile: activeProfile,
+            display_name: (displayName.trim() ? { default: displayName.trim() } : {}) as Json,
+            custom_field_type: type,
+            expiration_enabled: expiration,
+          });
+          if (eIns) throw new Error(eIns.message);
+        }
+      };
+
+      if (mode === "edit") {
+        // Nome/storage permanecem; o TIPO agora é editável. A seção não é
+        // editada aqui, então reenvia a atual para preservar o vínculo.
+        await argusApi.upsertCustomFieldUnified(
+          {
+            displayName: displayName.trim(),
+            customFieldType: type,
+            storage,
+            profile: activeProfile,
+            sectionName: field?.sectionName ?? null,
+            isReadOnly,
+            synchronizationEnabled: sync,
+            eTag: field?.eTag ?? null,
+            ...attPatch,
+          },
+          "PUT",
+          field!.customFieldName,
+        );
+        await persistExpiration(field!.customFieldName);
+        return null;
+      }
+
+      // CREATE
+      await argusApi.upsertCustomFieldUnified({
+        customFieldName: name.trim(),
+        displayName: displayName.trim(),
+        customFieldType: type,
+        storage,
+        profile: activeProfile,
+        sectionName,
+        isReadOnly,
+        synchronizationEnabled: sync,
+        ...attPatch,
+      });
+      await persistExpiration(name.trim());
+      return null;
+    },
+    onSuccess: () => {
+      toast.success(mode === "create" ? t("customFields.created") : t("customFields.updated"));
+      onSaved();
+    },
+    onError: (e) => toast.error((e as ArgusApiError).message),
+  });
+
+  // Compatibilidade de storage entre campo e seção:
+  //   campo 'clearid'  ⇢ seção 'clearid'  ou 'both'
+  //   campo 'supabase' ⇢ seção 'supabase' ou 'both'
+  //   campo 'both'     ⇢ seção 'both'
+  const compatibleSections = useMemo(
+    () =>
+      sections.filter((s) => {
+        if (storage === "clearid") return s.storage === "clearid" || s.storage === "both";
+        if (storage === "supabase") return s.storage === "supabase" || s.storage === "both";
+        return s.storage === "both";
+      }),
+    [sections, storage],
+  );
+
+  const canSave =
+    displayName.trim().length > 0 &&
+    (mode === "edit" || name.trim().length > 0) &&
+    (mode === "edit" || sectionName.trim().length > 0) &&
+    !save.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>
+            {mode === "create" ? t("customFields.newField") : t("customFields.editField")}
+          </DialogTitle>
+          <DialogDescription>
+            {mode === "create" ? t("customFields.createHint") : t("customFields.editHint")}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="cf-name">{t("customFields.col.identifier")}</Label>
+            <Input
+              id="cf-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={mode === "edit"}
+              maxLength={FIELD_NAME_MAX}
+              placeholder="ex.: cpf_colaborador"
+            />
+            {mode === "create" && (
+              <p className="text-xs text-muted-foreground">
+                {name.length}/{FIELD_NAME_MAX}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cf-display">{t("customFields.col.displayName")}</Label>
+            <Input
+              id="cf-display"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={DISPLAY_NAME_MAX}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t("customFields.col.type")}</Label>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FIELD_TYPES.map((ft) => (
+                  <SelectItem key={ft} value={ft}>
+                    {ft}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {mode === "edit" && (
+              <p className="text-xs text-muted-foreground">
+                {t("customFields.typeChangeHint")}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t pt-4">
+            <Label>Armazenar em</Label>
+            <Select
+              value={storage}
+              onValueChange={(v) => {
+                setStorage(v as CustomFieldStorage);
+                setSectionName(""); // reset — muda o filtro de seções compatíveis
+              }}
+              disabled={mode === "edit"}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="clearid">ClearID (SaaS)</SelectItem>
+                <SelectItem value="supabase">Local (Supabase)</SelectItem>
+                <SelectItem value="both">Ambos</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Padrão do cliente {activeProfile}:{" "}
+              <span className="font-medium">
+                {clientSettings.data?.defaultCustomFieldStorage ?? "both"}
+              </span>
+              . Só configurável na criação — para trocar depois, recrie o campo.
+            </p>
+          </div>
+
+          {mode === "create" && (
+            <div className="space-y-2">
+              <Label>{t("customFields.sectionLabel")} <span className="text-destructive">*</span></Label>
+              <Select value={sectionName} onValueChange={setSectionName}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma seção..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {compatibleSections.length === 0 ? (
+                    <div className="px-2 py-3 text-xs text-muted-foreground">
+                      Nenhuma seção compatível com storage <span className="font-medium">{storage}</span>.
+                      Crie uma seção antes de cadastrar o campo.
+                    </div>
+                  ) : (
+                    compatibleSections.map((s) => (
+                      <SelectItem key={s.sectionName} value={s.sectionName}>
+                        {(s.displayName || s.sectionName)}
+                        <span className="ml-2 text-xs text-muted-foreground">[{s.storage}]</span>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                A seção precisa estar compatível com o storage do campo (
+                <span className="font-medium">clearid</span> ↔ clearid/both,{" "}
+                <span className="font-medium">supabase</span> ↔ supabase/both,{" "}
+                <span className="font-medium">both</span> ↔ both).
+              </p>
+            </div>
+          )}
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox checked={isReadOnly} onCheckedChange={(v) => setIsReadOnly(Boolean(v))} />
+            {t("customFields.col.readOnly")}
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox checked={sync} onCheckedChange={(v) => setSync(Boolean(v))} />
+            {t("customFields.col.synchronization")}
+          </label>
+
+          {/* Vencimento: só para campos de data. Controla o alerta "Vencida". */}
+          {isDateType && (
+            <div className="space-y-1">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <Checkbox checked={expiration} onCheckedChange={(v) => setExpiration(Boolean(v))} />
+                {t("customFields.form.expiration")}
+              </label>
+              <p className="pl-6 text-xs text-muted-foreground">
+                {t("customFields.form.expirationHint")}
+              </p>
+            </div>
+          )}
+
+          {/* Anexo comprobatório: complemento opcional que comprova o valor do campo. */}
+          <div className="space-y-3 border-t pt-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={attEnabled} onCheckedChange={(v) => setAttEnabled(Boolean(v))} />
+              {t("attachmentField.enable")}
+            </label>
+            <label
+              className={cn("flex items-center gap-2 text-sm", !attEnabled && "opacity-50")}
+            >
+              <Checkbox
+                checked={attRequired}
+                disabled={!attEnabled}
+                onCheckedChange={(v) => setAttRequired(Boolean(v))}
+              />
+              {t("attachmentField.require")}
+            </label>
+            {attEnabled && (
+              <div className="space-y-2">
+                <Label>{t("attachmentDef.acceptCol")}</Label>
+                <Select value={attAccept} onValueChange={setAttAccept}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACCEPT_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {t(o.key)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={() => save.mutate()} disabled={!canSave}>
+            {save.isPending ? t("common.saving") : t("common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

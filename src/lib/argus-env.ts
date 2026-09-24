@@ -5,12 +5,24 @@ export interface ArgusEnvConfig {
   apiKey: string;
   defaultSiteId?: string;
   defaultSiteName?: string;
+  defaultRuleId?: string;
+  defaultRuleName?: string;
+  /**
+   * Quando true, o cadastro de visita pode vincular o visitante a uma
+   * identidade (habilita foto/credencial). Opcional — off por padrão.
+   */
+  linkVisitorToIdentity?: boolean;
 }
 
 const CFG_KEY = "argus.config";
 
 const DEFAULT: ArgusEnvConfig = {
-  baseUrl: "https://argusclearidapi.rmtecho.com.br",
+  // Backend clearid. Configurável por .env (VITE_ARGUS_API_BASE_URL) para
+  // alternar entre produção e um backend local sem tocar no código.
+  // Um override salvo em localStorage (tela de Configurações) tem precedência.
+  baseUrl:
+    (import.meta.env.VITE_ARGUS_API_BASE_URL as string | undefined)?.replace(/\/+$/, "") ??
+    "https://argusclearidapi.rmtecho.com.br",
   apiKey: "",
 };
 

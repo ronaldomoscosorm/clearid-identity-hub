@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
 import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { useT } from "@/lib/i18n";
 import { IdentityThumb } from "@/components/IdentityThumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ export const Route = createFileRoute("/_authenticated/terceirizados/")({
 });
 
 function TerceirizadosPage() {
+  const { t } = useT();
   const siteId = useDefaultSiteId();
   const SEARCH_KEY = "terceirizados:last-search";
   const emptyApplied = {
@@ -148,84 +150,84 @@ function TerceirizadosPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Terceirizados</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t("contractors.title")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Identities e seus campos personalizados (documentos, treinamentos e certificações).
+          {t("contractors.subtitle")}
         </p>
       </div>
 
       <Card className="p-4">
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Tipo do Trabalhador</Label>
+            <Label>{t("contractors.workerType")}</Label>
             <Select value="Terceiros" disabled>
               <SelectTrigger className="w-full sm:w-64">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Terceiros">Terceiros</SelectItem>
+                <SelectItem value="Terceiros">{t("contractors.workerTypeContractors")}</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Filtro fixo desta tela; não pode ser alterado.
+              {t("contractors.workerTypeHint")}
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-1.5">
-              <Label htmlFor="t-first-name">Nome</Label>
+              <Label htmlFor="t-first-name">{t("common.name")}</Label>
               <Input
                 id="t-first-name"
                 value={fFirstName}
                 onChange={(e) => setFFirstName(e.target.value)}
-                placeholder="Ex: Maria"
+                placeholder={t("contractors.firstNamePlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="t-email">E-mail</Label>
+              <Label htmlFor="t-email">{t("common.email")}</Label>
               <Input
                 id="t-email"
                 value={fEmail}
                 onChange={(e) => setFEmail(e.target.value)}
-                placeholder="usuario@empresa.com"
+                placeholder={t("contractors.emailPlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="t-company">Empresa</Label>
+              <Label htmlFor="t-company">{t("contractors.company")}</Label>
               <Input
                 id="t-company"
                 value={fCompany}
                 onChange={(e) => setFCompany(e.target.value)}
-                placeholder="Empresa"
+                placeholder={t("contractors.company")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="t-job-title">Cargo</Label>
+              <Label htmlFor="t-job-title">{t("contractors.jobTitle")}</Label>
               <Input
                 id="t-job-title"
                 value={fJobTitle}
                 onChange={(e) => setFJobTitle(e.target.value)}
-                placeholder="Cargo"
+                placeholder={t("contractors.jobTitle")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="t-department">Departamento</Label>
+              <Label htmlFor="t-department">{t("contractors.department")}</Label>
               <Input
                 id="t-department"
                 value={fDepartment}
                 onChange={(e) => setFDepartment(e.target.value)}
-                placeholder="Departamento"
+                placeholder={t("contractors.department")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Status</Label>
+              <Label>{t("common.status")}</Label>
               <Select value={fStatus} onValueChange={setFStatus}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Active">Ativos</SelectItem>
-                  <SelectItem value="Inactive">Inativos</SelectItem>
-                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="Active">{t("contractors.statusActive")}</SelectItem>
+                  <SelectItem value="Inactive">{t("contractors.statusInactive")}</SelectItem>
+                  <SelectItem value="all">{t("contractors.statusAll")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -238,11 +240,11 @@ function TerceirizadosPage() {
                 onCheckedChange={(v) => setFAllSites(!!v)}
               />
               <Label htmlFor="t-all-sites" className="cursor-pointer text-sm font-normal">
-                Todos os sites
+                {t("contractors.allSites")}
               </Label>
             </div>
             <Button type="button" variant="ghost" onClick={onClear} disabled={query.isFetching}>
-              Limpar
+              {t("contractors.clear")}
             </Button>
             <Button
               type="button"
@@ -250,12 +252,12 @@ function TerceirizadosPage() {
               size="icon"
               onClick={() => query.refetch()}
               disabled={query.isFetching || !hasSearched}
-              title="Recarregar"
+              title={t("contractors.reload")}
             >
               <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
             </Button>
             <Button type="submit" disabled={query.isFetching}>
-              <Search className="mr-1 h-4 w-4" /> Pesquisar
+              <Search className="mr-1 h-4 w-4" /> {t("common.search")}
             </Button>
           </div>
         </form>
@@ -266,17 +268,17 @@ function TerceirizadosPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-14"></TableHead>
-              <TableHead>Identity ID</TableHead>
-              <TableHead>Nome</TableHead>
-              <TableHead>E-mail</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>{t("contractors.col.identityId")}</TableHead>
+              <TableHead>{t("common.name")}</TableHead>
+              <TableHead>{t("common.email")}</TableHead>
+              <TableHead>{t("common.status")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!hasSearched ? (
               <TableRow>
                 <TableCell colSpan={totalCols} className="py-10 text-center text-sm text-muted-foreground">
-                  Informe filtros e clique em <span className="font-medium text-foreground">Pesquisar</span> para listar terceirizados.
+                  {t("contractors.emptyPromptBefore")} <span className="font-medium text-foreground">{t("common.search")}</span> {t("contractors.emptyPromptAfter")}
                 </TableCell>
               </TableRow>
             ) : query.isLoading || query.isFetching ? (
@@ -298,7 +300,7 @@ function TerceirizadosPage() {
             ) : !query.data?.items?.length ? (
               <TableRow>
                 <TableCell colSpan={totalCols} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhum terceirizado encontrado para os filtros informados.
+                  {t("contractors.emptyState")}
                 </TableCell>
               </TableRow>
             ) : (

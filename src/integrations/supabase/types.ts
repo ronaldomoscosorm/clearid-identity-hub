@@ -12,9 +12,794 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  public: {
+  graphql_public: {
     Tables: {
       [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  public: {
+    Tables: {
+      client_settings: {
+        Row: {
+          created_at: string
+          default_custom_field_storage: string
+          profile: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_custom_field_storage?: string
+          profile: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_custom_field_storage?: string
+          profile?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_client_defaults: {
+        Row: {
+          created_at: string
+          default_rule_id: string | null
+          default_rule_name: string | null
+          default_site_id: string | null
+          default_site_name: string | null
+          profile: string
+          system_object_id: string | null
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          default_rule_id?: string | null
+          default_rule_name?: string | null
+          default_site_id?: string | null
+          default_site_name?: string | null
+          profile: string
+          system_object_id?: string | null
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          default_rule_id?: string | null
+          default_rule_name?: string | null
+          default_site_id?: string | null
+          default_site_name?: string | null
+          profile?: string
+          system_object_id?: string | null
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
+      user_defaults: {
+        Row: {
+          created_at: string
+          default_profile: string | null
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          default_profile?: string | null
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          default_profile?: string | null
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
+      custom_field_sections: {
+        Row: {
+          created_at: string
+          display_index: number
+          display_name: string
+          id: string
+          profile: string
+          section_name: string
+          storage: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_index?: number
+          display_name: string
+          id?: string
+          profile?: string
+          section_name: string
+          storage?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_index?: number
+          display_name?: string
+          id?: string
+          profile?: string
+          section_name?: string
+          storage?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      companies: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          legal_name: string | null
+          name: string
+          profile: string
+          site_id: string | null
+          status: string
+          tax_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          legal_name?: string | null
+          name: string
+          profile?: string
+          site_id?: string | null
+          status?: string
+          tax_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          legal_name?: string | null
+          name?: string
+          profile?: string
+          site_id?: string | null
+          status?: string
+          tax_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      employer_sites: {
+        Row: {
+          codigo: string | null
+          created_at: string
+          id: string
+          nome: string | null
+          profile: string
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          codigo?: string | null
+          created_at?: string
+          id?: string
+          nome?: string | null
+          profile: string
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          codigo?: string | null
+          created_at?: string
+          id?: string
+          nome?: string | null
+          profile?: string
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      client_branding: {
+        Row: {
+          accent_color: string
+          client_logo: string
+          client_name: string
+          created_at: string
+          id: string
+          primary_color: string
+          profile: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          accent_color?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          id?: string
+          primary_color?: string
+          profile: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          accent_color?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          id?: string
+          primary_color?: string
+          profile?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      import_mappings: {
+        Row: {
+          created_at: string
+          default_worker_type_id: string | null
+          id: string
+          mapping: Json
+          name: string
+          profile: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_worker_type_id?: string | null
+          id?: string
+          mapping?: Json
+          name: string
+          profile: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_worker_type_id?: string | null
+          id?: string
+          mapping?: Json
+          name?: string
+          profile?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_mappings_default_worker_type_id_fkey"
+            columns: ["default_worker_type_id"]
+            isOneToOne: false
+            referencedRelation: "worker_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_custom_fields: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          site_custom_field_id: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          site_custom_field_id: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          site_custom_field_id?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_custom_fields_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_custom_fields_site_custom_field_id_fkey"
+            columns: ["site_custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "site_custom_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_field_definitions: {
+        Row: {
+          attachment_accept: string | null
+          attachment_enabled: boolean
+          attachment_required: boolean
+          created_at: string
+          custom_field_name: string
+          custom_field_type: string | null
+          display_name: Json
+          etag: string | null
+          expiration_enabled: boolean
+          id: string
+          is_deleted: boolean
+          is_local: boolean
+          is_read_only: boolean
+          profile: string
+          section_name: string | null
+          storage: string
+          synchronization_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          attachment_accept?: string | null
+          attachment_enabled?: boolean
+          attachment_required?: boolean
+          created_at?: string
+          custom_field_name: string
+          custom_field_type?: string | null
+          display_name?: Json
+          etag?: string | null
+          expiration_enabled?: boolean
+          id?: string
+          is_deleted?: boolean
+          is_local?: boolean
+          is_read_only?: boolean
+          profile?: string
+          section_name?: string | null
+          storage?: string
+          synchronization_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          attachment_accept?: string | null
+          attachment_enabled?: boolean
+          attachment_required?: boolean
+          created_at?: string
+          custom_field_name?: string
+          custom_field_type?: string | null
+          display_name?: Json
+          etag?: string | null
+          expiration_enabled?: boolean
+          id?: string
+          is_deleted?: boolean
+          is_local?: boolean
+          is_read_only?: boolean
+          profile?: string
+          section_name?: string | null
+          storage?: string
+          synchronization_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cfd_section_fk"
+            columns: ["section_name"]
+            isOneToOne: false
+            referencedRelation: "custom_field_sections"
+            referencedColumns: ["section_name"]
+          },
+        ]
+      }
+      identities: {
+        // LGPD: shadow table. Só o link para o identity do ClearID + metadados
+        // locais (company_id, worker_type_id). Nenhuma PII nativa aqui.
+        Row: {
+          account_id: string | null
+          company_id: string | null
+          created_at: string
+          etag: string | null
+          id: string
+          identity_id: string
+          is_deleted: boolean
+          updated_at: string
+          worker_type_id: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          etag?: string | null
+          id?: string
+          identity_id: string
+          is_deleted?: boolean
+          updated_at?: string
+          worker_type_id?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          etag?: string | null
+          id?: string
+          identity_id?: string
+          is_deleted?: boolean
+          updated_at?: string
+          worker_type_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identities_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identities_worker_type_id_fkey"
+            columns: ["worker_type_id"]
+            isOneToOne: false
+            referencedRelation: "worker_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      identity_attachments: {
+        Row: {
+          created_at: string
+          custom_field_definition_id: string
+          file_name: string
+          id: string
+          identity_id: string
+          is_current: boolean
+          mime_type: string
+          site_custom_field_id: string | null
+          size_bytes: number
+          storage_path: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          custom_field_definition_id: string
+          file_name: string
+          id?: string
+          identity_id: string
+          is_current?: boolean
+          mime_type: string
+          site_custom_field_id?: string | null
+          size_bytes: number
+          storage_path: string
+          version: number
+        }
+        Update: {
+          created_at?: string
+          custom_field_definition_id?: string
+          file_name?: string
+          id?: string
+          identity_id?: string
+          is_current?: boolean
+          mime_type?: string
+          site_custom_field_id?: string | null
+          size_bytes?: number
+          storage_path?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identity_attachments_custom_field_definition_id_fkey"
+            columns: ["custom_field_definition_id"]
+            isOneToOne: false
+            referencedRelation: "custom_field_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identity_attachments_identity_id_fkey"
+            columns: ["identity_id"]
+            isOneToOne: false
+            referencedRelation: "identities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identity_attachments_site_custom_field_id_fkey"
+            columns: ["site_custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "site_custom_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      identity_custom_fields: {
+        Row: {
+          created_at: string
+          id: string
+          identity_id: string
+          site_custom_field_id: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          identity_id: string
+          site_custom_field_id: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          identity_id?: string
+          site_custom_field_id?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identity_custom_fields_identity_id_fkey"
+            columns: ["identity_id"]
+            isOneToOne: false
+            referencedRelation: "identities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identity_custom_fields_site_custom_field_id_fkey"
+            columns: ["site_custom_field_id"]
+            isOneToOne: false
+            referencedRelation: "site_custom_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      identity_field_labels: {
+        Row: {
+          alias: Json
+          created_at: string
+          display_index: number | null
+          display_order: number | null
+          field_key: string
+          id: string
+          is_visible: boolean
+          updated_at: string
+        }
+        Insert: {
+          alias?: Json
+          created_at?: string
+          display_index?: number | null
+          display_order?: number | null
+          field_key: string
+          id?: string
+          is_visible?: boolean
+          updated_at?: string
+        }
+        Update: {
+          alias?: Json
+          created_at?: string
+          display_index?: number | null
+          display_order?: number | null
+          field_key?: string
+          id?: string
+          is_visible?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      settings: {
+        Row: {
+          accent_color: string
+          account_id: string | null
+          argus_api_key: string | null
+          argus_base_url: string
+          client_logo: string
+          client_name: string
+          created_at: string
+          default_rule_id: string | null
+          default_rule_name: string | null
+          default_site_id: string | null
+          default_site_name: string | null
+          link_visitor_to_identity: boolean
+          preferences: Json
+          primary_color: string
+          system_object_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accent_color?: string
+          account_id?: string | null
+          argus_api_key?: string | null
+          argus_base_url?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          default_rule_id?: string | null
+          default_rule_name?: string | null
+          default_site_id?: string | null
+          default_site_name?: string | null
+          link_visitor_to_identity?: boolean
+          preferences?: Json
+          primary_color?: string
+          system_object_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          accent_color?: string
+          account_id?: string | null
+          argus_api_key?: string | null
+          argus_base_url?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          default_rule_id?: string | null
+          default_rule_name?: string | null
+          default_site_id?: string | null
+          default_site_name?: string | null
+          link_visitor_to_identity?: boolean
+          preferences?: Json
+          primary_color?: string
+          system_object_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      site_custom_fields: {
+        Row: {
+          created_at: string
+          definition_id: string | null
+          display_index: number | null
+          display_name_override: Json
+          entity_type: string
+          fillable: boolean
+          id: string
+          is_active: boolean
+          is_required: boolean
+          native_field_key: string | null
+          profile: string
+          related_identity_field_id: string | null
+          updated_at: string
+          value_range: Json | null
+          worker_type_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          definition_id?: string | null
+          display_index?: number | null
+          display_name_override?: Json
+          entity_type?: string
+          fillable?: boolean
+          id?: string
+          is_active?: boolean
+          is_required?: boolean
+          native_field_key?: string | null
+          profile: string
+          related_identity_field_id?: string | null
+          updated_at?: string
+          value_range?: Json | null
+          worker_type_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          definition_id?: string | null
+          display_index?: number | null
+          display_name_override?: Json
+          entity_type?: string
+          fillable?: boolean
+          id?: string
+          is_active?: boolean
+          is_required?: boolean
+          native_field_key?: string | null
+          profile?: string
+          related_identity_field_id?: string | null
+          updated_at?: string
+          value_range?: Json | null
+          worker_type_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_custom_fields_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "custom_field_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_custom_fields_related_identity_field_id_fkey"
+            columns: ["related_identity_field_id"]
+            isOneToOne: false
+            referencedRelation: "site_custom_fields"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_custom_fields_worker_type_id_fkey"
+            columns: ["worker_type_id"]
+            isOneToOne: false
+            referencedRelation: "worker_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      special_custom_fields: {
+        Row: {
+          created_at: string
+          custom_field_name: string
+          id: string
+          label: string | null
+          options: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          custom_field_name: string
+          id?: string
+          label?: string | null
+          options?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          custom_field_name?: string
+          id?: string
+          label?: string | null
+          options?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      worker_types: {
+        Row: {
+          argus_worker_type_code: string | null
+          code: string
+          created_at: string
+          display_index: number | null
+          id: string
+          is_active: boolean
+          name: string
+          name_i18n: Json
+          profile: string
+          updated_at: string
+        }
+        Insert: {
+          argus_worker_type_code?: string | null
+          code: string
+          created_at?: string
+          display_index?: number | null
+          id?: string
+          is_active?: boolean
+          name: string
+          name_i18n?: Json
+          profile?: string
+          updated_at?: string
+        }
+        Update: {
+          argus_worker_type_code?: string | null
+          code?: string
+          created_at?: string
+          display_index?: number | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          name_i18n?: Json
+          profile?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -39,12 +824,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -68,11 +853,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -93,11 +878,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -118,11 +903,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -135,11 +920,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -149,6 +934,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

@@ -1,41 +1,76 @@
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 import { getConfig } from "./argus-env";
+import { getActiveSite } from "./active-site";
+import { getSsoToken } from "./sso-token";
 
-// --- Default site cache ---
-let cachedSiteId: string | null = null;
-const SITE_KEY = "argus.defaultSiteId";
-const siteListeners = new Set<() => void>();
-
-export function getDefaultSiteId(): string | null {
-  if (cachedSiteId) return cachedSiteId;
-  if (typeof window !== "undefined") {
-    try {
-      const stored = window.localStorage.getItem(SITE_KEY);
-      if (stored) cachedSiteId = stored;
-    } catch { /* ignore */ }
-  }
-  return cachedSiteId;
+// --- Armazenamento: helpers localStorage (padrão) e sessionStorage (override) ---
+function lsGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+function lsSet(key: string, val: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (val) window.localStorage.setItem(key, val);
+    else window.localStorage.removeItem(key);
+  } catch { /* ignore */ }
+}
+function ssGet(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.sessionStorage.getItem(key); } catch { return null; }
+}
+function ssSet(key: string, val: string) {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.setItem(key, val); } catch { /* ignore */ }
+}
+function ssRemove(key: string) {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.removeItem(key); } catch { /* ignore */ }
 }
 
-export function setDefaultSiteId(id: string | null) {
-  cachedSiteId = id || null;
-  if (typeof window !== "undefined") {
-    try {
-      if (id) window.localStorage.setItem(SITE_KEY, id);
-      else window.localStorage.removeItem(SITE_KEY);
-    } catch { /* ignore */ }
-  }
-  for (const cb of siteListeners) cb();
+// --- Site: padrão configurado (localStorage/Configurações) vs seleção da sessão
+// (sessionStorage/topbar). O site "em efeito" (usado nas requisições) é o override
+// da sessão quando houver, senão o padrão configurado. Alterar o site no topbar
+// NÃO altera o padrão salvo em Configurações. ---
+const SITE_KEY = "argus.defaultSiteId";          // padrão (persistente)
+const SITE_SESSION_KEY = "argus.sessionSiteId";  // override da sessão (topbar)
+const siteListeners = new Set<() => void>();
+function notifySite() { for (const cb of siteListeners) cb(); }
+
+/** Site padrão configurado em Configurações (persistente). */
+export function getConfiguredSiteId(): string | null {
+  return lsGet(SITE_KEY);
+}
+
+/** Grava o site padrão (Configurações) e remove o override da sessão. */
+export function setConfiguredSiteId(id: string | null) {
+  lsSet(SITE_KEY, id);
+  ssRemove(SITE_SESSION_KEY);
+  notifySite();
+}
+
+/**
+ * Define o site da SESSÃO (seletor do topbar). Não altera o padrão de
+ * Configurações. `null` = "sem site" explícito (força escolher), gravado como
+ * string vazia para sobrepor o padrão.
+ */
+export function setSessionSiteId(id: string | null) {
+  ssSet(SITE_SESSION_KEY, id ?? "");
+  notifySite();
+}
+
+/** Site em efeito: override da sessão (se houver) senão o padrão configurado. */
+export function getDefaultSiteId(): string | null {
+  const override = ssGet(SITE_SESSION_KEY);
+  if (override !== null) return override || null;
+  return getConfiguredSiteId();
 }
 
 function subscribeSite(cb: () => void) {
   siteListeners.add(cb);
   const onStorage = (e: StorageEvent) => {
-    if (e.key === SITE_KEY) {
-      cachedSiteId = e.newValue || null;
-      cb();
-    }
+    if (e.key === SITE_KEY) cb();
   };
   if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
   return () => {
@@ -44,13 +79,14 @@ function subscribeSite(cb: () => void) {
   };
 }
 
-/** React hook: re-renderiza quando o site padrão muda. */
+/** React hook: site em efeito (sessão ?? padrão). */
 export function useDefaultSiteId(): string | null {
-  return useSyncExternalStore(
-    subscribeSite,
-    () => getDefaultSiteId(),
-    () => null,
-  );
+  return useSyncExternalStore(subscribeSite, () => getDefaultSiteId(), () => null);
+}
+
+/** React hook: site padrão configurado (para Configurações). */
+export function useConfiguredSiteId(): string | null {
+  return useSyncExternalStore(subscribeSite, () => getConfiguredSiteId(), () => null);
 }
 
 // --- AccountId cache (preenchido pelo /api/diagnostics/environment) ---
@@ -135,6 +171,71 @@ export function useSystemObjectId(): string | null {
   );
 }
 
+// --- Perfil ClearID ativo (conta/cliente escolhido POR REQUISIÇÃO) ---
+// O backend passou a atender múltiplas contas por "perfil" (rótulo não sigiloso),
+// enviado no header X-ClearId-Environment. O front escolhe o perfil (seletor) e
+// NÃO envia mais accountId — a conta é derivada do perfil no servidor.
+export type ClearIdProfile = { code: string; label: string };
+
+/** Lista de perfis disponíveis. TODO: tornar dinâmica (endpoint/config). */
+export const CLEARID_PROFILES: ClearIdProfile[] = [
+  { code: "RM", label: "RM" },
+  { code: "Corteva", label: "Corteva" },
+  { code: "Vylor", label: "Vylor" },
+];
+
+const DEFAULT_PROFILE = "RM";
+const PROFILE_KEY = "argus.profile";               // padrão (persistente/Configurações)
+const PROFILE_SESSION_KEY = "argus.sessionProfile"; // override da sessão (topbar)
+const profileListeners = new Set<() => void>();
+function notifyProfile() { for (const cb of profileListeners) cb(); }
+
+/** Perfil padrão configurado em Configurações. */
+export function getDefaultProfile(): string {
+  return lsGet(PROFILE_KEY) || DEFAULT_PROFILE;
+}
+
+/** Grava o perfil padrão (Configurações) e remove o override da sessão. */
+export function setDefaultProfile(code: string | null) {
+  lsSet(PROFILE_KEY, code);
+  ssRemove(PROFILE_SESSION_KEY);
+  notifyProfile();
+}
+
+/** Define o perfil da SESSÃO (topbar). Não altera o padrão de Configurações. */
+export function setSessionProfile(code: string | null) {
+  if (code) ssSet(PROFILE_SESSION_KEY, code);
+  else ssRemove(PROFILE_SESSION_KEY);
+  notifyProfile();
+}
+
+/** Perfil em efeito: override da sessão (se houver) senão o padrão configurado. */
+export function getActiveProfile(): string {
+  return ssGet(PROFILE_SESSION_KEY) || getDefaultProfile();
+}
+
+function subscribeProfile(cb: () => void) {
+  profileListeners.add(cb);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === PROFILE_KEY) cb();
+  };
+  if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
+  return () => {
+    profileListeners.delete(cb);
+    if (typeof window !== "undefined") window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** React hook: perfil em efeito (sessão ?? padrão). */
+export function useActiveProfile(): string {
+  return useSyncExternalStore(subscribeProfile, getActiveProfile, () => DEFAULT_PROFILE);
+}
+
+/** React hook: perfil padrão configurado (para Configurações). */
+export function useDefaultProfile(): string {
+  return useSyncExternalStore(subscribeProfile, getDefaultProfile, () => DEFAULT_PROFILE);
+}
+
 export interface ClearIdSystem {
   systemObjectId: string;
   name: string;
@@ -148,6 +249,43 @@ export interface ArgusError {
   message: string;
   traceId?: string;
   raw?: unknown;
+}
+
+// ---- Importação de identities (planilha CSV/Excel) ----
+
+export interface IdentityImportRow {
+  rowNumber: number;
+  action: string; // Created | Updated | Skipped | Failed | WouldCreate | WouldUpdate
+  identityId?: string | null;
+  externalId?: string | null;
+  email?: string | null;
+  displayName?: string | null;
+  customFieldsSet?: number;
+  messages: string[];
+}
+
+export interface IdentityImportResult {
+  fileName?: string | null;
+  environment: string;
+  dryRun: boolean;
+  detectedColumns: string[];
+  unknownColumns: string[];
+  totalRows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  rows: IdentityImportRow[];
+}
+
+export interface ImportJob {
+  id: string;
+  status: "Running" | "Completed" | "Failed";
+  fileName?: string | null;
+  result?: IdentityImportResult | null;
+  error?: string | null;
+  createdUtc?: string;
+  completedUtc?: string | null;
 }
 
 export class ArgusApiError extends Error {
@@ -165,7 +303,7 @@ export class ArgusApiError extends Error {
 export async function argusFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
-  opts: { allSites?: boolean } = {},
+  opts: { allSites?: boolean; siteId?: string | null; environment?: string } = {},
 ): Promise<T> {
   const cfg = getConfig();
 
@@ -177,7 +315,11 @@ export async function argusFetch<T = unknown>(
   }
 
   let url = cfg.baseUrl.replace(/\/+$/, "") + path;
-  const siteIdForQuery = getDefaultSiteId();
+  // Permite escopar a chamada a um site específico (ex.: o site da pessoa),
+  // em vez do site padrão do cabeçalho. Quando o perfil é forçado (opts.environment,
+  // ex.: página de Configurações), não herdamos o site da sessão — a chamada fica
+  // totalmente desacoplada do estado do topbar.
+  const siteIdForQuery = opts.siteId ?? (opts.environment ? null : getDefaultSiteId());
   if (!opts.allSites && siteIdForQuery && !/[?&]siteId=/.test(url)) {
     url += (url.includes("?") ? "&" : "?") + "siteId=" + encodeURIComponent(siteIdForQuery);
   }
@@ -185,10 +327,28 @@ export async function argusFetch<T = unknown>(
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-  const accountId = getAccountId();
-  if (accountId && !headers.has("X-Account-Id")) {
-    headers.set("X-Account-Id", accountId);
+  // Precedência do Bearer:
+  //   1) apiKey em config (uso legado — quando o app foi configurado com um
+  //      token estático via Configurações). Ainda respeitado.
+  //   2) SSO Token do localStorage (fluxo novo — populado por captureTokenFromUrl
+  //      após redirect do Portal Argus com #token= no fragment). Substitui o
+  //      cookie, que não era propagado entre subdomínios.
+  if (cfg.apiKey) {
+    headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+  } else {
+    const ssoToken = getSsoToken();
+    if (ssoToken && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${ssoToken}`);
+    }
+  }
+  // Perfil ClearID (conta) por requisição. Não enviamos mais accountId — o
+  // backend deriva a conta a partir do perfil (header X-ClearId-Environment).
+  // NÃO enviamos mais o X-Argus-Site: o formato do site selecionado no front
+  // (code:nome) não casa com o grant (clienteId:siteId) e derrubava TODAS as
+  // chamadas com 403. A regra do backend "header ausente → aprova" libera; a
+  // autorização fica no app-level (apps=clearid) + policies.
+  if (!headers.has("X-ClearId-Environment")) {
+    headers.set("X-ClearId-Environment", opts.environment ?? getActiveProfile());
   }
   const systemObjectId = getSystemObjectId();
   if (systemObjectId && !headers.has("X-System-Object-Id")) {
@@ -217,7 +377,9 @@ export async function argusFetch<T = unknown>(
           "Operação bloqueada: DELETE em /api/identities não é permitido. Use updateIdentity com status='Inactive'.",
       });
     }
-    response = await fetch(url, { ...init, headers });
+    // credentials: "include" garante que o cookie SSO rmtecho_token (HttpOnly, domínio .rmtecho.com.br)
+    // viaje até o backend Argus. O `init` do chamador pode sobrescrever se necessário.
+    response = await fetch(url, { credentials: "include", ...init, headers });
   } catch (e) {
     throw new ArgusApiError({
       status: 0,
@@ -225,7 +387,7 @@ export async function argusFetch<T = unknown>(
     });
   }
 
-  const traceId = response.headers.get("x-trace-id") ?? undefined;
+  const headerTraceId = response.headers.get("x-trace-id") ?? undefined;
   const text = await response.text();
   let body: unknown = text;
   if (text) {
@@ -238,6 +400,10 @@ export async function argusFetch<T = unknown>(
 
   if (!response.ok) {
     const bodyObj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+    // O envelope ApiResponse traz o traceId no corpo; o header é um fallback.
+    const traceId =
+      headerTraceId ??
+      (bodyObj && typeof bodyObj.traceId === "string" ? bodyObj.traceId : undefined);
     const msg =
       (bodyObj && "message" in bodyObj && typeof bodyObj.message === "string"
         ? bodyObj.message
@@ -245,6 +411,10 @@ export async function argusFetch<T = unknown>(
       (bodyObj && "error" in bodyObj ? String(bodyObj.error) : null) ??
       response.statusText ??
       `HTTP ${response.status}`;
+    // Loga o traceId para correlação com os logs do backend (Serilog).
+    console.warn(
+      `[argus] ${response.status} ${path} — ${msg}${traceId ? ` (traceId ${traceId})` : ""}`,
+    );
     throw new ArgusApiError({
       status: response.status,
       message: msg,
@@ -355,6 +525,9 @@ function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
   assertWorkerTypeCode(data.workerTypeCode);
   return {
     ...data,
+    // Campos personalizados NÃO vão no create (o ClearID rejeita o formato dict
+    // aqui). São gravados após a criação via patchIdentityCustomFields.
+    customFields: undefined,
     siteId: data.siteId ?? getDefaultSiteId() ?? undefined,
     workerTypeCode: data.workerTypeCode ?? undefined,
     companyData: {
@@ -499,10 +672,24 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     });
   }
 
-  const systemData: Record<string, unknown> = { ...(data.systemData ?? {}) };
-  systemData.externalId = getClearIdExternalId(data);
-  const customFields = customFieldsToClearIdArray(data.customFields, data.systemData?.customFields);
-  if (customFields) systemData.customFields = customFields;
+  // systemData: preserva apenas campos editáveis não-nulos. Campos derivados/
+  // read-only (resourceFilters, horizonId, provisioning, sync) NÃO podem ser
+  // enviados no PUT — o ClearID rejeita com 400 (o resourceFilters é recalculado
+  // a partir de companyData.siteId). customFields vão via PATCH, não no PUT.
+  const READONLY_SYSTEM = new Set([
+    "resourceFilters",
+    "horizonId",
+    "provisioningAttributes",
+    "externalSyncSourceId",
+    "externalSyncTimeUtc",
+    "externalId",
+    "customFields",
+  ]);
+  const systemData: Record<string, unknown> = { externalId: getClearIdExternalId(data) };
+  for (const [k, v] of Object.entries((data.systemData ?? {}) as Record<string, unknown>)) {
+    if (READONLY_SYSTEM.has(k)) continue;
+    if (v !== null && v !== undefined) systemData[k] = v;
+  }
 
   const displayName =
     data.displayName ??
@@ -518,6 +705,7 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
   return {
     systemData,
     companyData,
+    privateData: data.privateData ?? undefined,
     description: data.description ?? null,
     status:
       typeof data.status === "string"
@@ -572,6 +760,37 @@ export interface ClearIdTeamMember {
   identityDepartmentName?: string | null;
 }
 
+// ---- Campanha de atualização de foto ----
+export interface PhotoCampaignTarget {
+  identityId: string;
+  displayName: string | null;
+  email: string | null;
+  status: "Pending" | "Sent" | "Used" | "Failed" | "SkippedNoEmail" | string;
+  expiresUtc: string | null;
+  sentUtc: string | null;
+  usedUtc: string | null;
+  error: string | null;
+  dryRunLink: string | null;
+}
+export interface PhotoCampaignResult {
+  campaignId: string;
+  name: string | null;
+  environment: string;
+  totalTargets: number;
+  sent: number;
+  skippedNoEmail: number;
+  failed: number;
+  dryRun: boolean;
+  createdUtc: string;
+  targets?: PhotoCampaignTarget[] | null;
+}
+export interface CreatePhotoCampaign {
+  name?: string;
+  identityIds?: string[];
+  siteId?: string | null;
+  accountId?: string | null;
+}
+
 export interface ClearIdLocation {
   locationId: string;
   siteId: string;
@@ -599,9 +818,49 @@ export interface ClearIdCustomFieldDef {
   isDeleted?: boolean;
 }
 
+/**
+ * Definição unificada — como o backend .NET devolve em GET /api/custom-fields?source=….
+ * Contém `storage` + metadados do Supabase (profile, sectionName, attachment).
+ */
+export interface UnifiedCustomFieldDef {
+  customFieldName: string;
+  displayName?: string | null;
+  customFieldType?: string | null;
+  storage: "clearid" | "supabase" | "both";
+  profile?: string | null;
+  sectionName?: string | null;
+  isReadOnly: boolean;
+  synchronizationEnabled: boolean;
+  isDeleted: boolean;
+  eTag?: string | null;
+  attachmentEnabled: boolean;
+  attachmentAccept?: string | null;
+  attachmentRequired: boolean;
+}
+
 export interface ClearIdCustomFieldSection {
   sectionName: string;
   identityCustomFields?: Array<{ name: string; index: number }>;
+}
+
+/** Section unificada — devolvida por GET /api/custom-fields/sections?source=…. */
+export interface UnifiedCustomFieldSection {
+  sectionName: string;
+  displayName?: string | null;
+  index: number;
+  storage: "clearid" | "supabase" | "both";
+  profile?: string | null;
+  fieldNames: string[];
+  eTag?: string | null;
+}
+
+/** Seção de campos personalizados, já normalizada para a UI. */
+export interface CustomFieldSectionSummary {
+  sectionName: string;
+  displayName: string;
+  index: number;
+  eTag: string | null;
+  fields: { name: string; index: number }[];
 }
 
 export interface CustomFieldPatchValue {
@@ -632,6 +891,68 @@ export interface CredentialRecord {
   expirationMode?: string | null;
   expirationDurationInDays?: number | null;
   [k: string]: unknown;
+}
+
+// ---- Visitas ----
+export interface VisitProfile {
+  visitProfileId: string;
+  siteId?: string | null;
+  name?: string | null;
+  isEnabled?: boolean;
+  isDefault?: boolean;
+  plannedVisitAllowed?: boolean;
+  selfCheckInAllowed?: boolean;
+  plannedVisitSettings?: {
+    /** Motivos aceitos pelo ClearID. Qualquer outro valor gera 400 na criação. */
+    visitReasons?: string[] | null;
+  } | null;
+}
+
+export interface VisitVisitor {
+  visitorId: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  identityId?: string | null;
+  registrationCode?: string | null;
+  /** Expected | CheckedIn | CheckedOut | ... */
+  visitorState?: string | null;
+  checkinTimestampUtc?: string | null;
+  checkoutTimestampUtc?: string | null;
+}
+
+export interface VisitEvent {
+  visitEventId: string;
+  visitEventName?: string | null;
+  startDateTimeUtc?: string | null;
+  endDateTimeUtc?: string | null;
+  reason?: string | null;
+  siteId?: string | null;
+  /** Pending | Approved | Denied | Cancelled | ... */
+  status?: string | null;
+  requesterId?: string | null;
+  eTag?: string | null;
+  hosts?: { identityId: string; displayName?: string | null }[] | null;
+  visitors?: VisitVisitor[] | null;
+}
+
+export interface CreateVisitPayload {
+  visitEventName: string;
+  startDateTimeUtc: string;
+  endDateTimeUtc: string;
+  reason: string;
+  siteId: string;
+  requesterId: string;
+  hosts: { identityId: string }[];
+  visitors: {
+    firstName: string;
+    lastName?: string | null;
+    email?: string | null;
+    identityId?: string | null;
+  }[];
+  internalNotes?: string | null;
+  visitProfileId?: string | null;
+  type?: string | null;
 }
 
 export interface CredentialUpsert {
@@ -740,21 +1061,19 @@ export function parseCredentialsResponse(raw: unknown): CredentialRecord[] {
 // ---- API helpers ----
 
 export const argusApi = {
-  listSites: async (): Promise<ClearIdSite[]> => {
+  listSites: async (environment?: string): Promise<ClearIdSite[]> => {
     const data = await unwrap<{ sites?: ClearIdSite[] } | ClearIdSite[]>(
-      argusFetch(`/api/sites`),
+      argusFetch(`/api/sites`, undefined, { environment, allSites: true }),
     );
     if (Array.isArray(data)) return data;
     return data?.sites ?? [];
   },
 
-  listSystems: async (): Promise<ClearIdSystem[]> => {
-    const accountId = getAccountId();
+  listSystems: async (environment?: string): Promise<ClearIdSystem[]> => {
     const q = new URLSearchParams();
-    if (accountId) q.set("accountId", accountId);
     const data = await unwrap<
       { systems?: unknown[] } | unknown[]
-    >(argusFetch(`/api/systems?${q.toString()}`, undefined, { allSites: true }));
+    >(argusFetch(`/api/systems?${q.toString()}`, undefined, { allSites: true, environment }));
     const raw = Array.isArray(data) ? data : (data?.systems ?? []);
     return (raw as Array<Record<string, unknown>>).map((s) => ({
       systemObjectId:
@@ -774,13 +1093,23 @@ export const argusApi = {
     })).filter((s) => s.systemObjectId);
   },
 
-  listTeams: async (params?: { name?: string; take?: number; allSites?: boolean }): Promise<ClearIdTeam[]> => {
+  listTeams: async (params?: {
+    name?: string;
+    take?: number;
+    allSites?: boolean;
+    siteId?: string | null;
+    environment?: string;
+  }): Promise<ClearIdTeam[]> => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
     q.set("take", String(params?.take ?? 200));
     if (params?.name) q.set("name", params.name);
     const data = await unwrap<{ teams?: ClearIdTeam[] } | ClearIdTeam[]>(
-      argusFetch(`/api/teams?${q.toString()}`, undefined, { allSites: params?.allSites }),
+      argusFetch(`/api/teams?${q.toString()}`, undefined, {
+        allSites: params?.allSites,
+        siteId: params?.siteId,
+        environment: params?.environment,
+      }),
     );
     if (Array.isArray(data)) return data;
     return data?.teams ?? [];
@@ -809,15 +1138,246 @@ export const argusApi = {
   },
 
   listCustomFields: async (): Promise<ClearIdCustomFieldDef[]> => {
-    const accountId = getAccountId();
     const q = new URLSearchParams();
-    if (accountId) q.set("accountId", accountId);
     const data = await unwrap<
       { customFields?: ClearIdCustomFieldDef[] } | ClearIdCustomFieldDef[]
     >(argusFetch(`/api/custom-fields?${q.toString()}`, undefined, { allSites: true }));
     if (Array.isArray(data)) return data;
     return data?.customFields ?? [];
   },
+
+  /**
+   * Lista unificada — ClearID + Supabase. Backend faz o merge por
+   * customFieldName e devolve `storage` em cada item. Use quando quiser
+   * substituir a dupla `listCustomFields()` + `supaFieldsQuery`.
+   *
+   * `source`: clearid (default) | supabase | both | all.
+   * `profile`: se omitido, backend usa o header X-ClearId-Environment.
+   */
+  listCustomFieldsUnified: async (opts?: {
+    source?: "clearid" | "supabase" | "both" | "all";
+    profile?: string;
+    includeDeleted?: boolean;
+  }): Promise<UnifiedCustomFieldDef[]> => {
+    const q = new URLSearchParams();
+    q.set("source", opts?.source ?? "all");
+    if (opts?.profile) q.set("profile", opts.profile);
+    if (opts?.includeDeleted) q.set("includeDeleted", "true");
+    const data = await unwrap<UnifiedCustomFieldDef[]>(
+      argusFetch(`/api/custom-fields?${q.toString()}`, undefined, { allSites: true }),
+    );
+    return Array.isArray(data) ? data : [];
+  },
+
+  /**
+   * Cria/atualiza campo com storage. Roteia entre ClearID/Supabase/ambos no backend.
+   * Substitui `createCustomField` + upsert direto no Supabase.
+   */
+  upsertCustomFieldUnified: (
+    payload: {
+      customFieldName?: string;
+      displayName: string;
+      customFieldType?: string;
+      storage: "clearid" | "supabase" | "both";
+      profile?: string;
+      sectionName?: string | null;
+      isReadOnly?: boolean;
+      synchronizationEnabled?: boolean;
+      eTag?: string | null;
+      attachmentEnabled?: boolean;
+      attachmentAccept?: string | null;
+      attachmentRequired?: boolean;
+    },
+    method: "POST" | "PUT" = "POST",
+    customFieldName?: string,
+  ) =>
+    unwrap<UnifiedCustomFieldDef>(
+      argusFetch(
+        method === "POST"
+          ? `/api/custom-fields`
+          : `/api/custom-fields/${encodeURIComponent(customFieldName ?? payload.customFieldName ?? "")}`,
+        { method, body: JSON.stringify(payload) },
+        { allSites: true },
+      ),
+    ),
+
+  /** Delete unificado — `storage` na query decide alvos. */
+  deleteCustomFieldUnified: (
+    customFieldName: string,
+    opts: { storage: "clearid" | "supabase" | "both"; profile?: string },
+  ) => {
+    const q = new URLSearchParams({ storage: opts.storage });
+    if (opts.profile) q.set("profile", opts.profile);
+    return unwrap<unknown>(
+      argusFetch(
+        `/api/custom-fields/${encodeURIComponent(customFieldName)}?${q.toString()}`,
+        { method: "DELETE" },
+        { allSites: true },
+      ),
+    );
+  },
+
+  /** Cria uma definição de campo personalizado. O nome/tipo são imutáveis depois. */
+  createCustomField: (payload: {
+    customFieldName: string;
+    displayName: string;
+    customFieldType: string;
+    isReadOnly: boolean;
+    synchronizationEnabled: boolean;
+  }) =>
+    unwrap<ClearIdCustomFieldDef>(
+      argusFetch(`/api/custom-fields`, { method: "POST", body: JSON.stringify(payload) }, {
+        allSites: true,
+      }),
+    ),
+
+  /** Atualiza uma definição (nome e tipo não são alteráveis pela API). */
+  updateCustomField: (
+    customFieldName: string,
+    payload: {
+      displayName: string;
+      isReadOnly: boolean;
+      synchronizationEnabled: boolean;
+      eTag?: string | null;
+    },
+  ) =>
+    unwrap<ClearIdCustomFieldDef>(
+      argusFetch(
+        `/api/custom-fields/${encodeURIComponent(customFieldName)}`,
+        { method: "PUT", body: JSON.stringify(payload) },
+        { allSites: true },
+      ),
+    ),
+
+  /** Remove a definição de campo personalizado da conta. */
+  deleteCustomField: (customFieldName: string) =>
+    unwrap<unknown>(
+      argusFetch(
+        `/api/custom-fields/${encodeURIComponent(customFieldName)}`,
+        { method: "DELETE" },
+        { allSites: true },
+      ),
+    ),
+
+  /**
+   * Lista unificada de sections — ClearID + Supabase, com `storage` por item.
+   * Backend faz o merge em GET /api/custom-fields/sections?source=….
+   */
+  listCustomFieldSectionsUnified: async (opts?: {
+    source?: "clearid" | "supabase" | "both" | "all";
+    profile?: string;
+  }): Promise<UnifiedCustomFieldSection[]> => {
+    const q = new URLSearchParams();
+    q.set("source", opts?.source ?? "all");
+    if (opts?.profile) q.set("profile", opts.profile);
+    const data = await unwrap<UnifiedCustomFieldSection[]>(
+      argusFetch(`/api/custom-fields/sections?${q.toString()}`),
+    );
+    return Array.isArray(data) ? data : [];
+  },
+
+  /** Upsert section com storage. */
+  upsertCustomFieldSectionUnified: (
+    payload: {
+      sectionName?: string;
+      displayName: string;
+      index?: number;
+      storage: "clearid" | "supabase" | "both";
+      profile?: string;
+      eTag?: string | null;
+    },
+    method: "POST" | "PUT" = "POST",
+    sectionName?: string,
+  ) =>
+    unwrap<UnifiedCustomFieldSection>(
+      argusFetch(
+        method === "POST"
+          ? `/api/custom-fields/sections`
+          : `/api/custom-fields/sections/${encodeURIComponent(sectionName ?? payload.sectionName ?? "")}`,
+        { method, body: JSON.stringify(payload) },
+      ),
+    ),
+
+  /** Delete section unificado. */
+  deleteCustomFieldSectionUnified: (
+    sectionName: string,
+    opts: { storage: "clearid" | "supabase" | "both"; profile?: string },
+  ) => {
+    const q = new URLSearchParams({ storage: opts.storage });
+    if (opts.profile) q.set("profile", opts.profile);
+    return unwrap<unknown>(
+      argusFetch(
+        `/api/custom-fields/sections/${encodeURIComponent(sectionName)}?${q.toString()}`,
+        { method: "DELETE" },
+      ),
+    );
+  },
+
+  /** Lista todas as seções de campos personalizados (nome, exibição, campos). */
+  listCustomFieldSections: async (): Promise<CustomFieldSectionSummary[]> => {
+    const data = await unwrap<unknown>(argusFetch(`/api/custom-fields/sections`));
+    const arr = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+    return arr.map((s) => ({
+      sectionName: String(s.identityCustomFieldsSectionName ?? s.sectionName ?? ""),
+      displayName: String(s.displayName ?? s.identityCustomFieldsSectionName ?? s.sectionName ?? ""),
+      index: typeof s.index === "number" ? s.index : 0,
+      eTag: typeof s.eTag === "string" ? s.eTag : null,
+      fields: Array.isArray(s.identityCustomFields)
+        ? (s.identityCustomFields as Record<string, unknown>[]).map((f) => ({
+            name: String(f.name ?? ""),
+            index: typeof f.index === "number" ? f.index : 0,
+          }))
+        : [],
+    }));
+  },
+
+  /**
+   * Cria uma seção de campos personalizados. O nome é imutável depois.
+   *
+   * Atenção: o `index` precisa ser único entre as seções. Se colidir, o backend
+   * responde 400 com a mensagem enganosa "Já existe uma section com o nome X"
+   * (fala do nome, mas o conflito é do índice).
+   */
+  createCustomFieldSection: (payload: {
+    identityCustomFieldsSectionName: string;
+    displayName: string;
+    index?: number | null;
+    identityCustomFields?: { name: string; index: number }[] | null;
+  }) =>
+    unwrap<unknown>(
+      argusFetch(`/api/custom-fields/sections`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    ),
+
+  /**
+   * Atualiza a seção. `identityCustomFields` deve conter os campos atuais — o
+   * PUT substitui o agrupamento, então omiti-lo esvaziaria a seção.
+   */
+  updateCustomFieldSection: (
+    sectionName: string,
+    payload: {
+      displayName: string;
+      index: number;
+      identityCustomFields?: { name: string; index: number }[] | null;
+      eTag?: string | null;
+    },
+  ) =>
+    unwrap<unknown>(
+      argusFetch(`/api/custom-fields/sections/${encodeURIComponent(sectionName)}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    ),
+
+  /** Remove a seção (o agrupamento). Os campos personalizados não são excluídos. */
+  deleteCustomFieldSection: (sectionName: string) =>
+    unwrap<unknown>(
+      argusFetch(`/api/custom-fields/sections/${encodeURIComponent(sectionName)}`, {
+        method: "DELETE",
+      }),
+    ),
 
   getCustomFieldSection: async (
     sectionName: string,
@@ -861,18 +1421,114 @@ export const argusApi = {
       startDateTimeUtc?: string | null;
       endDateTimeUtc?: string | null;
       reason?: string;
+      siteId?: string | null;
     },
   ) =>
-    argusFetch<unknown>(`/api/teams/${encodeURIComponent(teamId)}/members`, {
-      method: "POST",
-      body: JSON.stringify({
-        identityIds: payload.identityIds,
-        sourceId: payload.sourceId ?? null,
-        startDateTimeUtc: payload.startDateTimeUtc ?? null,
-        endDateTimeUtc: payload.endDateTimeUtc ?? null,
-        reason: payload.reason ?? "Portal Argus",
+    argusFetch<unknown>(
+      `/api/teams/${encodeURIComponent(teamId)}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          identityIds: payload.identityIds,
+          sourceId: payload.sourceId ?? null,
+          startDateTimeUtc: payload.startDateTimeUtc ?? null,
+          endDateTimeUtc: payload.endDateTimeUtc ?? null,
+          reason: payload.reason ?? "Portal Argus",
+        }),
+      },
+      { siteId: payload.siteId },
+    ),
+
+  removeTeamMembers: (
+    teamId: string,
+    payload: { identityIds: string[]; reason?: string; siteId?: string | null },
+  ) =>
+    argusFetch<unknown>(
+      `/api/teams/${encodeURIComponent(teamId)}/members`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({
+          identityIds: payload.identityIds,
+          reason: payload.reason ?? "Portal Argus",
+        }),
+      },
+      { siteId: payload.siteId },
+    ),
+
+  /** Identidades com o e-mail informado (busca exata, em todos os sites). */
+  findIdentitiesByEmail: async (email: string): Promise<ClearIdIdentity[]> => {
+    const e = (email ?? "").trim();
+    if (!e) return [];
+    const { items } = await argusApi.listIdentities({ email: e, allSites: true, take: 20 });
+    return items.filter((i) => (i.email ?? "").trim().toLowerCase() === e.toLowerCase());
+  },
+
+  /** Regras (teams) vinculadas a uma identidade. */
+  getIdentityTeams: async (
+    id: string,
+    opts?: { siteId?: string | null },
+  ): Promise<ClearIdTeamMember[]> => {
+    const data = await unwrap<{ teams?: ClearIdTeamMember[] } | ClearIdTeamMember[]>(
+      argusFetch(`/api/identities/${encodeURIComponent(id)}/teams`, undefined, {
+        siteId: opts?.siteId,
       }),
-    }),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.teams ?? [];
+  },
+
+  /**
+   * Garante que a identidade tenha ao menos uma regra: se não tiver nenhuma e
+   * houver uma regra padrão configurada, atribui a padrão.
+   */
+  ensureDefaultRule: async (
+    id: string,
+  ): Promise<{ assigned: boolean; ruleName?: string }> => {
+    const cfg = getConfig();
+    const ruleId = cfg.defaultRuleId;
+    if (!ruleId) return { assigned: false };
+    const teams = await argusApi.getIdentityTeams(id);
+    if (teams.length > 0) return { assigned: false };
+    await argusApi.addTeamMembers(ruleId, { identityIds: [id] });
+    return { assigned: true, ruleName: cfg.defaultRuleName };
+  },
+
+  // ---- Campanhas de atualização de foto (admin) ----
+  listPhotoCampaigns: async (): Promise<PhotoCampaignResult[]> => {
+    const data = await unwrap<PhotoCampaignResult[] | { campaigns?: PhotoCampaignResult[] }>(
+      argusFetch(`/api/photo-campaigns`, undefined, { allSites: true }),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.campaigns ?? [];
+  },
+  getPhotoCampaign: (id: string) =>
+    unwrap<PhotoCampaignResult>(
+      argusFetch(`/api/photo-campaigns/${encodeURIComponent(id)}`, undefined, { allSites: true }),
+    ),
+  createPhotoCampaign: (payload: CreatePhotoCampaign) =>
+    unwrap<PhotoCampaignResult>(
+      argusFetch(
+        `/api/photo-campaigns`,
+        { method: "POST", body: JSON.stringify(payload) },
+        { allSites: true },
+      ),
+    ),
+  updatePhotoCampaign: (id: string, payload: { name?: string | null }) =>
+    unwrap<PhotoCampaignResult>(
+      argusFetch(
+        `/api/photo-campaigns/${encodeURIComponent(id)}`,
+        { method: "PUT", body: JSON.stringify(payload) },
+        { allSites: true },
+      ),
+    ),
+  deletePhotoCampaign: (id: string) =>
+    unwrap<unknown>(
+      argusFetch(
+        `/api/photo-campaigns/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+        { allSites: true },
+      ),
+    ),
 
   listIdentities: async (params?: {
     query?: string;
@@ -886,13 +1542,32 @@ export const argusApi = {
     skip?: number;
     take?: number;
     allSites?: boolean;
+    /** Escopa a busca a um site específico (ignora o site padrão). */
+    siteId?: string | null;
     workerTypeCode?: string;
   }) => {
     const q = new URLSearchParams();
     q.set("includeDeleted", "false");
     q.set("skip", String(params?.skip ?? 0));
     q.set("take", String(params?.take ?? 50));
-    if (params?.query) q.set("query", params.query);
+    // Em "todos os sites" não há siteId; a API exige ao menos um critério de
+    // busca. Sem filtros, usamos um coringa para trazer os primeiros registros.
+    const hasCriterion = Boolean(
+      params?.query ||
+        params?.firstName ||
+        params?.lastName ||
+        params?.email ||
+        params?.company ||
+        params?.jobTitle ||
+        params?.department ||
+        params?.status,
+    );
+    // Sem critério de texto, usa um coringa para trazer um conjunto base — tanto
+    // em "todos os sites" quanto ao filtrar por um site específico (o backend
+    // varre esse conjunto e mantém os do site). Sem isso, o filtro por site sem
+    // nome não retornava nada.
+    const effectiveQuery = params?.query ?? (!hasCriterion ? "*" : undefined);
+    if (effectiveQuery) q.set("query", effectiveQuery);
     if (params?.firstName) q.set("firstName", params.firstName);
     if (params?.lastName) q.set("lastName", params.lastName);
     if (params?.email) q.set("email", params.email);
@@ -905,7 +1580,7 @@ export const argusApi = {
       argusFetch(
         `/api/identities/search?${q.toString()}`,
         {},
-        { allSites: params?.allSites },
+        { allSites: params?.allSites, siteId: params?.siteId },
       ),
     );
     return { items: data.results ?? [], total: data.totalItems ?? data.results?.length ?? 0 };
@@ -951,13 +1626,109 @@ export const argusApi = {
   activateIdentity: (id: string) =>
     argusFetch<void>(`/api/identities/${encodeURIComponent(id)}/activate`, { method: "POST" }),
 
+  /**
+   * Solicita a sincronização das identidades com os sistemas integrados.
+   * Deve ser chamado após incluir/alterar uma identity (e seus dados
+   * complementares). `siteId` escopa a chamada; por padrão usa o site padrão.
+   */
+  synchronizeIdentities: (ids: string[], siteId?: string | null) =>
+    unwrap<{ totalOfSynchronizedIdentities: number; failedIdentities: string[] }>(
+      argusFetch(
+        `/api/identities/synchronize`,
+        { method: "POST", body: JSON.stringify({ IdentityIds: ids }) },
+        { siteId: siteId ?? undefined },
+      ),
+    ),
+
   // ---- Credentials ----
+  // ---- Visitas ----
+  /**
+   * Perfis de visita do site. O perfil define os motivos permitidos
+   * (`visitReasons`) — o ClearID rejeita motivos fora dessa lista.
+   */
+  listVisitProfiles: async (siteId: string): Promise<VisitProfile[]> => {
+    const data = await unwrap<{ visitProfiles?: VisitProfile[] } | VisitProfile[]>(
+      argusFetch(`/api/visit-profiles?siteId=${encodeURIComponent(siteId)}`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.visitProfiles ?? [];
+  },
+
+  /** Busca visitas. `futureOnly` limita às que ainda vão ocorrer. */
+  listVisits: async (params?: {
+    searchTerm?: string;
+    status?: string;
+    identityId?: string;
+    futureOnly?: boolean;
+    take?: number;
+  }): Promise<VisitEvent[]> => {
+    const q = new URLSearchParams();
+    q.set("take", String(params?.take ?? 50));
+    if (params?.searchTerm) q.set("searchTerm", params.searchTerm);
+    if (params?.status) q.set("status", params.status);
+    if (params?.identityId) q.set("identityId", params.identityId);
+    if (params?.futureOnly) q.set("futureOnly", "true");
+    const data = await unwrap<{ visitEvents?: VisitEvent[]; results?: VisitEvent[] } | VisitEvent[]>(
+      argusFetch(`/api/visits?${q.toString()}`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.visitEvents ?? data?.results ?? [];
+  },
+
+  getVisit: (visitEventId: string) =>
+    unwrap<VisitEvent>(argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}`)),
+
+  createVisit: (payload: CreateVisitPayload) =>
+    unwrap<VisitEvent>(
+      argusFetch(`/api/visits`, { method: "POST", body: JSON.stringify(payload) }),
+    ),
+
+  /** Visitantes da visita — traz o visitorId e o identityId (necessário p/ credencial). */
+  listVisitVisitors: async (visitEventId: string): Promise<VisitVisitor[]> => {
+    const data = await unwrap<{ visitors?: VisitVisitor[] } | VisitVisitor[]>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}/visitors`),
+    );
+    if (Array.isArray(data)) return data;
+    return data?.visitors ?? [];
+  },
+
+  /** Check-in em lote. `timestampUtc` omitido = agora (decidido pelo ClearID). */
+  checkInVisitors: (visitEventId: string, visitorIds: string[]) =>
+    unwrap<unknown>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}/checkin`, {
+        method: "POST",
+        body: JSON.stringify({ visitorCheckIns: visitorIds.map((visitorId) => ({ visitorId })) }),
+      }),
+    ),
+
+  /** Check-out em lote. */
+  checkOutVisitors: (visitEventId: string, visitorIds: string[]) =>
+    unwrap<unknown>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}/checkout`, {
+        method: "POST",
+        body: JSON.stringify({ visitorCheckOuts: visitorIds.map((visitorId) => ({ visitorId })) }),
+      }),
+    ),
+
+  /** Exclui a visita. */
+  deleteVisit: (visitEventId: string) =>
+    unwrap<unknown>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}`, { method: "DELETE" }),
+    ),
+
+  /** Decisão sobre a visita: approve | deny | cancel. */
+  decideVisit: (visitEventId: string, decision: "approve" | "deny" | "cancel", comment?: string) =>
+    unwrap<unknown>(
+      argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}/${decision}`, {
+        method: "POST",
+        body: JSON.stringify({ comment: comment ?? null }),
+      }),
+    ),
+
   listCredentialFormats: async (): Promise<CredentialFormat[]> => {
-    const accountId = getAccountId();
     const systemObjectId = getSystemObjectId();
     const q = new URLSearchParams();
     if (systemObjectId) q.set("systemObjectId", systemObjectId);
-    if (accountId) q.set("accountId", accountId);
     const data = await unwrap<
       { credentialFormats?: CredentialFormat[]; formats?: CredentialFormat[] } | CredentialFormat[]
     >(argusFetch(`/api/credentials/formats?${q.toString()}`, undefined, { allSites: true }));
@@ -1030,14 +1801,14 @@ export const argusApi = {
     let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-    const acc = getAccountId();
-    if (acc) headers.set("X-Account-Id", acc);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
       url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
     }
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { credentials: "include", headers });
     if (res.status === 404) return null;
     if (!res.ok) throw new ArgusApiError({ status: res.status, message: res.statusText });
     return await res.blob();
@@ -1052,18 +1823,117 @@ export const argusApi = {
     form.append("picture", blob, "capture.jpg");
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
-    const acc = getAccountId();
-    if (acc) headers.set("X-Account-Id", acc);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
       url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
     }
-    const res = await fetch(url, { method: "POST", headers, body: form });
+    const res = await fetch(url, { method: "POST", credentials: "include", headers, body: form });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new ArgusApiError({ status: res.status, message: text || res.statusText });
     }
+  },
+
+  /**
+   * Importa identities a partir de uma planilha CSV/Excel via
+   * POST /api/identities/import (multipart, campo `file`). `dryRun` simula
+   * sem gravar. Retorna o log completo por linha.
+   */
+  importIdentities: async (
+    file: File,
+    opts?: { dryRun?: boolean; updateAfastamentoOnly?: boolean },
+  ): Promise<IdentityImportResult> => {
+    const cfg = getConfig();
+    if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+    let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import`;
+    const qs: string[] = [];
+    if (opts?.dryRun) qs.push("dryRun=true");
+    if (opts?.updateAfastamentoOnly) qs.push("updateAfastamentoOnly=true");
+    if (qs.length) url += "?" + qs.join("&");
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const headers = new Headers();
+    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
+    const sys = getSystemObjectId();
+    if (sys) {
+      headers.set("X-System-Object-Id", sys);
+      url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
+    }
+    const res = await fetch(url, { method: "POST", credentials: "include", headers, body: form });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message =
+        (body && typeof body === "object" && (body as { message?: string }).message) ||
+        res.statusText;
+      throw new ArgusApiError({ status: res.status, message, raw: body });
+    }
+    return (body && typeof body === "object" && "data" in body
+      ? (body as { data: IdentityImportResult }).data
+      : (body as IdentityImportResult));
+  },
+
+  /**
+   * Inicia a importação em BACKGROUND (assíncrona). Devolve o `jobId`; consulte
+   * o andamento com `getImportJob`. Evita timeout de gateway em lotes grandes.
+   */
+  startImportAsync: async (
+    file: File,
+    opts?: { dryRun?: boolean; updateAfastamentoOnly?: boolean },
+  ): Promise<string> => {
+    const cfg = getConfig();
+    if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+    let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import`;
+    const qs: string[] = ["async=true"];
+    if (opts?.dryRun) qs.push("dryRun=true");
+    if (opts?.updateAfastamentoOnly) qs.push("updateAfastamentoOnly=true");
+    url += "?" + qs.join("&");
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const headers = new Headers();
+    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    const sys = getSystemObjectId();
+    if (sys) {
+      headers.set("X-System-Object-Id", sys);
+      url += "&systemObjectId=" + encodeURIComponent(sys);
+    }
+    const res = await fetch(url, { method: "POST", credentials: "include", headers, body: form });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message =
+        (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+      throw new ArgusApiError({ status: res.status, message, raw: body });
+    }
+    const data = (body && typeof body === "object" && "data" in body ? (body as { data: unknown }).data : body) as
+      | { jobId?: string }
+      | null;
+    if (!data?.jobId) throw new ArgusApiError({ status: 0, message: "jobId ausente na resposta." });
+    return data.jobId;
+  },
+
+  /** Consulta o status de um job de importação assíncrono. */
+  getImportJob: async (jobId: string): Promise<ImportJob> => {
+    const cfg = getConfig();
+    if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+    const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import/jobs/${encodeURIComponent(jobId)}`;
+    const headers = new Headers();
+    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    const res = await fetch(url, { method: "GET", credentials: "include", headers });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message =
+        (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+      throw new ArgusApiError({ status: res.status, message, raw: body });
+    }
+    return (body && typeof body === "object" && "data" in body
+      ? (body as { data: ImportJob }).data
+      : (body as ImportJob));
   },
 
   /**
@@ -1093,7 +1963,7 @@ export const argusApi = {
         (envBody.accountId as string | undefined) ??
         (envBody.AccountId as string | undefined) ??
         (envBody.clientCode as string | undefined);
-      if (clientCode) setAccountId(clientCode);
+      // Não cacheamos mais o accountId: a conta é derivada do perfil no backend.
       const message = (conn?.message as string | undefined) ?? (connBody.message as string | undefined);
       return {
         environment,
@@ -1144,9 +2014,21 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     email: i.email ?? "",
     status: (i.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
     customFields: customFieldsToRecord(i.systemData?.customFields),
+    // Site conforme o ClearID: companyData.siteId (onde é gravado) → topo →
+    // systemData.siteId. Se nenhum existir, fica indefinido (o form pede escolha).
     siteId:
       siteIdFromCompany ??
-      ((i as unknown as { siteId?: string }).siteId ?? undefined),
+      ((i as unknown as { siteId?: string }).siteId ??
+        (i.systemData as { siteId?: string } | null | undefined)?.siteId ??
+        undefined),
     workerTypeCode: workerTypeFromCompany ?? i.workerTypeCode ?? undefined,
+    // Dados aninhados/adicionais preservados para o formulário completo.
+    middleName: i.middleName ?? undefined,
+    displayName: i.displayName ?? undefined,
+    description: i.description ?? undefined,
+    countryCode: i.countryCode ?? undefined,
+    culture: i.culture ?? undefined,
+    privateData: i.privateData ?? undefined,
+    companyData: i.companyData ?? undefined,
   };
 }

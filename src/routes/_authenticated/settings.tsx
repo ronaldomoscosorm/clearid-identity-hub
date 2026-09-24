@@ -1,23 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getConfig, saveConfig, type ArgusEnvConfig } from "@/lib/argus-env";
 import {
   argusApi,
-  getDefaultSiteId,
-  setDefaultSiteId,
+  getConfiguredSiteId,
+  setConfiguredSiteId,
   getSystemObjectId,
   setSystemObjectId,
+  useDefaultProfile,
+  setDefaultProfile,
   type DiagnosticsResult,
 } from "@/lib/argus-client";
 import { Badge } from "@/components/ui/badge";
+import { pushSettings } from "@/lib/supabase-settings";
+import { useT } from "@/lib/i18n";
+import { useUserScope } from "@/lib/user-scope";
+import { useCurrentUser } from "@/lib/current-user";
+import {
+  useUserClientDefaults,
+  useUpdateUserClientDefaults,
+  useUpdateUserDefaultProfile,
+} from "@/lib/user-defaults";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({ meta: [{ title: "Configurações — Argus ClearID" }] }),
@@ -27,19 +39,71 @@ export const Route = createFileRoute("/_authenticated/settings")({
 function Settings() {
   const [cfg, setCfg] = useState<ArgusEnvConfig>(() => getConfig());
   const [lastResult, setLastResult] = useState<DiagnosticsResult | null>(null);
-  const [siteId, setSiteId] = useState<string>(() => getDefaultSiteId() ?? "");
+  const [siteId, setSiteId] = useState<string>(() => getConfiguredSiteId() ?? "");
   const [systemObjectId, setSystemObjectIdState] = useState<string>(() => getSystemObjectId() ?? "");
+  const [ruleId, setRuleId] = useState<string>(() => getConfig().defaultRuleId ?? "");
   const qc = useQueryClient();
+  const { t } = useT();
+  const configuredProfile = useDefaultProfile();
+  const scope = useUserScope();
 
+  // Usuário REAL do ClearID (chave dos defaults por usuário).
+  const { data: currentUser } = useCurrentUser();
+  const userKey = currentUser?.username || undefined;
+
+  // Defaults por (USUÁRIO + CLIENTE): site/regra/system. Ao trocar o cliente
+  // configurado, o formulário reflete os defaults salvos do usuário no cliente.
+  const clientDefaultsQuery = useUserClientDefaults(userKey, configuredProfile);
+  const updateUserClientDefaults = useUpdateUserClientDefaults();
+  const updateUserDefaultProfile = useUpdateUserDefaultProfile();
+  const loadedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const d = clientDefaultsQuery.data;
+    if (!d) return;
+    if (loadedRef.current === configuredProfile) return; // já populou este cliente
+    loadedRef.current = configuredProfile;
+    setSiteId(d.defaultSiteId ?? "");
+    setSystemObjectIdState(d.systemObjectId ?? "");
+    setRuleId(d.defaultRuleId ?? "");
+    // Aplica também na topbar (default do usuário naquele cliente).
+    setConfiguredSiteId(d.defaultSiteId ?? null);
+    setSystemObjectId(d.systemObjectId ?? null);
+  }, [clientDefaultsQuery.data, configuredProfile]);
+
+  // Troca o cliente PADRÃO do usuário (persistido no servidor por user_key) e
+  // limpa o override de sessão. Reseta o ref para o form recarregar os defaults
+  // do usuário no novo cliente.
+  const changeProfile = (code: string) => {
+    if (code === configuredProfile) return;
+    setDefaultProfile(code);
+    if (userKey) updateUserDefaultProfile.mutate({ userKey, defaultProfile: code });
+    loadedRef.current = null;
+    setSiteId("");
+    setSystemObjectIdState("");
+    setRuleId("");
+    setConfiguredSiteId(null);
+    setSystemObjectId(null);
+    qc.invalidateQueries();
+  };
+
+  // As listagens de Configurações usam o perfil CONFIGURADO (não o da sessão do
+  // topbar), para que trocar o cliente no topo não altere as opções aqui.
   const sitesQuery = useQuery({
-    queryKey: ["argus", "sites"],
-    queryFn: argusApi.listSites,
+    queryKey: ["argus", "sites", configuredProfile],
+    queryFn: () => argusApi.listSites(configuredProfile),
     staleTime: 60_000,
   });
 
   const systemsQuery = useQuery({
-    queryKey: ["argus", "systems"],
-    queryFn: argusApi.listSystems,
+    queryKey: ["argus", "systems", configuredProfile],
+    queryFn: () => argusApi.listSystems(configuredProfile),
+    staleTime: 60_000,
+  });
+
+  const teamsQuery = useQuery({
+    // O endpoint /api/teams exige siteId — usa o site configurado.
+    queryKey: ["argus", "teams", configuredProfile, siteId],
+    queryFn: () => argusApi.listTeams({ take: 200, siteId: siteId || undefined, environment: configuredProfile }),
     staleTime: 60_000,
   });
 
@@ -48,40 +112,84 @@ function Settings() {
     onSuccess: (r) => {
       setLastResult(r);
       if (r.backend.reachable) {
-        toast.success(`Conexão OK — ambiente ${r.environment}`);
+        toast.success(t("settings.toast.connectionOk", { environment: r.environment }));
       } else {
-        toast.error(`Falha: ${r.backend.message ?? "inacessível"}`);
+        toast.error(t("settings.toast.connectionFail", { message: r.backend.message ?? t("settings.unreachable") }));
       }
     },
   });
 
   const handleSave = () => {
-    saveConfig(cfg);
-    setDefaultSiteId(siteId || null);
+    const siteName = sitesQuery.data?.find((s) => s.siteId === siteId)?.name;
+    const ruleName = teamsQuery.data?.find((t) => t.teamId === ruleId)?.name;
+    const nextCfg: ArgusEnvConfig = {
+      ...cfg,
+      defaultSiteId: siteId || undefined,
+      defaultSiteName: siteName,
+      defaultRuleId: ruleId || undefined,
+      defaultRuleName: ruleName,
+    };
+    saveConfig(nextCfg);
+    setConfiguredSiteId(siteId || null);
     setSystemObjectId(systemObjectId || null);
-    setCfg((c) => ({ ...c, defaultSiteId: siteId || undefined, defaultSiteName: sitesQuery.data?.find((s) => s.siteId === siteId)?.name }));
+    setCfg(nextCfg);
     qc.invalidateQueries();
-    toast.success("Configurações salvas");
+
+    // Persiste os defaults por (USUÁRIO + CLIENTE) — o que reaplica ao logar.
+    if (!userKey) {
+      toast.warning(
+        "Não foi possível identificar o usuário (username vazio no /me) — defaults por usuário NÃO gravados.",
+      );
+    } else {
+      updateUserClientDefaults.mutate(
+        {
+          userKey,
+          profile: configuredProfile,
+          defaults: {
+            defaultSiteId: siteId || null,
+            defaultSiteName: siteName ?? null,
+            defaultRuleId: ruleId || null,
+            defaultRuleName: ruleName ?? null,
+            systemObjectId: systemObjectId || null,
+          },
+        },
+        {
+          onError: (e) =>
+            toast.error(`Falha ao gravar defaults do cliente: ${(e as Error).message}`),
+        },
+      );
+      // Garante que este cliente seja o padrão do usuário (aterrissa aqui ao logar).
+      updateUserDefaultProfile.mutate(
+        { userKey, defaultProfile: configuredProfile },
+        {
+          onError: (e) =>
+            toast.error(`Falha ao gravar cliente padrão: ${(e as Error).message}`),
+        },
+      );
+    }
+
+    pushSettings()
+      .then(() => toast.success(t("settings.toast.saved")))
+      .catch(() => toast.warning(t("settings.toast.savedLocalSyncFail")));
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Configurações</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{t("settings.title")}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Defina o endpoint do ArgusClearId.Api. O ambiente (Demo ou Produção) é definido pelo
-          próprio backend — aqui você apenas vê qual está ativo.
+          {t("settings.subtitle")}
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Backend</CardTitle>
-          <CardDescription>Endpoint e credencial do ArgusClearId.Api.</CardDescription>
+          <CardTitle className="text-base">{t("settings.backend.title")}</CardTitle>
+          <CardDescription>{t("settings.backend.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="baseUrl">Base URL</Label>
+            <Label htmlFor="baseUrl">{t("settings.baseUrl.label")}</Label>
             <Input
               id="baseUrl"
               value={cfg.baseUrl}
@@ -90,40 +198,40 @@ function Settings() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key / Bearer</Label>
+            <Label htmlFor="apiKey">{t("settings.apiKey.label")}</Label>
             <Input
               id="apiKey"
               type="password"
               value={cfg.apiKey}
               onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
-              placeholder="Opcional — token aceito pelo ArgusClearId.Api"
+              placeholder={t("settings.apiKey.placeholder")}
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" variant="outline" onClick={() => test.mutate()} disabled={test.isPending}>
               {test.isPending ? (
-                "Testando..."
+                t("settings.testing")
               ) : test.isSuccess && lastResult?.backend.reachable ? (
                 <>
-                  <CheckCircle2 className="mr-1 h-4 w-4 text-[var(--success)]" /> OK
+                  <CheckCircle2 className="mr-1 h-4 w-4 text-[var(--success)]" /> {t("settings.ok")}
                 </>
               ) : test.isSuccess && !lastResult?.backend.reachable ? (
                 <>
-                  <XCircle className="mr-1 h-4 w-4 text-destructive" /> Falhou
+                  <XCircle className="mr-1 h-4 w-4 text-destructive" /> {t("settings.failed")}
                 </>
               ) : (
-                "Testar conexão"
+                t("settings.testConnection")
               )}
             </Button>
             {lastResult && (
               <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Ambiente atual:</span>
+                <span className="text-muted-foreground">{t("settings.currentEnvironment")}</span>
                 <Badge variant={lastResult.environment.toLowerCase().startsWith("prod") ? "default" : "secondary"}>
                   {lastResult.environment}
                 </Badge>
                 {lastResult.clientCode && (
                   <>
-                    <span className="text-muted-foreground">Código do cliente:</span>
+                    <span className="text-muted-foreground">{t("settings.clientCode")}</span>
                     <Badge variant="outline">{lastResult.clientCode}</Badge>
                   </>
                 )}
@@ -141,26 +249,52 @@ function Settings() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Site padrão</CardTitle>
+          <CardTitle className="text-base">{t("settings.client.title")}</CardTitle>
+          <CardDescription>{t("settings.client.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="client">{t("settings.client.label")}</Label>
+            <Select value={configuredProfile} onValueChange={changeProfile}>
+              <SelectTrigger id="client">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {scope.visibleProfiles.map((p) => (
+                  <SelectItem key={p.code} value={p.code}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("settings.client.hint")}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("settings.site.title")}</CardTitle>
           <CardDescription>
-            Selecione o site usado por padrão em todas as páginas do aplicativo.
+            {t("settings.site.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="site">Site</Label>
+            <Label htmlFor="site">{t("settings.site.label")}</Label>
             <Select value={siteId} onValueChange={setSiteId} disabled={sitesQuery.isLoading || !!sitesQuery.error}>
               <SelectTrigger id="site">
                 <SelectValue placeholder={
                   sitesQuery.isLoading
-                    ? "Carregando sites..."
+                    ? t("settings.site.loading")
                     : sitesQuery.error
-                    ? "Falha ao carregar sites"
-                    : "Selecione um site"
+                    ? t("settings.site.loadError")
+                    : t("settings.site.placeholder")
                 } />
               </SelectTrigger>
               <SelectContent>
-                {(sitesQuery.data ?? [])
+                {scope
+                  .filterSites(sitesQuery.data ?? [], configuredProfile)
                   .slice()
                   .sort((a, b) => a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }))
                   .map((s) => (
@@ -181,14 +315,59 @@ function Settings() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Sistema (SystemObjectId)</CardTitle>
+          <CardTitle className="text-base">{t("settings.rule.title")}</CardTitle>
           <CardDescription>
-            Sistema padrão do ClearID usado nas operações que exigem systemObjectId.
+            {t("settings.rule.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="system">Sistema</Label>
+            <Label htmlFor="rule">{t("settings.rule.label")}</Label>
+            <Select
+              value={ruleId}
+              onValueChange={setRuleId}
+              disabled={teamsQuery.isLoading || !!teamsQuery.error}
+            >
+              <SelectTrigger id="rule">
+                <SelectValue
+                  placeholder={
+                    teamsQuery.isLoading
+                      ? t("settings.rule.loading")
+                      : teamsQuery.error
+                        ? t("settings.rule.loadError")
+                        : t("settings.rule.placeholder")
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {(teamsQuery.data ?? [])
+                  .filter((t) => !t.isDeleted)
+                  .slice()
+                  .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR", { sensitivity: "base" }))
+                  .map((t) => (
+                    <SelectItem key={t.teamId} value={t.teamId}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {teamsQuery.error && (
+              <p className="text-sm text-destructive">{(teamsQuery.error as Error).message}</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("settings.system.title")}</CardTitle>
+          <CardDescription>
+            {t("settings.system.description")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="system">{t("settings.system.label")}</Label>
             <Select
               value={systemObjectId}
               onValueChange={setSystemObjectIdState}
@@ -198,10 +377,10 @@ function Settings() {
                 <SelectValue
                   placeholder={
                     systemsQuery.isLoading
-                      ? "Carregando sistemas..."
+                      ? t("settings.system.loading")
                       : systemsQuery.error
-                      ? "Falha ao carregar sistemas"
-                      : "Selecione um sistema"
+                      ? t("settings.system.loadError")
+                      : t("settings.system.placeholder")
                   }
                 />
               </SelectTrigger>
@@ -228,8 +407,31 @@ function Settings() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("settings.visits.title")}</CardTitle>
+          <CardDescription>{t("settings.visits.description")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <label className="flex cursor-pointer items-start gap-3">
+            <Switch
+              checked={Boolean(cfg.linkVisitorToIdentity)}
+              onCheckedChange={(v) => setCfg((c) => ({ ...c, linkVisitorToIdentity: v }))}
+            />
+            <span className="space-y-1">
+              <span className="block text-sm font-medium text-foreground">
+                {t("settings.visits.linkLabel")}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {t("settings.visits.linkHint")}
+              </span>
+            </span>
+          </label>
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end">
-        <Button onClick={handleSave}>Salvar configurações</Button>
+        <Button onClick={handleSave}>{t("settings.saveButton")}</Button>
       </div>
     </div>
   );
