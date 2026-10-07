@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useT, type TFn } from "@/lib/i18n";
 import { typeOf, pickLang, optionsOf, isTruthy } from "@/lib/custom-fields";
+import { useSpecialFields } from "@/lib/special-fields";
 import {
   listCompanyCurrentAttachmentDefinitions,
   uploadCompanyAttachmentVersion,
@@ -123,6 +124,9 @@ export function CompanyForm({
   onCancel: () => void;
 }) {
   const { t } = useT();
+  // Dropdowns especiais (Campos personalizados → "campo especial"): mesmas opções
+  // value/label usadas no cadastro de identity. Prevalecem sobre o tipo do campo.
+  const { byName: specialByName, labelByName: specialLabelByName } = useSpecialFields();
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState>(company ? toForm(company) : EMPTY_FORM);
   // Valores começam VAZIOS: só o que já está gravado para a empresa é carregado.
@@ -339,9 +343,11 @@ export function CompanyForm({
           </CardHeader>
           <CardContent className="grid gap-4 lg:grid-cols-2">
             {siteFields.map((sf) => {
-              const kind = typeOf(sf.definition?.custom_field_type);
+              const special = sf.definition ? specialByName.get(sf.definition.custom_field_name) : undefined;
+              const kind = special?.length ? "list" : typeOf(sf.definition?.custom_field_type);
               const value = customValues[sf.id] ?? "";
-              const label = fieldLabel(sf, t);
+              const label =
+                (sf.definition && specialLabelByName.get(sf.definition.custom_field_name)) || fieldLabel(sf, t);
               const def = sf.definition;
               return (
                 <div key={sf.id} className="space-y-2 rounded-md border p-3">
@@ -367,11 +373,17 @@ export function CompanyForm({
                         <SelectValue placeholder={t("companies.customField.selectPlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
-                        {optionsOf(sf.value_range).map((opt) => (
-                          <SelectItem key={opt} value={opt}>
-                            {opt}
-                          </SelectItem>
-                        ))}
+                        {special?.length
+                          ? special.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))
+                          : optionsOf(sf.value_range).map((opt) => (
+                              <SelectItem key={opt} value={opt}>
+                                {opt}
+                              </SelectItem>
+                            ))}
                       </SelectContent>
                     </Select>
                   ) : kind === "date" ? (
