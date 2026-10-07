@@ -1,3 +1,4 @@
+import { audit } from "@/lib/audit";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useCurrentUser } from "@/lib/current-user";
@@ -47,6 +48,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     // usuário real. Sem username, tratamos como não autenticado.
     const hasRealUser = !!data && !!data.username && data.username.length > 0;
     if (hasRealUser) {
+      // Registra o login uma vez por sessão do navegador.
+      try {
+        if (!sessionStorage.getItem("audit_login_done")) {
+          sessionStorage.setItem("audit_login_done", "1");
+          audit({ action: "login", entityType: "session", summary: "Entrou no sistema" });
+        }
+      } catch { /* ignore */ }
       try { sessionStorage.removeItem(REDIRECTED_FLAG); } catch { /* ignore */ }
       return;
     }

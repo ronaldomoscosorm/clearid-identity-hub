@@ -242,6 +242,11 @@ export function IdentityForm({
   const [email, setEmail] = useState(initial?.email ?? "");
   const [displayName, setDisplayName] = useState(initial?.displayName ?? "");
   const [status, setStatus] = useState<"Active" | "Inactive">(initial?.status ?? "Active");
+  // O status não é editado no formulário: segue o registro (a página de detalhe
+  // ativa/desativa com o formulário montado; sem isto o PUT reenviava o antigo).
+  useEffect(() => {
+    if (initial?.status) setStatus(initial.status);
+  }, [initial?.status]);
   const [workerTypeId, setWorkerTypeId] = useState<string>(initialWorkerTypeId ?? "");
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [companyId, setCompanyId] = useState<string>("");
@@ -281,6 +286,9 @@ export function IdentityForm({
   // identities.id (uuid) da identidade em edição — necessário para listar as
   // versões já existentes dos anexos.
   const [identityDbId, setIdentityDbId] = useState<string | null>(null);
+  // Edição: vínculos (empresa/tipo) do Supabase já carregados? Salvar antes
+  // disso gravaria company_id nulo e o tipo ambíguo do reverse-lookup.
+  const [linksLoaded, setLinksLoaded] = useState(mode !== "edit");
   const [extra, setExtra] = useState<Record<string, string>>(() => {
     const priv = (initial?.privateData ?? {}) as Record<string, unknown>;
     const comp = (initial?.companyData ?? {}) as Record<string, unknown>;
@@ -374,27 +382,20 @@ export function IdentityForm({
   });
   const workerTypes = workerTypesQuery.data ?? [];
 
-  // Pré-seleção do tipo de trabalhador: 1) tenta pelo código Argus do inicial;
-  // 2) no CADASTRO NOVO, sem código ou sem casar, cai no Colaborador (tipo
-  // padrão). Na EDIÇÃO, pessoa sem tipo vinculado fica SEM seleção (placeholder
-  // "Selecione um tipo de trabalhador"), para o usuário escolher explicitamente.
-  // O tipo local EXATO (Supabase), quando existir, sobrescreve depois.
+  // Pré-seleção do tipo de trabalhador: o tipo do Supabase é a fonte e é
+  // obrigatório. O código gravado no ClearID NUNCA é usado para derivar o tipo
+  // (vários tipos compartilham o mesmo código Argus). Na EDIÇÃO, pessoa sem tipo
+  // no Supabase fica SEM seleção, para o usuário escolher explicitamente; só no
+  // CADASTRO NOVO o Colaborador entra como padrão.
   useEffect(() => {
     if (workerTypeId || !workerTypes.length) return;
-    const byCode = initial?.workerTypeCode
-      ? workerTypes.find((w) => w.argus_worker_type_code === initial.workerTypeCode)
-      : undefined;
-    if (byCode) {
-      setWorkerTypeId(byCode.id);
-      return;
-    }
     if (mode !== "create") return;
     const colaborador =
       workerTypes.find((w) => w.argus_worker_type_code === "Colaborador") ??
       workerTypes.find((w) => (w.code ?? "").toUpperCase() === "COL") ??
       workerTypes.find((w) => (w.name ?? "").toLowerCase().includes("colaborador"));
     if (colaborador) setWorkerTypeId(colaborador.id);
-  }, [workerTypes, initial?.workerTypeCode, workerTypeId, mode]);
+  }, [workerTypes, workerTypeId, mode]);
 
   // Campos personalizados do site para o tipo de trabalhador selecionado.
   type SiteFieldLite = {
@@ -409,6 +410,7 @@ export function IdentityForm({
       id: string;
       custom_field_name: string;
       custom_field_type: string | null;
+      display_name: Json | null;
       attachment_accept: string | null;
       attachment_enabled: boolean;
       attachment_required: boolean;
@@ -422,7 +424,7 @@ export function IdentityForm({
       const { data, error } = await supabase
         .from("site_custom_fields")
         .select(
-          "id, is_required, fillable, value_range, display_name_override, native_field_key, worker_type_id, definition:custom_field_definitions(id, custom_field_name, custom_field_type, attachment_accept, attachment_enabled, attachment_required)",
+          "id, is_required, fillable, value_range, display_name_override, native_field_key, worker_type_id, definition:custom_field_definitions(id, custom_field_name, custom_field_type, display_name, attachment_accept, attachment_enabled, attachment_required)",
         )
         .eq("profile", activeProfile)
         .eq("entity_type", "identity")
@@ -440,21 +442,41 @@ export function IdentityForm({
   // Efetivo do tipo: campos do Colaborador (base) sobrepostos pelos do próprio
   // tipo (override de obrigatoriedade / campos específicos). Chave = nativo ou
   // nome da definição. A linha do tipo prevalece sobre a do Colaborador.
+  // Campos do tipo da pessoa: as linhas do PRÓPRIO tipo e as "permitidas no
+  // cliente" (sem tipo). Sem herança do Colaborador: os tipos são excludentes e
+  // um tipo sem linha para um campo não exibe nem grava esse campo.
   const siteFields = useMemo(() => {
     const rows = siteFieldsQuery.data ?? [];
     const keyOf = (r: SiteFieldLite) =>
       r.native_field_key ?? r.definition?.custom_field_name ?? r.id;
     const byKey = new Map<string, SiteFieldLite>();
-    if (colaboradorId)
-      for (const r of rows) if (r.worker_type_id === colaboradorId) byKey.set(keyOf(r), r);
+    for (const r of rows) if (r.worker_type_id == null) byKey.set(keyOf(r), r);
     for (const r of rows) if (r.worker_type_id === workerTypeId) byKey.set(keyOf(r), r);
     return [...byKey.values()];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteFieldsQuery.data, colaboradorId, workerTypeId]);
-  const siteFieldLabel = (sf: SiteFieldLite) =>
-    pickLang(sf.display_name_override) ||
-    sf.definition?.custom_field_name ||
-    t("identityForm.fieldFallback");
+  }, [siteFieldsQuery.data, workerTypeId]);
+  // Rótulo: apelido do campo (Apelidos) → nome de exibição do site (Campos do
+  // site) → nome de exibição da definição (Campos personalizados) → nome técnico.
+  // Linha de site por nome para o tipo da pessoa (própria, senão a sem tipo).
+  // Tipo sem linha para o campo → o valor não é gravado no Supabase.
+  const anySiteFieldByName = useMemo(() => {
+    const m = new Map<string, SiteFieldLite>();
+    for (const r of siteFieldsQuery.data ?? []) {
+      const n = r.definition?.custom_field_name;
+      if (!n) continue;
+      if (r.worker_type_id === workerTypeId) m.set(n, r);
+      else if (r.worker_type_id == null && !m.has(n)) m.set(n, r);
+    }
+    return m;
+  }, [siteFieldsQuery.data, workerTypeId]);
+  const siteFieldLabel = (sf: SiteFieldLite) => {
+    const name = sf.definition?.custom_field_name ?? "";
+    const fallback =
+      pickLang(sf.display_name_override) ||
+      pickLang(sf.definition?.display_name) ||
+      name ||
+      t("identityForm.fieldFallback");
+    return name ? alias(name, fallback) : fallback;
+  };
 
   // Quais campos de anexo já possuem uma versão atual (edição) — usado para
   // validar obrigatoriedade sem exigir novo upload em toda edição.
@@ -510,6 +532,17 @@ export function IdentityForm({
     },
   });
   const companies = companiesQuery.data ?? [];
+  // Campos derivados exibidos na tela: Descrição ← nome do site; Empresa ← empresa vinculada.
+  useEffect(() => {
+    const name = (sitesQuery.data ?? []).find((st) => st.siteId === siteId)?.name;
+    if (name) setExtra((prev) => (prev.description === name ? prev : { ...prev, description: name }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId, sitesQuery.data]);
+  useEffect(() => {
+    const name = companies.find((c) => c.id === companyId)?.name;
+    if (name) setExtra((prev) => (prev.company_name === name ? prev : { ...prev, company_name: name }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, companiesQuery.data]);
   // Rótulo da empresa: "Nome - CNPJ" (ou só o nome quando não há CNPJ).
   const companyLabel = (c: { name: string; tax_id?: string | null }) =>
     c.tax_id ? `${c.name} - ${formatCnpj(c.tax_id)}` : c.name;
@@ -525,7 +558,9 @@ export function IdentityForm({
       .eq("identity_id", initialIdentityId)
       .maybeSingle()
       .then(({ data }) => {
-        if (cancelled || !data) return;
+        if (cancelled) return;
+        setLinksLoaded(true);
+        if (!data) return;
         setIdentityDbId(data.id ?? null);
         if (data.company_id) setCompanyId(data.company_id);
         // Tipo do trabalhador exato vindo do Supabase tem prioridade sobre o
@@ -593,6 +628,11 @@ export function IdentityForm({
       .filter((sf) => sf.native_field_key)
       .map((sf) => [sf.native_field_key as string, sf]),
   );
+  // Foto: obrigatória por padrão. Em "Campos do cliente", o campo nativo "photo"
+  // (próprio do tipo ou herdado do Colaborador) com obrigatório desmarcado a
+  // torna opcional.
+  const photoRow = nativeFieldByKey.get("photo");
+  const photoRequired = photoRow ? photoRow.is_required === true : true;
   // Somente-leitura no cadastro quando o campo existe em "Campos do cliente"
   // com "pode ser preenchido no cadastro" DESMARCADO (fillable=false). Vale para
   // nativos e customizáveis. (A foto é gerida à parte e sempre pode ser alterada.)
@@ -934,12 +974,13 @@ export function IdentityForm({
   // tipo tem exibidos configurados, o formulário = exibido ∩ layout (o layout
   // só ordena/agrupa). Sem exibidos configurados, mantém o comportamento antigo
   // (100% pelo layout), para não quebrar clientes que só usam o designer.
+  const layoutSiteFields = siteFields.filter((sf) => sf.native_field_key !== "photo");
   const nativeExibido = new Set(
-    siteFields
+    layoutSiteFields
       .map((sf) => sf.native_field_key)
       .filter((k): k is string => Boolean(k)),
   );
-  const exibidoConfigured = siteFields.length > 0;
+  const exibidoConfigured = layoutSiteFields.length > 0;
   // Layout EXPLICITAMENTE vinculado a este tipo de trabalhador (em "Layout do
   // formulário"). Quando existe, o layout MANDA: o formulário segue exatamente
   // seus grupos/ordem/campos, sem intersectar com os "exibidos". Sem vínculo, o
@@ -1236,7 +1277,7 @@ export function IdentityForm({
     setCustomFields((prev) => ({ ...prev, [name]: value }));
 
   const typeOf = (t?: string | null) => (t ?? "").toLowerCase();
-  const isDate = (t?: string | null) => typeOf(t) === "date" || typeOf(t) === "datetime";
+  const isDate = (t?: string | null) => siteFieldKind(t) === "date";
   const isBool = (t?: string | null) => ["bool", "boolean", "switch", "toggle"].includes(typeOf(t));
 
   const isBlank = (v: string | null | undefined) => {
@@ -1299,6 +1340,10 @@ export function IdentityForm({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Sem o catálogo de campos não dá para separar ClearID x Supabase (campos
+    // Supabase iriam ao ClearID e o PATCH falharia). Sem os vínculos, a edição
+    // gravaria empresa nula.
+    if (!fieldsQuery.isFetched || !linksLoaded) return;
     const parsed = makeBaseSchema(t).safeParse({ externalId, name: fullName, email, status });
     const out: Record<string, string> = {};
     if (!parsed.success) {
@@ -1306,8 +1351,9 @@ export function IdentityForm({
     }
     // O dropdown (workerTypeId) é a fonte da verdade; o código Argus é derivado
     // dele no submit (evita ficar dessincronizado do estado ao carregar).
-    const effectiveWorkerTypeCode =
-      workerTypes.find((w) => w.id === workerTypeId)?.argus_worker_type_code ?? "";
+    // Regra: o campo "código do tipo de trabalhador" do ClearID recebe a
+    // DESCRIÇÃO do tipo cadastrado no Supabase (ex.: "Temporário").
+    const effectiveWorkerTypeCode = workerTypes.find((w) => w.id === workerTypeId)?.name ?? "";
     if (!workerTypeId) {
       out.workerTypeCode = t("identityForm.validation.selectWorkerType");
     } else if (!effectiveWorkerTypeCode) {
@@ -1323,7 +1369,7 @@ export function IdentityForm({
     // na edição exige que a identity já tenha foto no ClearID (enviada pelo
     // painel de foto acima). Sem isso, o salvamento é bloqueado.
     const photoMissing = mode === "create" ? !photo : !hasExistingPicture;
-    if (photoMissing) {
+    if (photoRequired && photoMissing) {
       out.photo = t("identityForm.validation.photoRequired");
     }
     for (const sf of siteFields) {
@@ -1365,13 +1411,20 @@ export function IdentityForm({
     const parsedData = parsed.success ? parsed.data : null;
     if (!parsedData) return;
     const { name: _fullName, ...baseData } = parsedData;
-    const { firstName, lastName } = splitName(_fullName);
+    // Nome completo intocado → preserva firstName/lastName como estão no ClearID
+    // (ex.: "Ana Maria" + "Souza"); só redivide quando o usuário editou o nome.
+    const initialFullName = [initial?.firstName, initial?.lastName].filter(Boolean).join(" ").trim();
+    const { firstName, lastName } =
+      initial?.firstName && _fullName.trim() === initialFullName
+        ? { firstName: initial.firstName, lastName: initial.lastName ?? "" }
+        : splitName(_fullName);
     const cfErrors: Record<string, string> = {};
     // Nomes de campos de data — do catálogo (defs) E dos campos do site do
     // tipo de trabalhador (certidões costumam ser campos do site). Cobre
     // normalização de sentinela e o "zerar" em ambos os caminhos de render.
     const dateFieldNames = new Set<string>([
       ...defs.filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName),
+      ...[...cfDefByName.values()].filter((f) => isDate(f.customFieldType)).map((f) => f.customFieldName),
       ...siteFields
         .filter((sf) => sf.definition && isDate(sf.definition.custom_field_type))
         .map((sf) => sf.definition!.custom_field_name),
@@ -1402,12 +1455,14 @@ export function IdentityForm({
       } else {
         const val = (v ?? "").trim();
         if (!val) {
-          // Não envia string vazia (ClearID rejeita "" em tipos Date/Numeric/
-          // Boolean). Na edição preserva o clear apenas para campos já Vylor.
+          // Vazio só vai quando o usuário LIMPOU um valor que existia (edição):
+          // a rota converte "" em null e o ClearID/Supabase limpam o campo.
+          // Campo que já era vazio não entra (ClearID rejeita "" em alguns tipos).
+          if (mode === "edit" && !isBlank(initial?.customFields?.[key])) cf[key] = "";
           continue;
         }
-        // Campo de data do site (input nativo → ISO): normaliza para yyyy-MM-dd.
-        cf[key] = /^\d{4}-\d{2}-\d{2}/.test(val) ? val.slice(0, 10) : val;
+        // Valor ISO com hora (input nativo) → só a data yyyy-MM-dd.
+        cf[key] = /^\d{4}-\d{2}-\d{2}T/.test(val) ? val.slice(0, 10) : val;
       }
     }
     // Datas do layout que o usuário não tocou (ausentes em customFields) entram
@@ -1427,6 +1482,17 @@ export function IdentityForm({
         site_custom_field_id: sf.id,
         value: cf[sf.definition!.custom_field_name] ? cf[sf.definition!.custom_field_name] : null,
       }));
+    // Campo storage='supabase' do layout que NÃO é campo do site deste tipo
+    // (renderizado pela definição): grava na linha de site do cliente (sem tipo,
+    // senão a primeira encontrada), como faz a importação — antes era perdido.
+    const covered = new Set(siteFieldValues.map((v) => v.site_custom_field_id));
+    for (const name of consumedCf) {
+      if (cfDefByName.get(name)?.storage !== "supabase") continue;
+      if (siteFieldByName.has(name)) continue;
+      const row = anySiteFieldByName.get(name);
+      if (!row || covered.has(row.id)) continue;
+      siteFieldValues.push({ site_custom_field_id: row.id, value: cf[name] ? cf[name] : null });
+    }
 
     // Anexos comprobatórios preparados (upload feito após a identidade existir),
     // vinculados à DEFINIÇÃO do campo. `attachments` é chaveado por definição e
@@ -1447,13 +1513,22 @@ export function IdentityForm({
       if (val) bag[f.argusKey] = val;
       else if (f.argusKey in bag) bag[f.argusKey] = null; // limpa valor existente (edição)
     }
+    // Regras de preenchimento do ClearID:
+    //  - description = nome do site da pessoa;
+    //  - companyData.companyName = nome da empresa vinculada (Supabase), quando houver.
+    const siteNameForDescription = (sitesQuery.data ?? []).find((st) => st.siteId === siteId)?.name;
+    if (siteNameForDescription) topExtra.description = siteNameForDescription;
+    const linkedCompanyName = companies.find((c) => c.id === companyId)?.name;
+    if (linkedCompanyName) compExtra.companyName = linkedCompanyName;
 
     // Campos que vão para o ClearID: exclui os storage='supabase' (só existem no
     // Supabase; enviá-los ao ClearID causa 400). Os valores Supabase vão via
     // siteFieldValues. 'clearid'/'both'/desconhecido → ClearID.
     const clearIdCf: Record<string, string> = {};
     for (const [name, val] of Object.entries(cf)) {
-      if (cfDefByName.get(name)?.storage !== "supabase") clearIdCf[name] = val;
+      const def = cfDefByName.get(name);
+      if (def?.storage === "supabase" || def?.isReadOnly) continue;
+      clearIdCf[name] = val;
     }
 
     const payload: Record<string, unknown> = {
@@ -1510,7 +1585,7 @@ export function IdentityForm({
   // Obrigatórios ainda em branco — espelha exatamente as checagens do submit,
   // para o usuário ver o que falta ANTES de tentar salvar.
   const missingRequired: string[] = [];
-  if (mode === "create" ? !photo : existingPictureQuery.isFetched && !hasExistingPicture) {
+  if (photoRequired && (mode === "create" ? !photo : existingPictureQuery.isFetched && !hasExistingPicture)) {
     missingRequired.push(t("photoCapture.title"));
   }
   if (!workerTypeId) missingRequired.push(nativeLabel("company_worker_type_code"));
@@ -1571,7 +1646,7 @@ export function IdentityForm({
           <CardHeader>
             <CardTitle className="text-base">
               {t("photoCapture.title")}
-              <span className="ml-0.5 text-destructive">*</span>
+              {photoRequired && <span className="ml-0.5 text-destructive">*</span>}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1759,7 +1834,7 @@ export function IdentityForm({
             {t("common.cancel")}
           </Button>
         )}
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting || !fieldsQuery.isFetched || !linksLoaded}>
           {submitting
             ? t("common.saving")
             : mode === "create"

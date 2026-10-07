@@ -1,3 +1,4 @@
+import { audit } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { findColaboradorId } from "@/lib/worker-types";
 import { useEffect, useRef, useState } from "react";
@@ -223,20 +224,11 @@ function LayoutFormularioPage() {
   const colaboradorId = findColaboradorId(workerTypes);
 
   // Campos disponíveis = PERMITIDO no cliente (worker_type_id null) + EXIBIDO
-  // para o tipo em edição (worker_type_id === editWorkerType) + HERDADOS do
-  // Colaborador (base) não sobrescritos pelo próprio tipo. Mesmo recorte que o
-  // cadastro (F6) aplica — por isso os customizáveis herdados também entram.
-  const rowKeyOf = (r: SiteRow) => r.native_field_key ?? r.definition?.custom_field_name ?? "";
-  const ownKeys = new Set(
-    siteRows.filter((r) => r.worker_type_id === editWorkerType).map(rowKeyOf),
+  // para o tipo em edição (worker_type_id === editWorkerType). Sem herança do
+  // Colaborador — mesmo recorte do cadastro: os tipos são excludentes.
+  const allowedRows = siteRows.filter(
+    (r) => r.worker_type_id === null || r.worker_type_id === editWorkerType,
   );
-  const allowedRows = siteRows.filter((r) => {
-    if (r.worker_type_id === null || r.worker_type_id === editWorkerType) return true;
-    if (colaboradorId && editWorkerType !== colaboradorId && r.worker_type_id === colaboradorId) {
-      return !ownKeys.has(rowKeyOf(r));
-    }
-    return false;
-  });
   const allowedConfigured = allowedRows.length > 0;
   const allowedNative = new Set(
     allowedRows.map((r) => r.native_field_key).filter((k): k is string => Boolean(k)),
@@ -538,6 +530,13 @@ function LayoutFormularioPage() {
       await saveFormLayoutConfig(activeProfile, payload);
     },
     onSuccess: () => {
+      audit({
+        action: "updated",
+        entityType: "form_layout",
+        entityLabel: activeProfile,
+        summary: `Salvou os layouts do formulário do cliente ${activeProfile}`,
+        details: { layouts: layouts.map((l) => l.name), links: Object.keys(links).length },
+      });
       toast.success(t("formLayout.saved"));
       qc.invalidateQueries({ queryKey: ["form-layout"] });
     },

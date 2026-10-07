@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Power, PowerOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,10 +46,16 @@ function IdentityDetail() {
   const siteId = useDefaultSiteId();
   const { t } = useT();
 
+  // A identity pode ter sido alterada fora desta tela (importação, outro
+  // usuário, rotina de reativação): ao abrir, sempre busca o estado atual em
+  // vez de montar o formulário com o cache da visita anterior.
   const query = useQuery({
     queryKey: ["identity", siteId, id],
     queryFn: () => argusApi.getIdentity(id),
     retry: false,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
   });
   const sitesQuery = useQuery({
     queryKey: ["sites"],
@@ -62,7 +68,24 @@ function IdentityDetail() {
     queryKey: ["identity-cf-values", id],
     queryFn: () => loadIdentityCustomFields(id),
     enabled: Boolean(id),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
   });
+  // O formulário só é montado depois que AMBAS as consultas terminaram a busca
+  // desta abertura (o estado interno do form é inicializado uma única vez).
+  const [fresh, setFresh] = useState(false);
+  useEffect(() => setFresh(false), [id]);
+  useEffect(() => {
+    if (
+      !fresh &&
+      query.isFetched &&
+      !query.isFetching &&
+      cfValuesQuery.isFetched &&
+      !cfValuesQuery.isFetching
+    )
+      setFresh(true);
+  }, [fresh, query.isFetched, query.isFetching, cfValuesQuery.isFetched, cfValuesQuery.isFetching]);
 
   // Espelha a identidade carregada para o Supabase (cobre visualização e
   // refetch pós-update). Best-effort — o save atomic já garante consistência;
@@ -262,7 +285,7 @@ function IdentityDetail() {
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           {(query.error as Error).message}
         </div>
-      ) : query.data && !cfValuesQuery.isFetched ? (
+      ) : query.data && !fresh ? (
         <div className="space-y-4">
           <Skeleton className="h-40 w-full" />
           <Skeleton className="h-32 w-full" />
@@ -278,9 +301,16 @@ function IdentityDetail() {
             mode="edit"
             initial={{
               ...clearIdToFormValues(query.data),
+              // ClearID manda nos campos que ele tem valor; o espelho do Supabase
+              // só completa (campos storage='supabase' e os sem valor no ClearID).
+              // Antes o espelho desatualizado sobrescrevia o ClearID e era regravado.
               customFields: {
-                ...(clearIdToFormValues(query.data).customFields ?? {}),
                 ...(cfValuesQuery.data ?? {}),
+                ...Object.fromEntries(
+                  Object.entries(clearIdToFormValues(query.data).customFields ?? {}).filter(
+                    ([, v]) => String(v ?? "").trim() !== "",
+                  ),
+                ),
               },
             }}
             submitting={update.isPending}

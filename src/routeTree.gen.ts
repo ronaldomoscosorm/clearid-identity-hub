@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedApelidosRouteImport } from './routes/_authenticated/apelidos'
+import { Route as AuthenticatedAuditoriaRouteImport } from './routes/_authenticated/auditoria'
 import { Route as AuthenticatedBrandingRouteImport } from './routes/_authenticated/branding'
 import { Route as AuthenticatedCampanhasFotoRouteImport } from './routes/_authenticated/campanhas-foto'
 import { Route as AuthenticatedCamposDoSiteRouteImport } from './routes/_authenticated/campos-do-site'
@@ -27,6 +28,9 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedSitesEmployerRouteImport } from './routes/_authenticated/sites-employer'
 import { Route as AuthenticatedTiposTrabalhadorRouteImport } from './routes/_authenticated/tipos-trabalhador'
 import { Route as FotoTokenRouteImport } from './routes/foto.$token'
+import { Route as AuthenticatedEmpresasIndexRouteImport } from './routes/_authenticated/empresas.index'
+import { Route as AuthenticatedEmpresasIdRouteImport } from './routes/_authenticated/empresas.$id'
+import { Route as AuthenticatedEmpresasNovaRouteImport } from './routes/_authenticated/empresas.nova'
 import { Route as AuthenticatedIdentitiesIndexRouteImport } from './routes/_authenticated/identities.index'
 import { Route as AuthenticatedIdentitiesIdRouteImport } from './routes/_authenticated/identities.$id'
 import { Route as AuthenticatedIdentitiesNewRouteImport } from './routes/_authenticated/identities.new'
@@ -47,6 +51,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedApelidosRoute = AuthenticatedApelidosRouteImport.update({
   id: '/apelidos',
   path: '/apelidos',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAuditoriaRoute = AuthenticatedAuditoriaRouteImport.update({
+  id: '/auditoria',
+  path: '/auditoria',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedBrandingRoute = AuthenticatedBrandingRouteImport.update({
@@ -132,6 +141,23 @@ const FotoTokenRoute = FotoTokenRouteImport.update({
   path: '/foto/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedEmpresasIndexRoute =
+  AuthenticatedEmpresasIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedEmpresasRoute,
+  } as any)
+const AuthenticatedEmpresasIdRoute = AuthenticatedEmpresasIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AuthenticatedEmpresasRoute,
+} as any)
+const AuthenticatedEmpresasNovaRoute =
+  AuthenticatedEmpresasNovaRouteImport.update({
+    id: '/nova',
+    path: '/nova',
+    getParentRoute: () => AuthenticatedEmpresasRoute,
+  } as any)
 const AuthenticatedIdentitiesIndexRoute =
   AuthenticatedIdentitiesIndexRouteImport.update({
     id: '/',
@@ -178,13 +204,14 @@ const AuthenticatedVisitasNovaRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/apelidos': typeof AuthenticatedApelidosRoute
+  '/auditoria': typeof AuthenticatedAuditoriaRoute
   '/branding': typeof AuthenticatedBrandingRoute
   '/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
-  '/empresas': typeof AuthenticatedEmpresasRoute
+  '/empresas': typeof AuthenticatedEmpresasRouteWithChildren
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/importar': typeof AuthenticatedImportarRoute
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
@@ -193,10 +220,13 @@ export interface FileRoutesByFullPath {
   '/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
   '/foto/$token': typeof FotoTokenRoute
+  '/empresas/$id': typeof AuthenticatedEmpresasIdRoute
+  '/empresas/nova': typeof AuthenticatedEmpresasNovaRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/visitas/nova': typeof AuthenticatedVisitasNovaRoute
+  '/empresas/': typeof AuthenticatedEmpresasIndexRoute
   '/identities/': typeof AuthenticatedIdentitiesIndexRoute
   '/terceirizados/': typeof AuthenticatedTerceirizadosIndexRoute
   '/visitas/': typeof AuthenticatedVisitasIndexRoute
@@ -204,13 +234,13 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/apelidos': typeof AuthenticatedApelidosRoute
+  '/auditoria': typeof AuthenticatedAuditoriaRoute
   '/branding': typeof AuthenticatedBrandingRoute
   '/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
-  '/empresas': typeof AuthenticatedEmpresasRoute
   '/importar': typeof AuthenticatedImportarRoute
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
@@ -218,10 +248,13 @@ export interface FileRoutesByTo {
   '/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
   '/foto/$token': typeof FotoTokenRoute
+  '/empresas/$id': typeof AuthenticatedEmpresasIdRoute
+  '/empresas/nova': typeof AuthenticatedEmpresasNovaRoute
   '/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/visitas/nova': typeof AuthenticatedVisitasNovaRoute
+  '/empresas': typeof AuthenticatedEmpresasIndexRoute
   '/identities': typeof AuthenticatedIdentitiesIndexRoute
   '/terceirizados': typeof AuthenticatedTerceirizadosIndexRoute
   '/visitas': typeof AuthenticatedVisitasIndexRoute
@@ -231,13 +264,14 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/apelidos': typeof AuthenticatedApelidosRoute
+  '/_authenticated/auditoria': typeof AuthenticatedAuditoriaRoute
   '/_authenticated/branding': typeof AuthenticatedBrandingRoute
   '/_authenticated/campanhas-foto': typeof AuthenticatedCampanhasFotoRoute
   '/_authenticated/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/_authenticated/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/_authenticated/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
-  '/_authenticated/empresas': typeof AuthenticatedEmpresasRoute
+  '/_authenticated/empresas': typeof AuthenticatedEmpresasRouteWithChildren
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/importar': typeof AuthenticatedImportarRoute
   '/_authenticated/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
@@ -246,10 +280,13 @@ export interface FileRoutesById {
   '/_authenticated/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/_authenticated/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
   '/foto/$token': typeof FotoTokenRoute
+  '/_authenticated/empresas/$id': typeof AuthenticatedEmpresasIdRoute
+  '/_authenticated/empresas/nova': typeof AuthenticatedEmpresasNovaRoute
   '/_authenticated/identities/$id': typeof AuthenticatedIdentitiesIdRoute
   '/_authenticated/identities/new': typeof AuthenticatedIdentitiesNewRoute
   '/_authenticated/terceirizados/$id': typeof AuthenticatedTerceirizadosIdRoute
   '/_authenticated/visitas/nova': typeof AuthenticatedVisitasNovaRoute
+  '/_authenticated/empresas/': typeof AuthenticatedEmpresasIndexRoute
   '/_authenticated/identities/': typeof AuthenticatedIdentitiesIndexRoute
   '/_authenticated/terceirizados/': typeof AuthenticatedTerceirizadosIndexRoute
   '/_authenticated/visitas/': typeof AuthenticatedVisitasIndexRoute
@@ -259,6 +296,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/apelidos'
+    | '/auditoria'
     | '/branding'
     | '/campanhas-foto'
     | '/campos-do-site'
@@ -274,10 +312,13 @@ export interface FileRouteTypes {
     | '/sites-employer'
     | '/tipos-trabalhador'
     | '/foto/$token'
+    | '/empresas/$id'
+    | '/empresas/nova'
     | '/identities/$id'
     | '/identities/new'
     | '/terceirizados/$id'
     | '/visitas/nova'
+    | '/empresas/'
     | '/identities/'
     | '/terceirizados/'
     | '/visitas/'
@@ -285,13 +326,13 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/apelidos'
+    | '/auditoria'
     | '/branding'
     | '/campanhas-foto'
     | '/campos-do-site'
     | '/campos-personalizados'
     | '/configuracoes-cliente'
     | '/diagnostics'
-    | '/empresas'
     | '/importar'
     | '/layout-formulario'
     | '/regras'
@@ -299,10 +340,13 @@ export interface FileRouteTypes {
     | '/sites-employer'
     | '/tipos-trabalhador'
     | '/foto/$token'
+    | '/empresas/$id'
+    | '/empresas/nova'
     | '/identities/$id'
     | '/identities/new'
     | '/terceirizados/$id'
     | '/visitas/nova'
+    | '/empresas'
     | '/identities'
     | '/terceirizados'
     | '/visitas'
@@ -311,6 +355,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/_authenticated/apelidos'
+    | '/_authenticated/auditoria'
     | '/_authenticated/branding'
     | '/_authenticated/campanhas-foto'
     | '/_authenticated/campos-do-site'
@@ -326,10 +371,13 @@ export interface FileRouteTypes {
     | '/_authenticated/sites-employer'
     | '/_authenticated/tipos-trabalhador'
     | '/foto/$token'
+    | '/_authenticated/empresas/$id'
+    | '/_authenticated/empresas/nova'
     | '/_authenticated/identities/$id'
     | '/_authenticated/identities/new'
     | '/_authenticated/terceirizados/$id'
     | '/_authenticated/visitas/nova'
+    | '/_authenticated/empresas/'
     | '/_authenticated/identities/'
     | '/_authenticated/terceirizados/'
     | '/_authenticated/visitas/'
@@ -362,6 +410,13 @@ declare module '@tanstack/react-router' {
       path: '/apelidos'
       fullPath: '/apelidos'
       preLoaderRoute: typeof AuthenticatedApelidosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/auditoria': {
+      id: '/_authenticated/auditoria'
+      path: '/auditoria'
+      fullPath: '/auditoria'
+      preLoaderRoute: typeof AuthenticatedAuditoriaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/branding': {
@@ -469,6 +524,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FotoTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/empresas/': {
+      id: '/_authenticated/empresas/'
+      path: '/'
+      fullPath: '/empresas/'
+      preLoaderRoute: typeof AuthenticatedEmpresasIndexRouteImport
+      parentRoute: typeof AuthenticatedEmpresasRoute
+    }
+    '/_authenticated/empresas/$id': {
+      id: '/_authenticated/empresas/$id'
+      path: '/$id'
+      fullPath: '/empresas/$id'
+      preLoaderRoute: typeof AuthenticatedEmpresasIdRouteImport
+      parentRoute: typeof AuthenticatedEmpresasRoute
+    }
+    '/_authenticated/empresas/nova': {
+      id: '/_authenticated/empresas/nova'
+      path: '/nova'
+      fullPath: '/empresas/nova'
+      preLoaderRoute: typeof AuthenticatedEmpresasNovaRouteImport
+      parentRoute: typeof AuthenticatedEmpresasRoute
+    }
     '/_authenticated/identities/': {
       id: '/_authenticated/identities/'
       path: '/'
@@ -521,6 +597,23 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedEmpresasRouteChildren {
+  AuthenticatedEmpresasIdRoute: typeof AuthenticatedEmpresasIdRoute
+  AuthenticatedEmpresasNovaRoute: typeof AuthenticatedEmpresasNovaRoute
+  AuthenticatedEmpresasIndexRoute: typeof AuthenticatedEmpresasIndexRoute
+}
+
+const AuthenticatedEmpresasRouteChildren: AuthenticatedEmpresasRouteChildren = {
+  AuthenticatedEmpresasIdRoute: AuthenticatedEmpresasIdRoute,
+  AuthenticatedEmpresasNovaRoute: AuthenticatedEmpresasNovaRoute,
+  AuthenticatedEmpresasIndexRoute: AuthenticatedEmpresasIndexRoute,
+}
+
+const AuthenticatedEmpresasRouteWithChildren =
+  AuthenticatedEmpresasRoute._addFileChildren(
+    AuthenticatedEmpresasRouteChildren,
+  )
+
 interface AuthenticatedIdentitiesRouteChildren {
   AuthenticatedIdentitiesIdRoute: typeof AuthenticatedIdentitiesIdRoute
   AuthenticatedIdentitiesNewRoute: typeof AuthenticatedIdentitiesNewRoute
@@ -541,13 +634,14 @@ const AuthenticatedIdentitiesRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedApelidosRoute: typeof AuthenticatedApelidosRoute
+  AuthenticatedAuditoriaRoute: typeof AuthenticatedAuditoriaRoute
   AuthenticatedBrandingRoute: typeof AuthenticatedBrandingRoute
   AuthenticatedCampanhasFotoRoute: typeof AuthenticatedCampanhasFotoRoute
   AuthenticatedCamposDoSiteRoute: typeof AuthenticatedCamposDoSiteRoute
   AuthenticatedCamposPersonalizadosRoute: typeof AuthenticatedCamposPersonalizadosRoute
   AuthenticatedConfiguracoesClienteRoute: typeof AuthenticatedConfiguracoesClienteRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
-  AuthenticatedEmpresasRoute: typeof AuthenticatedEmpresasRoute
+  AuthenticatedEmpresasRoute: typeof AuthenticatedEmpresasRouteWithChildren
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
   AuthenticatedImportarRoute: typeof AuthenticatedImportarRoute
   AuthenticatedLayoutFormularioRoute: typeof AuthenticatedLayoutFormularioRoute
@@ -563,6 +657,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApelidosRoute: AuthenticatedApelidosRoute,
+  AuthenticatedAuditoriaRoute: AuthenticatedAuditoriaRoute,
   AuthenticatedBrandingRoute: AuthenticatedBrandingRoute,
   AuthenticatedCampanhasFotoRoute: AuthenticatedCampanhasFotoRoute,
   AuthenticatedCamposDoSiteRoute: AuthenticatedCamposDoSiteRoute,
@@ -571,7 +666,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedConfiguracoesClienteRoute:
     AuthenticatedConfiguracoesClienteRoute,
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
-  AuthenticatedEmpresasRoute: AuthenticatedEmpresasRoute,
+  AuthenticatedEmpresasRoute: AuthenticatedEmpresasRouteWithChildren,
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
   AuthenticatedImportarRoute: AuthenticatedImportarRoute,
   AuthenticatedLayoutFormularioRoute: AuthenticatedLayoutFormularioRoute,

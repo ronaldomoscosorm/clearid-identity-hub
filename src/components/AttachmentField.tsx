@@ -15,7 +15,12 @@ import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useAttachmentVersions, signedUrlFor, type AttachmentVersion } from "@/lib/attachments";
+import {
+  useAttachmentVersions,
+  useCompanyAttachmentVersions,
+  signedUrlFor,
+  type AttachmentVersionLike,
+} from "@/lib/attachments";
 
 const DEFAULT_ACCEPT = "image/*,application/pdf";
 
@@ -40,7 +45,7 @@ async function openAttachment(path: string, onError: (msg: string) => void) {
 }
 
 /** Miniatura da imagem da versão atual (resolve URL assinada sob demanda). */
-function CurrentThumb({ version }: { version: AttachmentVersion }) {
+function CurrentThumb({ version }: { version: AttachmentVersionLike }) {
   const { data: url } = useQuery({
     queryKey: ["attachment-thumb", version.id],
     queryFn: () => signedUrlFor(version.storage_path),
@@ -70,6 +75,11 @@ export type AttachmentFieldProps = {
   definitionId: string;
   /** identities.id (uuid) — nulo no cadastro novo (ainda não existe). */
   identityDbId: string | null;
+  /**
+   * companies.id — quando informado (mesmo nulo, no cadastro novo), o anexo é da
+   * EMPRESA (company_attachments) e `identityDbId` é ignorado.
+   */
+  companyId?: string | null;
   label: string;
   required?: boolean;
   disabled?: boolean;
@@ -84,6 +94,7 @@ export type AttachmentFieldProps = {
 export function AttachmentField({
   definitionId,
   identityDbId,
+  companyId,
   label,
   required,
   disabled,
@@ -96,8 +107,11 @@ export function AttachmentField({
   const fileRef = useRef<HTMLInputElement>(null);
   const [showHistory, setShowHistory] = useState(false);
 
-  const versionsQuery = useAttachmentVersions(identityDbId, definitionId);
-  const versions = versionsQuery.data ?? [];
+  const isCompany = companyId !== undefined;
+  const identityVersionsQuery = useAttachmentVersions(isCompany ? null : identityDbId, definitionId);
+  const companyVersionsQuery = useCompanyAttachmentVersions(isCompany ? companyId : null, definitionId);
+  const versionsQuery = isCompany ? companyVersionsQuery : identityVersionsQuery;
+  const versions: AttachmentVersionLike[] = versionsQuery.data ?? [];
   const current = versions.find((v) => v.is_current) ?? null;
   const history = versions.filter((v) => !v.is_current);
 

@@ -1,3 +1,4 @@
+import { audit } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -61,6 +62,7 @@ function BrandingPage() {
     try {
       await saveClientBranding(activeProfile, cfg, currentUser?.username ?? null);
       await clientBranding.refetch();
+      audit({ action: "updated", entityType: "branding", summary: "Salvou a identidade visual padrão do cliente" });
       toast.success(t("branding.toast.clientSaved"));
     } catch (e) {
       toast.error((e as Error).message);

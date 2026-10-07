@@ -459,6 +459,60 @@ export type Database = {
           },
         ]
       }
+      company_attachments: {
+        Row: {
+          company_id: string
+          created_at: string
+          custom_field_definition_id: string
+          file_name: string
+          id: string
+          is_current: boolean
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          version: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          custom_field_definition_id: string
+          file_name: string
+          id?: string
+          is_current?: boolean
+          mime_type: string
+          size_bytes: number
+          storage_path: string
+          version: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          custom_field_definition_id?: string
+          file_name?: string
+          id?: string
+          is_current?: boolean
+          mime_type?: string
+          size_bytes?: number
+          storage_path?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_attachments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_attachments_custom_field_definition_id_fkey"
+            columns: ["custom_field_definition_id"]
+            isOneToOne: false
+            referencedRelation: "custom_field_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       identity_attachments: {
         Row: {
           created_at: string

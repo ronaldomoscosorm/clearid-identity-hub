@@ -1,6 +1,7 @@
+import { audit } from "@/lib/audit";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle, MapPin, AlertTriangle } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle, MapPin, AlertTriangle , ScrollText } from "lucide-react";
 import { redirectToLogout } from "@/lib/portal-auth";
 import { getTheme, applyTheme } from "@/lib/theme";
 import { toast } from "sonner";
@@ -116,6 +117,7 @@ const NAV: NavEntry[] = [
       { to: "/diagnostics", icon: Activity, key: "nav.diagnostics" },
       { to: "/settings", icon: SettingsIcon, key: "nav.settings" },
       { to: "/branding", icon: Palette, key: "nav.branding" },
+      { to: "/auditoria", icon: ScrollText, key: "nav.auditoria" },
     ],
   },
 ];
@@ -582,7 +584,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => redirectToLogout()}
+                      onClick={() => {
+                        audit({ action: "logout", entityType: "session", summary: "Saiu do sistema" });
+                        // dá um instante para o registro sair antes de derrubar a sessão
+                        setTimeout(() => redirectToLogout(), 250);
+                      }}
                       className="flex items-center gap-2 text-destructive focus:text-destructive"
                     >
                       <LogOut className="h-4 w-4" />

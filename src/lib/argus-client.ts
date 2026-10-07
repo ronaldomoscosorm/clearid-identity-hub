@@ -262,6 +262,14 @@ export interface IdentityImportRow {
   displayName?: string | null;
   customFieldsSet?: number;
   messages: string[];
+  /** Pulada porque a pessoa já existe no ClearID (não é erro). */
+  alreadyImported?: boolean;
+  /** Motivo de linha pulada pelo modo escolhido (não é erro): alreadyImported | unchanged | notExisting. */
+  skipReason?: string | null;
+  /** Pessoa existente sem diferenças em relação à planilha. */
+  unchanged?: boolean;
+  /** Campos que mudariam/mudaram no cadastro existente. */
+  changedFields?: string[];
 }
 
 export interface IdentityImportResult {
@@ -275,6 +283,14 @@ export interface IdentityImportResult {
   updated: number;
   skipped: number;
   failed: number;
+  maxRows?: number | null;
+  skipExisting?: boolean;
+  alreadyImported?: number;
+  limitReached?: boolean;
+  notProcessed?: number;
+  importMode?: "all" | "new" | "changed";
+  unchanged?: number;
+  selectedRows?: number | null;
   rows: IdentityImportRow[];
 }
 
@@ -513,18 +529,21 @@ function assertWorkerTypeCode(code: string | null | undefined) {
       message: "workerTypeCode é obrigatório (Tipo do Trabalhador).",
     });
   }
-  if (v !== "Terceiros" && v !== "Colaborador") {
-    throw new ArgusApiError({
-      status: 400,
-      message: "workerTypeCode inválido: use 'Terceiros' ou 'Colaborador'.",
-    });
-  }
+  // O ClearID aceita texto livre: o valor é a descrição do tipo cadastrado no Supabase.
 }
 
 function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
   assertWorkerTypeCode(data.workerTypeCode);
+  // O documento digitado no formulário (externalId) precisa ir em
+  // systemData.externalId: a API só lê esse caminho e, quando ele vem vazio,
+  // gera um valor automático ({slug}-{hex}).
+  const typedExternalId = (data.externalId ?? "").trim();
   return {
     ...data,
+    systemData: {
+      ...(data.systemData ?? {}),
+      externalId: typedExternalId || getClearIdExternalId(data) || null,
+    },
     // Campos personalizados NÃO vão no create (o ClearID rejeita o formato dict
     // aqui). São gravados após a criação via patchIdentityCustomFields.
     customFields: undefined,
@@ -685,7 +704,12 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
     "externalId",
     "customFields",
   ]);
-  const systemData: Record<string, unknown> = { externalId: getClearIdExternalId(data) };
+  // Na edição, o documento digitado (externalId) prevalece sobre o valor que
+  // veio do ClearID em systemData.externalId (preservado para o PUT completo).
+  const typedExternalId = (data.externalId ?? "").trim();
+  const systemData: Record<string, unknown> = {
+    externalId: typedExternalId || getClearIdExternalId(data),
+  };
   for (const [k, v] of Object.entries((data.systemData ?? {}) as Record<string, unknown>)) {
     if (READONLY_SYSTEM.has(k)) continue;
     if (v !== null && v !== undefined) systemData[k] = v;
@@ -934,6 +958,76 @@ export interface VisitEvent {
   eTag?: string | null;
   hosts?: { identityId: string; displayName?: string | null }[] | null;
   visitors?: VisitVisitor[] | null;
+}
+
+// ---- Auditoria de atividades ----
+export type AuditAction = "created" | "updated" | "deleted" | "imported" | "login" | "logout" | "other" | (string & {});
+export interface AuditEvent {
+  action: AuditAction;
+  entityType?: string | null;
+  entityId?: string | null;
+  entityLabel?: string | null;
+  summary?: string | null;
+  details?: Record<string, unknown> | null;
+}
+export interface AuditEntry {
+  id?: number | null;
+  occurredAt: string;
+  profile?: string | null;
+  userName: string;
+  action: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  entityLabel?: string | null;
+  summary?: string | null;
+  details?: unknown;
+  source: string;
+  method?: string | null;
+  route?: string | null;
+  statusCode?: number | null;
+  traceId?: string | null;
+  ipAddress?: string | null;
+}
+export interface AuditSearchParams {
+  q?: string;
+  userName?: string;
+  action?: string;
+  entityType?: string;
+  entityId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+  allProfiles?: boolean;
+}
+export interface AuditSearchResult {
+  items: AuditEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Visitante do cadastro do sistema (Supabase, acessado só pelo backend). */
+export interface VisitorRecord {
+  id: string;
+  fullName: string;
+  email?: string | null;
+  documentNumber?: string | null;
+  companyId?: string | null;
+  companyName?: string | null;
+  identityId?: string | null;
+  visitCount: number;
+  lastVisitAt?: string | null;
+}
+
+export interface VisitorUpsertItem {
+  id?: string | null;
+  fullName: string;
+  email?: string | null;
+  documentNumber?: string | null;
+  companyId?: string | null;
+  companyName?: string | null;
+  identityId?: string | null;
 }
 
 export interface CreateVisitPayload {
@@ -1678,6 +1772,37 @@ export const argusApi = {
   getVisit: (visitEventId: string) =>
     unwrap<VisitEvent>(argusFetch(`/api/visits/${encodeURIComponent(visitEventId)}`)),
 
+  /** Registra uma atividade do usuário (gravações do front direto no Supabase, login/logout). */
+  logAudit: (event: AuditEvent) =>
+    argusFetch<unknown>(`/api/audit`, { method: "POST", body: JSON.stringify(event) }, { allSites: true }),
+
+  /** Consulta a auditoria (administrador). */
+  searchAudit: async (params: AuditSearchParams): Promise<AuditSearchResult> => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined || v === null || v === "" || v === false) continue;
+      qs.set(k, String(v));
+    }
+    const data = await unwrap<AuditSearchResult | null>(argusFetch(`/api/audit?${qs.toString()}`, undefined, { allSites: true }));
+    return data ?? { items: [], total: 0, page: 1, pageSize: 50 };
+  },
+
+  /** Pesquisa visitantes já cadastrados (nome, e-mail ou documento). */
+  searchVisitors: async (q: string, take = 20): Promise<VisitorRecord[]> => {
+    const qs = new URLSearchParams({ take: String(take) });
+    if (q.trim()) qs.set("q", q.trim());
+    const data = await unwrap<VisitorRecord[] | null>(argusFetch(`/api/visitors?${qs.toString()}`));
+    return data ?? [];
+  },
+
+  /** Grava/atualiza os visitantes de uma visita no cadastro (conta uma visita). */
+  upsertVisitors: async (visitors: VisitorUpsertItem[], countVisit = true): Promise<VisitorRecord[]> => {
+    const data = await unwrap<VisitorRecord[] | null>(
+      argusFetch(`/api/visitors`, { method: "POST", body: JSON.stringify({ visitors, countVisit }) }),
+    );
+    return data ?? [];
+  },
+
   createVisit: (payload: CreateVisitPayload) =>
     unwrap<VisitEvent>(
       argusFetch(`/api/visits`, { method: "POST", body: JSON.stringify(payload) }),
@@ -1883,7 +2008,16 @@ export const argusApi = {
    */
   startImportAsync: async (
     file: File,
-    opts?: { dryRun?: boolean; updateAfastamentoOnly?: boolean },
+    opts?: {
+      dryRun?: boolean;
+      updateAfastamentoOnly?: boolean;
+      /** Máximo de registros processados no lote (vazio = todos). */
+      maxRows?: number | null;
+      /** O que executar: todos, apenas novos ou apenas alterados. */
+      importMode?: "all" | "new" | "changed";
+      /** Linhas (numeração da planilha) a processar; vazio = todas. */
+      rowNumbers?: number[];
+    },
   ): Promise<string> => {
     const cfg = getConfig();
     if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
@@ -1891,9 +2025,12 @@ export const argusApi = {
     const qs: string[] = ["async=true"];
     if (opts?.dryRun) qs.push("dryRun=true");
     if (opts?.updateAfastamentoOnly) qs.push("updateAfastamentoOnly=true");
+    if (opts?.maxRows && opts.maxRows > 0) qs.push("maxRows=" + Math.floor(opts.maxRows));
+    if (opts?.importMode) qs.push("importMode=" + opts.importMode);
     url += "?" + qs.join("&");
     const form = new FormData();
     form.append("file", file, file.name);
+    if (opts?.rowNumbers?.length) form.append("rowNumbers", opts.rowNumbers.join(","));
     const headers = new Headers();
     if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
     headers.set("X-ClearId-Environment", getActiveProfile());

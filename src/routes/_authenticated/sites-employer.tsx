@@ -1,3 +1,4 @@
+import { audit, auditDelete } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -117,6 +118,14 @@ function EmployerSitesPage() {
       }
     },
     onSuccess: () => {
+      const fx = form as unknown as { id?: string; codigo?: string; nome?: string };
+      audit({
+        action: fx.id ? "updated" : "created",
+        entityType: "employer_site",
+        entityId: fx.id ?? null,
+        entityLabel: [fx.codigo, fx.nome].filter(Boolean).join(" · ") || null,
+        summary: `${fx.id ? "Alterou" : "Criou"} o vínculo de site da Employer ${[fx.codigo, fx.nome].filter(Boolean).join(" · ")}`,
+      });
       toast.success(t("employerSites.toast.saved"));
       qc.invalidateQueries({ queryKey: ["employer-sites", activeProfile] });
       setDialogOpen(false);
@@ -129,7 +138,8 @@ function EmployerSitesPage() {
       const { error } = await supabase.from("employer_sites").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
+      auditDelete("employer_site", String(id), null, "o vínculo de site da Employer");
       toast.success(t("employerSites.toast.removed"));
       qc.invalidateQueries({ queryKey: ["employer-sites", activeProfile] });
       setToDelete(null);

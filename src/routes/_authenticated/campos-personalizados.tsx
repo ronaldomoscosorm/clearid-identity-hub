@@ -1,3 +1,4 @@
+import { audit, auditDelete } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -197,7 +198,8 @@ function CustomFieldsPage() {
         profile: activeProfile,
       });
     },
-    onSuccess: () => {
+    onSuccess: (_d, fdef) => {
+      auditDelete("custom_field", fdef.customFieldName, fdef.displayName || fdef.customFieldName, "o campo personalizado");
       toast.success(t("customFields.deleted"));
       setDeleting(null);
       reload();
@@ -1334,6 +1336,13 @@ function CustomFieldDialog({
       return null;
     },
     onSuccess: () => {
+      audit({
+        action: mode === "create" ? "created" : "updated",
+        entityType: "custom_field",
+        entityId: name.trim(),
+        entityLabel: name.trim(),
+        summary: `${mode === "create" ? "Criou" : "Alterou"} o campo personalizado ${name.trim()}`,
+      });
       toast.success(mode === "create" ? t("customFields.created") : t("customFields.updated"));
       onSaved();
     },

@@ -1,0 +1,15 @@
+{
+ "restoredAt": "2026-10-07T20:59:17.739Z",
+ "restored": [
+  {
+   "identity_id": "aa37d2db-d010-435b-be44-425bfed77de0",
+   "site_custom_field_id": "8e4aef84-f62d-4b57-80dd-516c4abaa871",
+   "value": "2026-10-17"
+  },
+  {
+   "identity_id": "a3a7a0c0-1b64-4083-9880-3fde35c409a3",
+   "site_custom_field_id": "f45eeb64-2ca7-4c9d-bcbc-d6df38edd06d",
+   "value": "2026-09-03"
+  }
+ ]
+}

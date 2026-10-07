@@ -1,3 +1,4 @@
+import { auditSave, auditDelete } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { findColaboradorId } from "@/lib/worker-types";
 import { useMemo, useState } from "react";
@@ -69,7 +70,10 @@ const ALL_SECTIONS = "__ALL_SECTIONS__";
 // UUIDs das definições do catálogo.
 const NATIVE_PREFIX = "native:";
 const NATIVE_SECTION = "ClearID (nativos)";
-const NATIVE_KEYS = STANDARD_IDENTITY_FIELDS.map((f) => f.key);
+// "photo" não é campo do layout (a foto tem painel próprio), mas é configurável
+// aqui: obrigatória por padrão; uma linha com is_required=false a torna opcional.
+const PHOTO_KEY = "photo";
+const NATIVE_KEYS = [...STANDARD_IDENTITY_FIELDS.map((f) => f.key), PHOTO_KEY];
 const NATIVE_LABEL_KEY: Record<string, string> = {
   company_worker_type_code: "identityForm.workerType",
   first_name: "common.name",
@@ -79,6 +83,7 @@ const NATIVE_LABEL_KEY: Record<string, string> = {
   external_id: "identityForm.externalId",
   company_site_id: "identityForm.site",
   company_id: "identityForm.company",
+  photo: "photoCapture.title",
 };
 
 type Definition = Database["public"]["Tables"]["custom_field_definitions"]["Row"];
@@ -446,6 +451,10 @@ function CamposDoSitePage() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => {
+      auditSave(editing, "site_field", editing?.id, editing?.definition?.custom_field_name ?? editing?.native_field_key, "a configuração de campo do cliente", {
+        entityType: form.entity_type,
+        workerTypeId: form.worker_type_id,
+      });
       toast.success(editing ? t("siteFields.toast.updated") : t("siteFields.toast.added"));
       qc.invalidateQueries({ queryKey: ["site-custom-fields", activeProfile] });
       setDialogOpen(false);
@@ -458,7 +467,8 @@ function CamposDoSitePage() {
       const { error } = await supabase.from("site_custom_fields").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
+      auditDelete("site_field", String(id), null, "a configuração de campo do cliente");
       toast.success(t("siteFields.toast.removed"));
       qc.invalidateQueries({ queryKey: ["site-custom-fields", activeProfile] });
       setToDelete(null);

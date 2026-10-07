@@ -1,3 +1,4 @@
+import { audit, auditDelete } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -7,13 +8,13 @@ import { argusApi, ArgusApiError, useDefaultSiteId, useActiveProfile, type Ident
 import { useUserScope } from "@/lib/user-scope";
 import {
   withSiteId,
-  mapEmployerImport,
   applyColumnMapping,
   readHeaders,
   normalizeHeader,
   EMPLOYER_CODE_TARGET,
   EMPLOYER_NAME_TARGET,
   CLEARID_SITE_NAME_TARGET,
+  WORKER_TYPE_TARGET,
   NATIVE_TARGET_PREFIX,
   CF_TARGET_PREFIX,
   type EmployerSiteMap,
@@ -27,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -104,7 +106,19 @@ type ImportRow = IdentityImportResult["rows"][number];
 const ISSUE_RE = /falha|erro|ignorad|não é campo|sem chave|sem 'campos|sem site/i;
 
 /** A linha teve algum problema (falha, pulada, ou mensagem de erro/aviso)? */
+/** Classificação de uma linha do resultado, para o filtro e a seleção. */
+type RowKind = "new" | "changed" | "unchanged" | "skipped" | "issue";
+function rowKind(r: ImportRow): RowKind {
+  const a = r.action;
+  if (a === "WouldCreate" || a === "Created") return "new";
+  if (a === "WouldUpdate" || a === "Updated") return r.unchanged ? "unchanged" : "changed";
+  if (r.skipReason === "unchanged") return "unchanged";
+  if (r.skipReason) return "skipped";
+  return "issue";
+}
+
 function rowHasIssue(r: ImportRow): boolean {
+  if (r.alreadyImported || r.skipReason) return false;
   const a = r.action.toLowerCase();
   if (a.includes("fail") || a.includes("skip")) return true;
   return r.messages.some((m) => ISSUE_RE.test(m));
@@ -151,6 +165,14 @@ function ImportPage() {
   const [siteMode, setSiteMode] = useState<"single" | "employer" | "mapped">("single");
   const [dryRun, setDryRun] = useState(true);
   const [afastamentoOnly, setAfastamentoOnly] = useState(false);
+  // Lote: quantidade de registros (vazio = todos) e pular quem já foi importado.
+  const [batchSize, setBatchSize] = useState<string>("");
+  // O que executar: todos, apenas novos (pula quem já existe) ou apenas alterados.
+  const [importMode, setImportMode] = useState<"all" | "new" | "changed">("new");
+  // Arquivo preparado na última simulação: reaproveitado em "importar selecionados"
+  // (mesma numeração de linhas) + linhas marcadas pelo usuário.
+  const [lastPrepared, setLastPrepared] = useState<File | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<IdentityImportResult | null>(null);
   // Tela de mapeamento (modo "mapped"): cabeçalhos da planilha + coluna→alvo.
   const [headers, setHeaders] = useState<string[]>([]);
@@ -274,6 +296,7 @@ function ImportPage() {
       }
     },
     onSuccess: () => {
+      audit({ action: "updated", entityType: "import_mapping", entityLabel: mappingName.trim(), summary: `Salvou o mapeamento de importação ${mappingName.trim()}`, details: { mapping } });
       toast.success(t("import.map.savedOk"));
       mappingsQuery.refetch();
     },
@@ -286,7 +309,8 @@ function ImportPage() {
       const { error } = await supabase.from("import_mappings").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
+      auditDelete("import_mapping", String(id), null, "o mapeamento de importação");
       toast.success(t("import.map.removed"));
       setSelectedMappingId("");
       mappingsQuery.refetch();
@@ -314,6 +338,10 @@ function ImportPage() {
       if (["site", "site name", "sitename", "nome do site", "nomesite"].includes(h)) {
         return CLEARID_SITE_NAME_TARGET;
       }
+      // Tipo de trabalhador por linha (nome/código do tipo cadastrado no cliente).
+      if (["tipo", "tipo de trabalhador", "tipo trabalhador", "worker type", "workertype", "categoria"].includes(h)) {
+        return WORKER_TYPE_TARGET;
+      }
       // Aliases do template Genetec / variações comuns (company, employeeId, department…).
       const alias = NATIVE_ALIASES[h.replace(/\s+/g, "")];
       if (alias) return NATIVE_TARGET_PREFIX + alias;
@@ -321,12 +349,45 @@ function ImportPage() {
     };
   }, [cfTargets]);
 
-  // Ao escolher arquivo (modo mapeado), lê os cabeçalhos e pré-sugere o mapeamento.
+  // Sugestão do modo Employer (planilhas de RH): Filial/Código → site da Employer,
+  // Nome → firstName, CPF → campo de CPF do cliente (ou externalId), datas de
+  // admissão/afastamento → campos do cliente. Cai na sugestão genérica.
+  const suggestEmployerTarget = useMemo(() => {
+    const cfLike = (re: RegExp) => {
+      const c = cfTargets.find((x) => re.test(x.name));
+      return c ? CF_TARGET_PREFIX + c.name : "";
+    };
+    return (header: string): string => {
+      const h = normalizeHeader(header);
+      if (["filial", "nome filial", "unidade", "nome (employer)"].includes(h)) return EMPLOYER_NAME_TARGET;
+      if (["codigo", "cod", "codigo filial", "codigo (employer)"].includes(h)) return EMPLOYER_CODE_TARGET;
+      if (["nome", "nome completo", "funcionario", "colaborador"].includes(h)) {
+        return NATIVE_TARGET_PREFIX + "firstName";
+      }
+      if (h === "cpf") return cfLike(/cpf/i) || NATIVE_TARGET_PREFIX + "externalId";
+      if (/admiss/.test(h)) return cfLike(/admiss/i) || suggestTarget(header);
+      if (/afastamento/.test(h) && /^(inicio|data inicio)/.test(h)) {
+        return cfLike(/ini.*afast/i) || suggestTarget(header);
+      }
+      if (/afastamento/.test(h) && /^(fim|final|data fim)/.test(h)) {
+        return cfLike(/fim.*afast/i) || suggestTarget(header);
+      }
+      return suggestTarget(header);
+    };
+  }, [cfTargets, suggestTarget]);
+
+  // Ao escolher arquivo (modos com de→para: Employer e mapeado), lê os cabeçalhos
+  // e pré-sugere o mapeamento. Trocar de modo refaz as sugestões do zero.
+  const usesColumnMapping = siteMode === "mapped" || siteMode === "employer";
+  const lastMappingModeRef = useRef(siteMode);
   useEffect(() => {
-    if (siteMode !== "mapped" || !file) {
+    if (!usesColumnMapping || !file) {
       setHeaders([]);
       return;
     }
+    const modeChanged = lastMappingModeRef.current !== siteMode;
+    lastMappingModeRef.current = siteMode;
+    const suggest = siteMode === "employer" ? suggestEmployerTarget : suggestTarget;
     let alive = true;
     readHeaders(file)
       .then((hs) => {
@@ -336,7 +397,7 @@ function ImportPage() {
           const next: Record<string, string> = {};
           // Preserva escolha já feita; se ainda vazia, (re)sugere — útil quando os
           // campos customizáveis carregam depois dos cabeçalhos.
-          for (const h of hs) next[h] = prev[h] ? prev[h] : suggestTarget(h);
+          for (const h of hs) next[h] = !modeChanged && prev[h] ? prev[h] : suggest(h);
           return next;
         });
       })
@@ -344,7 +405,7 @@ function ImportPage() {
     return () => {
       alive = false;
     };
-  }, [file, siteMode, suggestTarget]);
+  }, [file, siteMode, usesColumnMapping, suggestTarget, suggestEmployerTarget]);
 
   const importScope = useUserScope();
   const sitesQuery = useQuery({
@@ -358,13 +419,16 @@ function ImportPage() {
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
 
   const importMut = useMutation({
-    mutationFn: async (f: File) => {
+    mutationFn: async ({ file: f, selection }: { file: File; selection?: number[] }) => {
       let prepared: File;
-      if (siteMode === "mapped") {
-        // Aplica o mapeamento coluna→campo definido na tela. O tipo de trabalhador
+      if (selection?.length && lastPrepared) {
+        // Importar selecionados: usa o MESMO arquivo preparado na simulação.
+        prepared = lastPrepared;
+      } else if (siteMode === "mapped" || siteMode === "employer") {
+        // Aplica o mapeamento coluna→campo definido na tela (Employer e mapeado). O tipo de trabalhador
         // padrão só é injetado quando a planilha não trouxer o tipo.
         const defaultWorkerTypeCode =
-          workerTypes.find((w) => w.id === defaultWorkerTypeId)?.argus_worker_type_code ?? "";
+          workerTypes.find((w) => w.id === defaultWorkerTypeId)?.name ?? "";
         // Catálogo COMPLETO de sites do ClearID (nome normalizado → siteId) para o
         // alvo "Site · Nome (ClearID)"; o backend valida o acesso ao site.
         const clearIdSiteMap = new Map(
@@ -374,14 +438,8 @@ function ImportPage() {
           defaultWorkerTypeCode,
           defaultWorkerTypeId,
           clearIdSiteMap,
+          workerTypes,
         });
-        if (r.unresolved > 0) {
-          toast.warning(t("import.employer.unresolved", { count: r.unresolved, total: r.total }));
-        }
-        prepared = r.file;
-      } else if (siteMode === "employer") {
-        // Aplica o de→para das colunas da Employer (site + nome/CPF/datas Vylor).
-        const r = await mapEmployerImport(f, employerMap);
         if (r.unresolved > 0) {
           toast.warning(t("import.employer.unresolved", { count: r.unresolved, total: r.total }));
         }
@@ -391,10 +449,18 @@ function ImportPage() {
         prepared = await withSiteId(f, siteId);
       }
       // Processamento ASSÍNCRONO (background) + polling — evita timeout de gateway.
-      const jobId = await argusApi.startImportAsync(prepared, {
-        dryRun,
-        updateAfastamentoOnly: afastamentoOnly,
-      });
+      if (!selection?.length) setLastPrepared(prepared);
+      const jobId = await argusApi.startImportAsync(
+        prepared,
+        selection?.length
+          ? { dryRun: false, updateAfastamentoOnly: afastamentoOnly, importMode: "all", rowNumbers: selection }
+          : {
+              dryRun,
+              updateAfastamentoOnly: afastamentoOnly,
+              maxRows: Number(batchSize) > 0 ? Number(batchSize) : null,
+              importMode: afastamentoOnly ? "all" : importMode,
+            },
+      );
       // Até ~20 min (600 × 2s), suficiente para lotes grandes.
       for (let i = 0; i < 600; i++) {
         await new Promise((r) => setTimeout(r, 2000));
@@ -411,6 +477,7 @@ function ImportPage() {
     },
     onSuccess: (r) => {
       setResult(r);
+      setSelectedRows(new Set());
       const msg = t("import.toast.done", {
         created: r.created,
         updated: r.updated,
@@ -430,6 +497,8 @@ function ImportPage() {
     const f = e.target.files?.[0] ?? null;
     setFile(f);
     setResult(null);
+    setLastPrepared(null);
+    setSelectedRows(new Set());
   };
 
   // No modo mapeado, o site precisa ser resolvível: por Código/Nome (Employer)
@@ -446,11 +515,22 @@ function ImportPage() {
     [mapping],
   );
 
+  // Afastamento mapeado sem o motivo: a importação rejeita as linhas com data de
+  // afastamento e sem motivo (regra do backend) — avisa já no mapeamento.
+  const mappedAfastamentoSemMotivo = useMemo(() => {
+    const cfs = Object.values(mapping)
+      .filter((t) => t.startsWith(CF_TARGET_PREFIX))
+      .map((t) => t.slice(CF_TARGET_PREFIX.length).toLowerCase());
+    const hasDate = cfs.some((n) => n.includes("afastamento") && !n.includes("motivo") && !n.includes("obs"));
+    const hasMotivo = cfs.some((n) => n.includes("motivo") && n.includes("afastamento"));
+    return hasDate && !hasMotivo;
+  }, [mapping]);
+
   const onSubmit = () => {
     if (!file) return;
     if (siteMode === "single" && !siteId) return;
-    if (siteMode === "mapped" && (!headers.length || !mappedHasSite)) return;
-    importMut.mutate(file);
+    if (usesColumnMapping && (!headers.length || !mappedHasSite)) return;
+    importMut.mutate({ file });
   };
 
   // Baixa o relatório detalhado dos erros/avisos da última importação.
@@ -533,12 +613,13 @@ function ImportPage() {
               </Select>
               <p className="text-xs text-muted-foreground">{t("import.site.hint")}</p>
             </div>
-          ) : siteMode === "employer" ? (
-            <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              {t("import.employer.hint", { count: employerSitesQuery.data?.length ?? 0 })}
-            </p>
           ) : (
             <div className="space-y-3">
+              {siteMode === "employer" && (
+                <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  {t("import.employer.hint", { count: employerSitesQuery.data?.length ?? 0 })}
+                </p>
+              )}
               <Label>{t("import.map.title")}</Label>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -639,6 +720,9 @@ function ImportPage() {
                                   <SelectItem value={CLEARID_SITE_NAME_TARGET}>
                                     {t("import.map.clearIdSiteName")}
                                   </SelectItem>
+                                  <SelectItem value={WORKER_TYPE_TARGET}>
+                                    {t("import.map.workerType")}
+                                  </SelectItem>
                                   {NATIVE_TARGETS.map((n) => (
                                     <SelectItem key={n.key} value={NATIVE_TARGET_PREFIX + n.key}>
                                       {n.label}
@@ -659,6 +743,9 @@ function ImportPage() {
                   </div>
                   {!mappedHasSite && (
                     <p className="text-xs text-[var(--rm-inactive-ink)]">{t("import.map.needSite")}</p>
+                  )}
+                  {mappedAfastamentoSemMotivo && (
+                    <p className="text-xs text-[var(--rm-inactive-ink)]">{t("import.map.needMotivo")}</p>
                   )}
                   <div className="flex items-end gap-2">
                     <div className="flex-1 space-y-1.5">
@@ -687,6 +774,47 @@ function ImportPage() {
               )}
             </div>
           )}
+
+          <div className="grid gap-3 sm:grid-cols-[180px_1fr] sm:items-start">
+            <div className="space-y-1.5">
+              <Label htmlFor="batchSize">{t("import.batch.label")}</Label>
+              <Input
+                id="batchSize"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                value={batchSize}
+                onChange={(e) => setBatchSize(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder={t("import.batch.placeholder")}
+                disabled={importMut.isPending}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground sm:pt-7">{t("import.batch.hint")}</p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[220px_1fr] sm:items-start">
+            <div className="space-y-1.5">
+              <Label>{t("import.mode.label")}</Label>
+              <Select
+                value={afastamentoOnly ? "all" : importMode}
+                onValueChange={(v) => setImportMode(v as "all" | "new" | "changed")}
+                disabled={importMut.isPending || afastamentoOnly}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("import.mode.all")}</SelectItem>
+                  <SelectItem value="new">{t("import.mode.new")}</SelectItem>
+                  <SelectItem value="changed">{t("import.mode.changed")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground sm:pt-7">
+              {afastamentoOnly ? t("import.mode.disabledHint") : t(`import.mode.hint.${importMode}`)}
+            </p>
+          </div>
 
           <label className="flex cursor-pointer items-start gap-3">
             <Switch checked={dryRun} onCheckedChange={setDryRun} disabled={importMut.isPending} />
@@ -718,7 +846,7 @@ function ImportPage() {
               disabled={
                 !file ||
                 (siteMode === "single" && !siteId) ||
-                (siteMode === "mapped" && (!headers.length || !mappedHasSite)) ||
+                (usesColumnMapping && (!headers.length || !mappedHasSite)) ||
                 importMut.isPending
               }
             >
@@ -761,6 +889,41 @@ function ImportPage() {
               <Stat value={result.skipped} label={t("import.stat.skipped")} />
               <Stat value={result.failed} label={t("import.stat.failed")} tone={result.failed > 0 ? "inactive" : undefined} />
             </div>
+
+            {(result.skipExisting || result.maxRows || (result.unchanged ?? 0) > 0) && (
+              <div className="space-y-1 rounded-lg border bg-muted/40 p-3 text-sm text-foreground">
+                {result.skipExisting && (
+                  <p>{t("import.batch.alreadyImported", { count: result.alreadyImported ?? 0 })}</p>
+                )}
+                {(result.unchanged ?? 0) > 0 && (
+                  <p>{t("import.batch.unchanged", { count: result.unchanged ?? 0 })}</p>
+                )}
+                {result.limitReached ? (
+                  <p className="font-medium">
+                    {t("import.batch.limitReached", {
+                      max: result.maxRows ?? 0,
+                      rest: result.notProcessed ?? 0,
+                    })}
+                  </p>
+                ) : result.maxRows ? (
+                  <p>{t("import.batch.allDone")}</p>
+                ) : null}
+              </div>
+            )}
+
+            {result.dryRun && (
+              <ImportRowsPicker
+                result={result}
+                selected={selectedRows}
+                onChange={setSelectedRows}
+                busy={importMut.isPending}
+                canImport={!!lastPrepared && !!file}
+                onImport={() =>
+                  file &&
+                  importMut.mutate({ file, selection: [...selectedRows].sort((a, b) => a - b) })
+                }
+              />
+            )}
 
             {(() => {
               const issues = result.rows.filter(rowHasIssue);
@@ -887,6 +1050,156 @@ function Stat({
     <div className="rounded-lg border border-[var(--rm-line)] bg-[var(--rm-panel)] p-3">
       <div className="text-2xl font-semibold tabular-nums" style={{ color }}>{value}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+/**
+ * Registros da simulação: filtro por situação, seleção individual ou de todos os
+ * visíveis e "importar selecionados" (reaproveita o arquivo preparado na simulação).
+ */
+function ImportRowsPicker({
+  result,
+  selected,
+  onChange,
+  busy,
+  canImport,
+  onImport,
+}: {
+  result: IdentityImportResult;
+  selected: Set<number>;
+  onChange: (next: Set<number>) => void;
+  busy: boolean;
+  canImport: boolean;
+  onImport: () => void;
+}) {
+  const { t } = useT();
+  const [filter, setFilter] = useState<"all" | RowKind>("all");
+  const kinds: RowKind[] = ["new", "changed", "unchanged", "skipped", "issue"];
+  const counts = useMemo(() => {
+    const c: Record<RowKind, number> = { new: 0, changed: 0, unchanged: 0, skipped: 0, issue: 0 };
+    for (const r of result.rows) c[rowKind(r)]++;
+    return c;
+  }, [result.rows]);
+  const visible = useMemo(
+    () => (filter === "all" ? result.rows : result.rows.filter((r) => rowKind(r) === filter)),
+    [result.rows, filter],
+  );
+  // Linhas com problema (sem chave, falha) não são selecionáveis.
+  const selectable = visible.filter((r) => rowKind(r) !== "issue");
+  const allVisibleSelected = selectable.length > 0 && selectable.every((r) => selected.has(r.rowNumber));
+  const toggleAllVisible = (on: boolean) => {
+    const next = new Set(selected);
+    for (const r of selectable) {
+      if (on) next.add(r.rowNumber);
+      else next.delete(r.rowNumber);
+    }
+    onChange(next);
+  };
+  const toggle = (rowNumber: number, on: boolean) => {
+    const next = new Set(selected);
+    if (on) next.add(rowNumber);
+    else next.delete(rowNumber);
+    onChange(next);
+  };
+  const tone: Record<RowKind, string> = {
+    new: "border-[var(--success)]/40 text-[var(--success)]",
+    changed: "border-[var(--rm-brand)]/40 text-[var(--rm-brand-ink)]",
+    unchanged: "text-muted-foreground",
+    skipped: "text-muted-foreground",
+    issue: "border-destructive/40 text-destructive",
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-foreground">{t("import.rows.title")}</p>
+          <p className="text-xs text-muted-foreground">{t("import.rows.hint")}</p>
+        </div>
+        <Button onClick={onImport} disabled={busy || !canImport || selected.size === 0}>
+          {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Upload className="mr-1 h-4 w-4" />}
+          {t("import.rows.importSelected", { count: selected.size })}
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {(["all", ...kinds] as const).map((k) => (
+          <Button
+            key={k}
+            type="button"
+            size="sm"
+            variant={filter === k ? "default" : "outline"}
+            onClick={() => setFilter(k)}
+          >
+            {t(`import.rows.filter.${k}`)} ({k === "all" ? result.rows.length : counts[k]})
+          </Button>
+        ))}
+      </div>
+
+      <div className="max-h-96 overflow-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allVisibleSelected}
+                  onCheckedChange={(v) => toggleAllVisible(v === true)}
+                  disabled={busy || selectable.length === 0}
+                  aria-label={t("import.rows.selectAll")}
+                />
+              </TableHead>
+              <TableHead className="w-16">{t("import.rows.col.row")}</TableHead>
+              <TableHead>{t("import.rows.col.name")}</TableHead>
+              <TableHead className="hidden md:table-cell">{t("import.rows.col.key")}</TableHead>
+              <TableHead>{t("import.rows.col.status")}</TableHead>
+              <TableHead className="hidden lg:table-cell">{t("import.rows.col.details")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visible.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                  {t("import.rows.empty")}
+                </TableCell>
+              </TableRow>
+            ) : (
+              visible.map((r) => {
+                const k = rowKind(r);
+                const details = r.changedFields?.length
+                  ? r.changedFields.join(", ")
+                  : (r.messages[r.messages.length - 1] ?? "");
+                return (
+                  <TableRow key={r.rowNumber}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.has(r.rowNumber)}
+                        onCheckedChange={(v) => toggle(r.rowNumber, v === true)}
+                        disabled={busy || k === "issue"}
+                        aria-label={`${t("import.rows.col.row")} ${r.rowNumber}`}
+                      />
+                    </TableCell>
+                    <TableCell className="tnum text-xs text-muted-foreground">{r.rowNumber}</TableCell>
+                    <TableCell className="max-w-[220px] truncate text-sm">{r.displayName || "—"}</TableCell>
+                    <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
+                      {r.externalId || r.email || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={tone[k]}>
+                        {t(`import.rows.kind.${k}`)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden max-w-[320px] truncate text-xs text-muted-foreground lg:table-cell" title={details}>
+                      {details}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("import.rows.selectedCount", { count: selected.size })}</p>
     </div>
   );
 }

@@ -19,6 +19,12 @@ import type { Database, Json } from "@/integrations/supabase/types";
 export const ATTACHMENT_BUCKET = "identity-attachments";
 
 export type AttachmentVersion = Database["public"]["Tables"]["identity_attachments"]["Row"];
+export type CompanyAttachmentVersion = Database["public"]["Tables"]["company_attachments"]["Row"];
+/** Campos comuns às versões de anexo (identidade ou empresa), usados na UI. */
+export type AttachmentVersionLike = Pick<
+  AttachmentVersion,
+  "id" | "file_name" | "storage_path" | "mime_type" | "size_bytes" | "created_at" | "version" | "is_current"
+>;
 
 /** Arquivo preparado no formulário, aguardando upload após a criação. */
 export type PendingAttachment = { custom_field_definition_id: string; file: File };
@@ -211,5 +217,104 @@ export function useAttachmentVersions(
     queryKey: ["identity-attachments", identityDbId, customFieldDefinitionId],
     queryFn: () => listAttachmentVersions(identityDbId as string, customFieldDefinitionId),
     enabled: Boolean(identityDbId && customFieldDefinitionId),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Anexos de EMPRESAS (certidões/comprovantes) — mesmo modelo versionado, na
+// tabela company_attachments e no mesmo bucket, sob o prefixo companies/<id>/.
+// ---------------------------------------------------------------------------
+
+/** Lista as versões de um anexo da empresa (mais recente primeiro). */
+export async function listCompanyAttachmentVersions(
+  companyId: string,
+  customFieldDefinitionId: string,
+): Promise<CompanyAttachmentVersion[]> {
+  const { data, error } = await supabase
+    .from("company_attachments")
+    .select("*")
+    .eq("company_id", companyId)
+    .eq("custom_field_definition_id", customFieldDefinitionId)
+    .order("version", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+/** Envia um arquivo como nova versão do anexo da empresa (a anterior deixa de ser a atual). */
+export async function uploadCompanyAttachmentVersion(
+  companyId: string,
+  customFieldDefinitionId: string,
+  file: File,
+): Promise<CompanyAttachmentVersion> {
+  const { data: last, error: eLast } = await supabase
+    .from("company_attachments")
+    .select("version")
+    .eq("company_id", companyId)
+    .eq("custom_field_definition_id", customFieldDefinitionId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (eLast) throw new Error(eLast.message);
+  const nextVersion = (last?.version ?? 0) + 1;
+
+  const path = `companies/${companyId}/${customFieldDefinitionId}/v${nextVersion}-${crypto.randomUUID()}.${extOf(file.name)}`;
+  const { error: eUp } = await supabase.storage.from(ATTACHMENT_BUCKET).upload(path, file, {
+    contentType: file.type || "application/octet-stream",
+    upsert: false,
+  });
+  if (eUp) throw new Error(eUp.message);
+
+  const { error: eClear } = await supabase
+    .from("company_attachments")
+    .update({ is_current: false })
+    .eq("company_id", companyId)
+    .eq("custom_field_definition_id", customFieldDefinitionId)
+    .eq("is_current", true);
+  if (eClear) {
+    await supabase.storage.from(ATTACHMENT_BUCKET).remove([path]).catch(() => {});
+    throw new Error(eClear.message);
+  }
+
+  const { data: row, error: eIns } = await supabase
+    .from("company_attachments")
+    .insert({
+      company_id: companyId,
+      custom_field_definition_id: customFieldDefinitionId,
+      version: nextVersion,
+      storage_path: path,
+      file_name: file.name,
+      mime_type: file.type || "application/octet-stream",
+      size_bytes: file.size,
+      is_current: true,
+    })
+    .select("*")
+    .single();
+  if (eIns || !row) {
+    await supabase.storage.from(ATTACHMENT_BUCKET).remove([path]).catch(() => {});
+    throw new Error(eIns?.message ?? "Falha ao registrar o anexo.");
+  }
+  return row;
+}
+
+/** Definições que já têm um anexo ATUAL para a empresa (para validar obrigatoriedade). */
+export async function listCompanyCurrentAttachmentDefinitions(companyId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("company_attachments")
+    .select("custom_field_definition_id")
+    .eq("company_id", companyId)
+    .eq("is_current", true);
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((r) => r.custom_field_definition_id));
+}
+
+/** Hook: versões de um anexo de uma empresa já existente. */
+export function useCompanyAttachmentVersions(
+  companyId: string | null | undefined,
+  customFieldDefinitionId: string,
+) {
+  return useQuery({
+    queryKey: ["company-attachments", companyId, customFieldDefinitionId],
+    queryFn: () => listCompanyAttachmentVersions(companyId as string, customFieldDefinitionId),
+    enabled: Boolean(companyId && customFieldDefinitionId),
   });
 }

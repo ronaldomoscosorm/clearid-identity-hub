@@ -1,3 +1,4 @@
+import { auditSave, auditDelete } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -157,6 +158,7 @@ function WorkerTypesPage() {
       }
     },
     onSuccess: () => {
+      auditSave(editing, "worker_type", editing?.id, (form as unknown as { name?: string }).name ?? editing?.name, "o tipo de trabalhador");
       toast.success(editing ? t("workerTypes.toast.updated") : t("workerTypes.toast.created"));
       qc.invalidateQueries({ queryKey: ["worker-types-admin"] });
       qc.invalidateQueries({ queryKey: ["worker-types"] });
@@ -211,7 +213,8 @@ function WorkerTypesPage() {
       const { error } = await supabase.from("worker_types").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
+      auditDelete("worker_type", String(id), null, "o tipo de trabalhador");
       toast.success(t("workerTypes.toast.deleted"));
       qc.invalidateQueries({ queryKey: ["worker-types-admin"] });
       qc.invalidateQueries({ queryKey: ["worker-types"] });

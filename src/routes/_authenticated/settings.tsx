@@ -1,3 +1,4 @@
+import { audit } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -169,7 +170,10 @@ function Settings() {
     }
 
     pushSettings()
-      .then(() => toast.success(t("settings.toast.saved")))
+      .then(() => {
+        audit({ action: "updated", entityType: "settings", entityLabel: configuredProfile, summary: `Salvou as configurações do cliente ${configuredProfile}` });
+        toast.success(t("settings.toast.saved"));
+      })
       .catch(() => toast.warning(t("settings.toast.savedLocalSyncFail")));
   };
 

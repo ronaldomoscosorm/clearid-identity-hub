@@ -1,3 +1,4 @@
+import { auditSave, auditDelete } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -112,6 +113,7 @@ function ApelidosPage() {
       }
     },
     onSuccess: () => {
+      auditSave(editing, "field_label", editing?.id, (form as unknown as { field_key?: string }).field_key ?? null, "o apelido de campo");
       toast.success(editing ? t("aliases.toast.updated") : t("aliases.toast.created"));
       qc.invalidateQueries({ queryKey: ["identity-field-labels-admin"] });
       qc.invalidateQueries({ queryKey: ["identity-field-labels"] });
@@ -125,7 +127,8 @@ function ApelidosPage() {
       const { error } = await supabase.from("identity_field_labels").delete().eq("id", id);
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
+      auditDelete("field_label", String(id), null, "o apelido de campo");
       toast.success(t("aliases.toast.removed"));
       qc.invalidateQueries({ queryKey: ["identity-field-labels-admin"] });
       qc.invalidateQueries({ queryKey: ["identity-field-labels"] });

@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Search, Trash2, X, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Search, Trash2, X, Loader2, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import {
   argusApi,
@@ -9,7 +9,9 @@ import {
   useDefaultSiteId,
   useActiveProfile,
   type VisitVisitor,
+  type VisitorRecord,
 } from "@/lib/argus-client";
+import { supabase } from "@/integrations/supabase/client";
 import { useArgusConfig } from "@/lib/argus-env";
 import { useUserScope } from "@/lib/user-scope";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
@@ -35,7 +37,27 @@ export const Route = createFileRoute("/_authenticated/visitas/nova")({
 });
 
 type Picked = { identityId: string; label: string };
-type VisitorRow = { firstName: string; lastName: string; email: string; photo: Blob | null };
+/**
+ * Visitante do formulário. O nome é um campo único; só no envio ao ClearID ele
+ * é dividido (primeira palavra = firstName, restante = lastName). `recordId` =
+ * cadastro do sistema de onde o visitante veio (pesquisa).
+ */
+type VisitorRow = {
+  recordId?: string;
+  fullName: string;
+  email: string;
+  document: string;
+  companyId?: string;
+  companyName: string;
+  photo: Blob | null;
+};
+const EMPTY_VISITOR: VisitorRow = { fullName: "", email: "", document: "", companyName: "", photo: null };
+
+/** Nome completo → firstName / lastName (exigidos separados pelo ClearID). */
+function splitName(full: string): { firstName: string; lastName: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") };
+}
 
 /** datetime-local (hora local) → ISO UTC exigido pela API. */
 function toUtcIso(local: string): string {
@@ -77,13 +99,50 @@ function NovaVisitaPage() {
   const [requester, setRequester] = useState<Picked | null>(null);
   const [hosts, setHosts] = useState<Picked[]>([]);
   const [visitors, setVisitors] = useState<VisitorRow[]>([
-    { firstName: "", lastName: "", email: "", photo: null },
+    { ...EMPTY_VISITOR },
   ]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   // Fluxo A concluído: visitantes com check-in, aguardando a credencial.
   const [checkedIn, setCheckedIn] = useState<VisitVisitor[] | null>(null);
 
   const visitActiveProfile = useActiveProfile();
+  // Empresas do cliente: sugestões do campo "Empresa" do visitante.
+  const companiesQuery = useQuery({
+    queryKey: ["companies", visitActiveProfile],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("companies")
+        .select("id, name")
+        .eq("profile", visitActiveProfile)
+        .order("name", { ascending: true });
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const companies = companiesQuery.data ?? [];
+  const companyIdByName = (name: string) =>
+    companies.find((c) => c.name.trim().toLowerCase() === name.trim().toLowerCase())?.id;
+  const updateVisitor = (i: number, patch: Partial<VisitorRow>) =>
+    setVisitors((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  // Visitante escolhido na pesquisa: ocupa a primeira linha vazia ou entra no fim.
+  const pickRegisteredVisitor = (r: VisitorRecord) => {
+    const row: VisitorRow = {
+      recordId: r.id,
+      fullName: r.fullName,
+      email: r.email ?? "",
+      document: r.documentNumber ?? "",
+      companyId: r.companyId ?? undefined,
+      companyName: r.companyName ?? "",
+      photo: null,
+    };
+    setVisitors((p) => {
+      if (p.some((x) => x.recordId === r.id)) return p;
+      const empty = p.findIndex((x) => !x.fullName.trim() && !x.email.trim() && !x.document.trim());
+      if (empty >= 0) return p.map((x, j) => (j === empty ? row : x));
+      return [...p, row];
+    });
+  };
   const visitScope = useUserScope();
   const sitesQuery = useQuery({
     queryKey: ["sites"],
@@ -128,10 +187,10 @@ function NovaVisitaPage() {
     if (start && end && new Date(end) <= new Date(start)) e.end = t("visits.validation.endAfterStart");
     if (!requester) e.requester = t("visits.validation.required");
     if (hosts.length === 0) e.hosts = t("visits.validation.atLeastOneHost");
-    if (!visitors.some((v) => v.firstName.trim())) e.visitors = t("visits.validation.atLeastOneVisitor");
-    // Para ter foto, o visitante vira uma identidade (2b) — exige sobrenome e e-mail.
+    if (!visitors.some((v) => v.fullName.trim())) e.visitors = t("visits.validation.atLeastOneVisitor");
+    // Para ter foto, o visitante vira uma identidade (2b) — exige nome e e-mail.
     visitors.forEach((v, i) => {
-      if (v.photo && (!v.firstName.trim() || !v.lastName.trim() || !v.email.trim())) {
+      if (v.photo && (!v.fullName.trim() || !v.email.trim())) {
         e[`visitor_${i}`] = t("visits.validation.photoNeedsIdentity");
       }
     });
@@ -150,10 +209,11 @@ function NovaVisitaPage() {
     if (existing.length) {
       id = existing[0].identityId;
     } else {
+      const { firstName, lastName } = splitName(v.fullName);
       const created = await argusApi.createIdentity({
         externalId: "",
-        firstName: v.firstName.trim(),
-        lastName: v.lastName.trim(),
+        firstName,
+        lastName,
         email,
         status: "Active",
         identityType: "Visitor", // identidade criada pela visita nasce como Visitor
@@ -175,9 +235,11 @@ function NovaVisitaPage() {
   const create = useMutation({
     mutationFn: async () => {
       const warnings: string[] = [];
-      const rows = visitors.filter((v) => v.firstName.trim());
+      const rows = visitors.filter((v) => v.fullName.trim());
+      // identityId resolvido por visitante (foto) — reaproveitado no cadastro.
+      const identityIds: (string | null)[] = [];
       const builtVisitors = await Promise.all(
-        rows.map(async (v) => {
+        rows.map(async (v, idx) => {
           let identityId: string | null = null;
           if (v.photo) {
             try {
@@ -185,12 +247,14 @@ function NovaVisitaPage() {
             } catch (e) {
               // Falha ao criar identidade/subir foto não bloqueia a visita:
               // o visitante entra como avulso (sem foto) e avisamos.
-              warnings.push(`${v.firstName.trim()}: ${(e as Error).message}`);
+              warnings.push(`${v.fullName.trim()}: ${(e as Error).message}`);
             }
           }
+          identityIds[idx] = identityId;
+          const { firstName, lastName } = splitName(v.fullName);
           return {
-            firstName: v.firstName.trim(),
-            lastName: v.lastName.trim() || null,
+            firstName,
+            lastName: lastName || null,
             email: v.email.trim() || null,
             ...(identityId ? { identityId } : {}),
           };
@@ -211,6 +275,24 @@ function NovaVisitaPage() {
         hosts: hosts.map((h) => ({ identityId: h.identityId })),
         visitors: builtVisitors,
       });
+
+      // Cadastro do sistema: grava/atualiza os visitantes para pesquisas futuras.
+      // Falha aqui não desfaz a visita já criada no ClearID — só avisa.
+      try {
+        await argusApi.upsertVisitors(
+          rows.map((v, idx) => ({
+            id: v.recordId ?? null,
+            fullName: v.fullName.trim(),
+            email: v.email.trim() || null,
+            documentNumber: v.document.trim() || null,
+            companyId: v.companyId ?? null,
+            companyName: v.companyName.trim() || null,
+            identityId: identityIds[idx] ?? null,
+          })),
+        );
+      } catch (e) {
+        toast.warning(t("visits.registryFailed", { message: (e as Error).message }));
+      }
 
       if (warnings.length) {
         toast.warning(t("visits.photoIssues"), {
@@ -446,40 +528,51 @@ function NovaVisitaPage() {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">{t("visits.visitors")}</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setVisitors((p) => [...p, { firstName: "", lastName: "", email: "", photo: null }])
-            }
-          >
+          <Button variant="outline" size="sm" onClick={() => setVisitors((p) => [...p, { ...EMPTY_VISITOR }])}>
             <Plus className="mr-1 h-4 w-4" /> {t("visits.addVisitor")}
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
+          <VisitorSearch onPick={pickRegisteredVisitor} />
+          <datalist id="visit-companies">
+            {companies.map((c) => (
+              <option key={c.id} value={c.name} />
+            ))}
+          </datalist>
           {visitors.map((v, i) => (
             <div key={i} className="space-y-2 rounded-md border p-3">
-              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1.5fr_auto]">
+              {v.recordId && (
+                <Badge variant="outline" className="gap-1 text-[11px]">
+                  <UserCheck className="h-3 w-3" /> {t("visits.searchVisitor.registered")}
+                </Badge>
+              )}
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1.6fr_1.4fr_1fr_1.2fr_auto]">
                 <Input
-                  placeholder={t("visits.firstName")}
-                  value={v.firstName}
-                  onChange={(e) =>
-                    setVisitors((p) => p.map((x, j) => (j === i ? { ...x, firstName: e.target.value } : x)))
-                  }
-                />
-                <Input
-                  placeholder={t("visits.lastName")}
-                  value={v.lastName}
-                  onChange={(e) =>
-                    setVisitors((p) => p.map((x, j) => (j === i ? { ...x, lastName: e.target.value } : x)))
-                  }
+                  aria-label={t("visits.fullName")}
+                  placeholder={t("visits.fullName")}
+                  value={v.fullName}
+                  onChange={(e) => updateVisitor(i, { fullName: e.target.value })}
                 />
                 <Input
                   type="email"
+                  aria-label={t("common.email")}
                   placeholder={t("common.email")}
                   value={v.email}
+                  onChange={(e) => updateVisitor(i, { email: e.target.value })}
+                />
+                <Input
+                  aria-label={t("visits.document")}
+                  placeholder={t("visits.document")}
+                  value={v.document}
+                  onChange={(e) => updateVisitor(i, { document: e.target.value })}
+                />
+                <Input
+                  list="visit-companies"
+                  aria-label={t("visits.company")}
+                  placeholder={t("visits.company")}
+                  value={v.companyName}
                   onChange={(e) =>
-                    setVisitors((p) => p.map((x, j) => (j === i ? { ...x, email: e.target.value } : x)))
+                    updateVisitor(i, { companyName: e.target.value, companyId: companyIdByName(e.target.value) })
                   }
                 />
                 <Button
@@ -488,6 +581,7 @@ function NovaVisitaPage() {
                   className="text-destructive hover:text-destructive"
                   disabled={visitors.length === 1}
                   onClick={() => setVisitors((p) => p.filter((_, j) => j !== i))}
+                  aria-label={t("common.delete")}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -496,9 +590,7 @@ function NovaVisitaPage() {
                 <>
                   <PhotoCapture
                     value={v.photo}
-                    onChange={(blob) =>
-                      setVisitors((p) => p.map((x, j) => (j === i ? { ...x, photo: blob } : x)))
-                    }
+                    onChange={(blob) => updateVisitor(i, { photo: blob })}
                   />
                   <p className="text-xs text-muted-foreground">{t("visits.photoHint")}</p>
                 </>
@@ -521,6 +613,81 @@ function NovaVisitaPage() {
           {mode === "now" ? t("visits.createAndCheckIn") : t("visits.schedule")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Pesquisa visitantes já cadastrados (nome, e-mail ou documento) e devolve o escolhido. */
+function VisitorSearch({ onPick }: { onPick: (r: VisitorRecord) => void }) {
+  const { t } = useT();
+  const [q, setQ] = useState("");
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const h = setTimeout(() => setTerm(q.trim()), 300);
+    return () => clearTimeout(h);
+  }, [q]);
+  const query = useQuery({
+    queryKey: ["visitors-search", term],
+    queryFn: () => argusApi.searchVisitors(term, 10),
+    enabled: term.length >= 2,
+    retry: false,
+  });
+  const results = query.data ?? [];
+
+  return (
+    <div className="space-y-2 rounded-md border border-dashed p-3">
+      <Label htmlFor="visitor-search" className="text-xs text-muted-foreground">
+        {t("visits.searchVisitor.label")}
+      </Label>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          id="visitor-search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t("visits.searchVisitor.placeholder")}
+          className="pl-8"
+        />
+        {query.isFetching && (
+          <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+        )}
+      </div>
+      {term.length >= 2 && !query.isFetching && (
+        query.isError ? (
+          <p className="text-xs text-destructive">{(query.error as Error).message}</p>
+        ) : results.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("visits.searchVisitor.empty")}</p>
+        ) : (
+          <div className="max-h-64 divide-y overflow-auto rounded-md border">
+            {results.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => {
+                  onPick(r);
+                  setQ("");
+                  setTerm("");
+                }}
+                className="flex w-full items-start gap-3 px-3 py-2 text-left text-sm hover:bg-muted"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{r.fullName}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {[r.documentNumber, r.email, r.companyName].filter(Boolean).join(" · ") || "—"}
+                  </span>
+                </span>
+                {r.lastVisitAt && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {t("visits.searchVisitor.lastVisit", {
+                      date: new Date(r.lastVisitAt).toLocaleDateString("pt-BR"),
+                    })}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }
