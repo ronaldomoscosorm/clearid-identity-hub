@@ -39,6 +39,13 @@ export const Route = createFileRoute("/_authenticated/identities/$id")({
   component: IdentityDetail,
 });
 
+/** Valor do ClearID conta como preenchido? Vazio e datas-sentinela (0001-/1900-/1970-01-01) não. */
+function hasClearIdValue(v: unknown): boolean {
+  const s = String(v ?? "").trim();
+  if (!s) return false;
+  return !(s.startsWith("0001-") || s.startsWith("1900-01-01") || s.startsWith("1970-01-01"));
+}
+
 function IdentityDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
@@ -298,6 +305,7 @@ function IdentityDetail() {
             </CardContent>
           </Card>
           <IdentityForm
+            key={id}
             mode="edit"
             initial={{
               ...clearIdToFormValues(query.data),
@@ -308,7 +316,7 @@ function IdentityDetail() {
                 ...(cfValuesQuery.data ?? {}),
                 ...Object.fromEntries(
                   Object.entries(clearIdToFormValues(query.data).customFields ?? {}).filter(
-                    ([, v]) => String(v ?? "").trim() !== "",
+                    ([, v]) => hasClearIdValue(v),
                   ),
                 ),
               },

@@ -347,13 +347,14 @@ export async function applyColumnMapping(
     }
     if (usesEmployer) {
       const siteId = resolveEmployerSite(employerMap, codigo, nome);
-      if (!siteId) unresolved++;
-      next.siteId = siteId;
+      // Site não resolvido não apaga um siteId mapeado diretamente (native:siteId).
+      if (siteId) next.siteId = siteId;
+      else if (!String(next.siteId ?? "").trim()) unresolved++;
     } else if (usesClearIdSite) {
       // Nome do site → siteId pelo catálogo ClearID (normalizado).
       const siteId = (siteName && clearIdSiteMap.get(siteName.toLowerCase())) || "";
-      if (!siteId) unresolved++;
-      next.siteId = siteId;
+      if (siteId) next.siteId = siteId;
+      else if (!String(next.siteId ?? "").trim()) unresolved++;
     }
     // Tipo de trabalhador padrão: só quando a planilha não trouxe um valor.
     // Injeta o CÓDIGO (para o ClearID) e o ID exato (para o shadow no Supabase,

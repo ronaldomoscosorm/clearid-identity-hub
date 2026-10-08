@@ -7,6 +7,7 @@ import { clearIdToFormValues, serializeCustomFieldsForPatch } from "@/lib/argus-
 import {
   saveIdentityCustomFields,
   loadIdentityCustomFields,
+  saveIdentityWorkerType,
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
 import { useT } from "@/lib/i18n";
@@ -78,11 +79,15 @@ function IdentityDetail() {
     mutationFn: async (vars: {
       data: Parameters<typeof argusApi.updateIdentity>[1];
       siteFieldValues: SiteFieldValue[];
+      workerTypeId: string | null;
     }) => {
-      const { data, siteFieldValues } = vars;
+      const { data, siteFieldValues, workerTypeId } = vars;
       // 1) Grava dados gerais (nome/e-mail/status) via PUT — sem custom fields.
       const { customFields, ...general } = data;
       await argusApi.updateIdentity(id, { ...general, customFields: undefined });
+      // 1b) Tipo de trabalhador exato (Supabase) — fonte do tipo; sem isso a próxima
+      // edição abria sem seleção.
+      await saveIdentityWorkerType(id, workerTypeId);
       // 2) Grava campos personalizados via PATCH dedicado.
       if (customFields) {
         const defs = (await argusApi.listCustomFields()).filter(
@@ -217,13 +222,20 @@ function IdentityDetail() {
           showCustomFields
           initial={{
             ...clearIdToFormValues(query.data),
+            // ClearID manda nos campos em que tem valor; o Supabase completa (mesma
+            // regra da tela de identities).
             customFields: {
-              ...(clearIdToFormValues(query.data).customFields ?? {}),
               ...(cfValuesQuery.data ?? {}),
+              ...Object.fromEntries(
+                Object.entries(clearIdToFormValues(query.data).customFields ?? {}).filter(([, v]) => {
+                  const sv = String(v ?? "").trim();
+                  return sv !== "" && !sv.startsWith("0001-") && !sv.startsWith("1900-01-01") && !sv.startsWith("1970-01-01");
+                }),
+              ),
             },
           }}
           submitting={update.isPending}
-          onSubmit={(data, siteFieldValues) => {
+          onSubmit={(data, siteFieldValues, _companyId, workerTypeId) => {
             const original = query.data!;
             // ClearID PUT é um replace completo. Preservamos os campos que
             // não estão no formulário para evitar 400 (Falha ao atualizar
@@ -245,6 +257,7 @@ function IdentityDetail() {
                 systemData: original.systemData ?? undefined,
               },
               siteFieldValues,
+              workerTypeId,
             });
           }}
           onCancel={() => navigate({ to: "/terceirizados" })}

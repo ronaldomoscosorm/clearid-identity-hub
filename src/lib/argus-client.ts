@@ -2149,7 +2149,7 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     firstName: i.firstName ?? "",
     lastName: i.lastName ?? "",
     email: i.email ?? "",
-    status: (i.status === "Inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
+    status: (String(i.status ?? "").toLowerCase() === "inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
     customFields: customFieldsToRecord(i.systemData?.customFields),
     // Site conforme o ClearID: companyData.siteId (onde é gravado) → topo →
     // systemData.siteId. Se nenhum existir, fica indefinido (o form pede escolha).

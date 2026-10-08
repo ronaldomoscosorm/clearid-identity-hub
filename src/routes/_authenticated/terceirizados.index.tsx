@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, Search } from "lucide-react";
-import { argusApi, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
+import { supabase } from "@/integrations/supabase/client";
 import { useT } from "@/lib/i18n";
 import { IdentityThumb } from "@/components/IdentityThumb";
 import { Button } from "@/components/ui/button";
@@ -67,9 +68,19 @@ function TerceirizadosPage() {
   const [hasSearched, setHasSearched] = useState<boolean>(true);
   const [applied, setApplied] = useState(saved ?? emptyApplied);
 
+  const activeProfile = useActiveProfile();
   const query = useQuery({
-    queryKey: ["terceirizados", siteId, applied],
+    queryKey: ["terceirizados", siteId, applied, activeProfile],
     queryFn: async () => {
+      // Códigos aceitos no ClearID para "terceiro": o código Argus legado e a
+      // DESCRIÇÃO (nome) dos tipos do Supabase mapeados para "Terceiros".
+      const terceiroCodes = new Set<string>(["terceiros"]);
+      const { data: wts } = await supabase
+        .from("worker_types")
+        .select("name, argus_worker_type_code")
+        .eq("profile", activeProfile)
+        .eq("argus_worker_type_code", "Terceiros");
+      for (const w of wts ?? []) if (w.name) terceiroCodes.add(w.name.trim().toLowerCase());
       // A API de /search não filtra por workerTypeCode e nem retorna esse
       // campo na listagem. Buscamos os detalhes de cada identity em paralelo
       // (onde workerTypeCode existe em companyData) e filtramos por
@@ -102,7 +113,8 @@ function TerceirizadosPage() {
             : null) ??
           it.workerTypeCode ??
           "";
-        return code.trim().toLowerCase() === "terceiros";
+        // ClearID guarda a DESCRIÇÃO do tipo (nome no Supabase); registros antigos têm o código Argus.
+        return terceiroCodes.has(code.trim().toLowerCase());
       });
       return { items, total: items.length };
     },

@@ -179,6 +179,8 @@ function ImportPage() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [defaultWorkerTypeId, setDefaultWorkerTypeId] = useState<string>("");
   const [mappingName, setMappingName] = useState<string>("");
+  // Arquivo preparado na simulação só vale para os mesmos parâmetros.
+  useEffect(() => setLastPrepared(null), [mapping, defaultWorkerTypeId, importMode, siteMode]);
   const [selectedMappingId, setSelectedMappingId] = useState<string>("");
 
   const importActiveProfile = useActiveProfile();
@@ -234,7 +236,7 @@ function ImportPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("worker_types")
-        .select("id, name, name_i18n, argus_worker_type_code")
+        .select("id, name, code, name_i18n, argus_worker_type_code")
         .eq("profile", importActiveProfile)
         .eq("is_active", true)
         .order("display_index", { ascending: true, nullsFirst: false });

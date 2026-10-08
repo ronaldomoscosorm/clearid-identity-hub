@@ -221,7 +221,6 @@ function LayoutFormularioPage() {
     staleTime: 5 * 60 * 1000,
   });
   const workerTypes = workerTypesQuery.data ?? [];
-  const colaboradorId = findColaboradorId(workerTypes);
 
   // Campos disponíveis = PERMITIDO no cliente (worker_type_id null) + EXIBIDO
   // para o tipo em edição (worker_type_id === editWorkerType). Sem herança do
