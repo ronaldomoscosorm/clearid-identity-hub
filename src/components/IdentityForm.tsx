@@ -647,7 +647,24 @@ export function IdentityForm({
     (fieldsQuery.data ?? []).filter((f) => !f.isDeleted).map((f) => [f.customFieldName, f]),
   );
   // Dropdowns especiais (opções value/label vinculadas a campos do ClearID).
-  const { byName: specialByName, labelByName: specialLabelByName } = useSpecialFields();
+  const { byName: specialByName, labelByName: specialLabelByName, defaultByName: specialDefaultByName } = useSpecialFields();
+  // Cadastro NOVO: dropdowns especiais com opção padrão já abrem pré-selecionados
+  // (só preenche o que está vazio; o usuário pode trocar).
+  useEffect(() => {
+    if (mode !== "create" || specialDefaultByName.size === 0) return;
+    setCustomFields((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [name, def] of specialDefaultByName) {
+        if (!String(next[name] ?? "").trim()) {
+          next[name] = def;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, specialDefaultByName.size]);
 
   // Seletor de data compartilhado (campos do site e do catálogo). Usa
   // Popover+Calendário em vez de <input type="date">: o input nativo mostra a

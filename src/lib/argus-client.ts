@@ -316,7 +316,22 @@ export class ArgusApiError extends Error {
   }
 }
 
-export async function argusFetch<T = unknown>(
+export /**
+ * Authorization com a MESMA precedência do argusFetch: apiKey legado da config,
+ * senão o SSO token do localStorage. Usado pelos uploads (multipart) e demais
+ * chamadas que montam o fetch à mão — sem isto, quem entra pelo token (sem o
+ * cookie SSO) recebia 401 na importação e nos uploads.
+ */
+function applyAuthHeader(headers: Headers, cfg: { apiKey?: string | null }): void {
+  if (cfg.apiKey) {
+    headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    return;
+  }
+  const ssoToken = getSsoToken();
+  if (ssoToken) headers.set("Authorization", `Bearer ${ssoToken}`);
+}
+
+async function argusFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
   opts: { allSites?: boolean; siteId?: string | null; environment?: string } = {},
@@ -1925,7 +1940,7 @@ export const argusApi = {
     if (!cfg.baseUrl) return null;
     let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/${encodeURIComponent(id)}/picture`;
     const headers = new Headers();
-    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    applyAuthHeader(headers, cfg);
     headers.set("X-ClearId-Environment", getActiveProfile());
     // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
     const sys = getSystemObjectId();
@@ -1947,7 +1962,7 @@ export const argusApi = {
     const form = new FormData();
     form.append("picture", blob, "capture.jpg");
     const headers = new Headers();
-    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    applyAuthHeader(headers, cfg);
     headers.set("X-ClearId-Environment", getActiveProfile());
     // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
     const sys = getSystemObjectId();
@@ -1981,7 +1996,7 @@ export const argusApi = {
     const form = new FormData();
     form.append("file", file, file.name);
     const headers = new Headers();
-    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    applyAuthHeader(headers, cfg);
     headers.set("X-ClearId-Environment", getActiveProfile());
     // X-Argus-Site não é enviado (evita 403 por formato incompatível com o grant).
     const sys = getSystemObjectId();
@@ -2032,7 +2047,7 @@ export const argusApi = {
     form.append("file", file, file.name);
     if (opts?.rowNumbers?.length) form.append("rowNumbers", opts.rowNumbers.join(","));
     const headers = new Headers();
-    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    applyAuthHeader(headers, cfg);
     headers.set("X-ClearId-Environment", getActiveProfile());
     const sys = getSystemObjectId();
     if (sys) {
@@ -2059,7 +2074,7 @@ export const argusApi = {
     if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
     const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import/jobs/${encodeURIComponent(jobId)}`;
     const headers = new Headers();
-    if (cfg.apiKey) headers.set("Authorization", `Bearer ${cfg.apiKey}`);
+    applyAuthHeader(headers, cfg);
     headers.set("X-ClearId-Environment", getActiveProfile());
     const res = await fetch(url, { method: "GET", credentials: "include", headers });
     const body = await res.json().catch(() => null);

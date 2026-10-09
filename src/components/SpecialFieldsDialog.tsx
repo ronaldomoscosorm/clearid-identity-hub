@@ -47,7 +47,11 @@ export function SpecialFieldsDialog({
   const save = useMutation({
     mutationFn: async (d: Draft) => {
       const options = d.options
-        .map((o) => ({ value: o.value.trim(), label: o.label.trim() || o.value.trim() }))
+        .map((o) => ({
+          value: o.value.trim(),
+          label: o.label.trim() || o.value.trim(),
+          ...(o.isDefault ? { isDefault: true } : {}),
+        }))
         .filter((o) => o.value);
       const { error } = await supabase
         .from("special_custom_fields")
@@ -176,13 +180,14 @@ export function SpecialFieldsDialog({
             </div>
 
             <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-xs font-medium text-muted-foreground">
+              <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2 text-xs font-medium text-muted-foreground">
                 <span>{t("specialFields.optionLabel")}</span>
                 <span>{t("specialFields.optionValue")}</span>
+                <span>{t("specialFields.optionDefault")}</span>
                 <span />
               </div>
               {draft.options.map((o, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+                <div key={i} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2">
                   <Input
                     value={o.label}
                     placeholder={t("specialFields.optionLabelPlaceholder")}
@@ -192,6 +197,20 @@ export function SpecialFieldsDialog({
                     value={o.value}
                     placeholder={t("specialFields.optionValuePlaceholder")}
                     onChange={(e) => setOption(i, { value: e.target.value })}
+                  />
+                  {/* Opção padrão: pré-selecionada nos cadastros novos (uma por campo; clique de novo para desmarcar). */}
+                  <input
+                    type="radio"
+                    name="special-default-option"
+                    className="h-4 w-4 accent-primary"
+                    title={t("specialFields.optionDefaultHint")}
+                    checked={!!o.isDefault}
+                    onClick={() =>
+                      setDraft((d) =>
+                        d ? { ...d, options: d.options.map((x, j) => ({ ...x, isDefault: j === i ? !x.isDefault : false })) } : d,
+                      )
+                    }
+                    onChange={() => undefined}
                   />
                   <Button
                     variant="ghost"

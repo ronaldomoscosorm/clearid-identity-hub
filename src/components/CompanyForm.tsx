@@ -126,7 +126,7 @@ export function CompanyForm({
   const { t } = useT();
   // Dropdowns especiais (Campos personalizados → "campo especial"): mesmas opções
   // value/label usadas no cadastro de identity. Prevalecem sobre o tipo do campo.
-  const { byName: specialByName, labelByName: specialLabelByName } = useSpecialFields();
+  const { byName: specialByName, labelByName: specialLabelByName, defaultByName: specialDefaultByName } = useSpecialFields();
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState>(company ? toForm(company) : EMPTY_FORM);
   // Valores começam VAZIOS: só o que já está gravado para a empresa é carregado.
@@ -153,6 +153,24 @@ export function CompanyForm({
     enabled: Boolean(profile),
   });
   const siteFields = siteFieldsQuery.data ?? [];
+  // Empresa NOVA: campos com dropdown especial e opção padrão já abrem pré-selecionados.
+  useEffect(() => {
+    if (company || !siteFields.length || specialDefaultByName.size === 0) return;
+    setCustomValues((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const sf of siteFields) {
+        const name = sf.definition?.custom_field_name;
+        const def = name ? specialDefaultByName.get(name) : undefined;
+        if (def && !String(next[sf.id] ?? "").trim()) {
+          next[sf.id] = def;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company, siteFieldsQuery.data, specialDefaultByName.size]);
 
   // Edição: carrega os valores gravados e quais certidões já têm arquivo.
   useEffect(() => {
@@ -346,8 +364,10 @@ export function CompanyForm({
               const special = sf.definition ? specialByName.get(sf.definition.custom_field_name) : undefined;
               const kind = special?.length ? "list" : typeOf(sf.definition?.custom_field_type);
               const value = customValues[sf.id] ?? "";
-              const label =
-                (sf.definition && specialLabelByName.get(sf.definition.custom_field_name)) || fieldLabel(sf, t);
+              // O campo mantém o próprio nome (ex.: "Pré-Qualificação"); o campo especial
+              // vinculado (ex.: "Aprovado") dá as opções e aparece como placeholder da lista.
+              const label = fieldLabel(sf, t);
+              const specialLabel = sf.definition ? specialLabelByName.get(sf.definition.custom_field_name) : undefined;
               const def = sf.definition;
               return (
                 <div key={sf.id} className="space-y-2 rounded-md border p-3">
@@ -370,7 +390,7 @@ export function CompanyForm({
                   ) : kind === "list" ? (
                     <Select value={value} onValueChange={(v) => setCV(sf.id, v)} disabled={busy}>
                       <SelectTrigger id={`cf-${sf.id}`}>
-                        <SelectValue placeholder={t("companies.customField.selectPlaceholder")} />
+                        <SelectValue placeholder={specialLabel || t("companies.customField.selectPlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
                         {special?.length
