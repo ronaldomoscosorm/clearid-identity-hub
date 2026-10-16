@@ -255,6 +255,8 @@ export interface ArgusError {
 
 export interface IdentityImportRow {
   rowNumber: number;
+  /** Cliente (perfil) em que a linha foi importada — só em importação com coluna de cliente. */
+  cliente?: string;
   action: string; // Created | Updated | Skipped | Failed | WouldCreate | WouldUpdate
   identityId?: string | null;
   externalId?: string | null;
@@ -270,9 +272,27 @@ export interface IdentityImportRow {
   unchanged?: boolean;
   /** Campos que mudariam/mudaram no cadastro existente. */
   changedFields?: string[];
+  /** Regra (team) em que a pessoa deve ser incluída após a importação (coluna mapeada). */
+  regra?: string | null;
+}
+
+/** Resultado da inclusão nas regras (teams) após a importação. */
+export interface ImportTeamSummary {
+  name: string;
+  teamId?: string | null;
+  environment?: string | null;
+  /** Identidades enviadas para inclusão. */
+  requested: number;
+  /** Identidades incluídas (aceitas pelo ClearID). */
+  added: number;
+  /** Regra não encontrada pelo nome. */
+  unresolved?: boolean;
+  error?: string | null;
 }
 
 export interface IdentityImportResult {
+  /** Inclusão nas regras (teams) executada após a importação. */
+  teams?: ImportTeamSummary[];
   fileName?: string | null;
   environment: string;
   dryRun: boolean;
@@ -1224,6 +1244,34 @@ export const argusApi = {
     return data?.teams ?? [];
   },
 
+  /**
+   * Todas as regras (teams) do ambiente: sem `siteId` a API pagina (Team Service,
+   * `continuation`); segue as páginas até o fim. Com `siteId`, pesquisa pelo site.
+   */
+  listAllTeams: async (params?: { siteId?: string | null; environment?: string }): Promise<ClearIdTeam[]> => {
+    const out: ClearIdTeam[] = [];
+    let continuation: string | null = null;
+    for (let i = 0; i < 50; i++) {
+      const q = new URLSearchParams();
+      q.set("includeDeleted", "false");
+      q.set("take", "100");
+      if (continuation) q.set("continuation", continuation);
+      const data: { teams?: ClearIdTeam[]; continuationToken?: string | null; continuation?: string | null } | null =
+        await unwrap(
+          argusFetch(`/api/teams?${q.toString()}`, undefined, {
+            siteId: params?.siteId,
+            environment: params?.environment,
+          }),
+        );
+      const page = data?.teams ?? [];
+      out.push(...page);
+      continuation = data?.continuationToken ?? data?.continuation ?? null;
+      if (!continuation || !page.length || params?.siteId) break;
+    }
+    const seen = new Set<string>();
+    return out.filter((t) => !t.isDeleted && t.teamId && !seen.has(t.teamId) && seen.add(t.teamId));
+  },
+
   listTeamMembers: async (teamId: string, params?: { searchText?: string; count?: number }) => {
     const q = new URLSearchParams();
     q.set("count", String(params?.count ?? 200));
@@ -1531,6 +1579,8 @@ export const argusApi = {
       endDateTimeUtc?: string | null;
       reason?: string;
       siteId?: string | null;
+      /** Ambiente (perfil ClearID) da regra — importação por cliente. */
+      environment?: string;
     },
   ) =>
     argusFetch<unknown>(
@@ -1545,7 +1595,7 @@ export const argusApi = {
           reason: payload.reason ?? "Portal Argus",
         }),
       },
-      { siteId: payload.siteId },
+      { siteId: payload.siteId, environment: payload.environment },
     ),
 
   removeTeamMembers: (
@@ -2032,6 +2082,8 @@ export const argusApi = {
       importMode?: "all" | "new" | "changed";
       /** Linhas (numeração da planilha) a processar; vazio = todas. */
       rowNumbers?: number[];
+      /** Cliente (perfil ClearID) da importação; default: o ativo. */
+      environment?: string;
     },
   ): Promise<string> => {
     const cfg = getConfig();
@@ -2048,7 +2100,7 @@ export const argusApi = {
     if (opts?.rowNumbers?.length) form.append("rowNumbers", opts.rowNumbers.join(","));
     const headers = new Headers();
     applyAuthHeader(headers, cfg);
-    headers.set("X-ClearId-Environment", getActiveProfile());
+    headers.set("X-ClearId-Environment", opts?.environment ?? getActiveProfile());
     const sys = getSystemObjectId();
     if (sys) {
       headers.set("X-System-Object-Id", sys);
@@ -2069,13 +2121,13 @@ export const argusApi = {
   },
 
   /** Consulta o status de um job de importação assíncrono. */
-  getImportJob: async (jobId: string): Promise<ImportJob> => {
+  getImportJob: async (jobId: string, environment?: string): Promise<ImportJob> => {
     const cfg = getConfig();
     if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
     const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import/jobs/${encodeURIComponent(jobId)}`;
     const headers = new Headers();
     applyAuthHeader(headers, cfg);
-    headers.set("X-ClearId-Environment", getActiveProfile());
+    headers.set("X-ClearId-Environment", environment ?? getActiveProfile());
     const res = await fetch(url, { method: "GET", credentials: "include", headers });
     const body = await res.json().catch(() => null);
     if (!res.ok) {

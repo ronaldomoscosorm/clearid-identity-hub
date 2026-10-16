@@ -4,7 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, Save, Trash2, Download } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError, useDefaultSiteId, useActiveProfile, type IdentityImportResult } from "@/lib/argus-client";
+import {
+  argusApi,
+  ArgusApiError,
+  useDefaultSiteId,
+  useActiveProfile,
+  type IdentityImportResult,
+  type ImportTeamSummary,
+} from "@/lib/argus-client";
 import { useUserScope } from "@/lib/user-scope";
 import {
   withSiteId,
@@ -14,7 +21,13 @@ import {
   EMPLOYER_CODE_TARGET,
   EMPLOYER_NAME_TARGET,
   CLEARID_SITE_NAME_TARGET,
+  CLIENT_NAME_TARGET,
+  TEAM_NAME_TARGET,
   WORKER_TYPE_TARGET,
+  normKey,
+  listSheets,
+  readDistinctValues,
+  type PreparedGroup,
   NATIVE_TARGET_PREFIX,
   CF_TARGET_PREFIX,
   type EmployerSiteMap,
@@ -51,6 +64,7 @@ const ACCEPT = ".csv,.xlsx,.xls";
 const IGNORE = "__ignore__";
 // Sentinela de UI para "sem tipo de trabalhador padrão".
 const NO_WT = "__none__";
+const NO_TEAM = "__none__";
 
 // Campos NATIVOS do import (coluna aceita pelo backend → rótulo amigável).
 const NATIVE_TARGETS: { key: string; label: string }[] = [
@@ -171,7 +185,11 @@ function ImportPage() {
   const [importMode, setImportMode] = useState<"all" | "new" | "changed">("new");
   // Arquivo preparado na última simulação: reaproveitado em "importar selecionados"
   // (mesma numeração de linhas) + linhas marcadas pelo usuário.
-  const [lastPrepared, setLastPrepared] = useState<File | null>(null);
+  // Um arquivo preparado por cliente (sem coluna de cliente: um único grupo, do cliente ativo).
+  const [lastPrepared, setLastPrepared] = useState<PreparedGroup[] | null>(null);
+  // Aba da planilha a importar (arquivos com várias abas: capa/resumo + dados).
+  const [sheets, setSheets] = useState<string[]>([]);
+  const [sheet, setSheet] = useState<string>("");
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<IdentityImportResult | null>(null);
   // Tela de mapeamento (modo "mapped"): cabeçalhos da planilha + coluna→alvo.
@@ -179,8 +197,11 @@ function ImportPage() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [defaultWorkerTypeId, setDefaultWorkerTypeId] = useState<string>("");
   const [mappingName, setMappingName] = useState<string>("");
+  // Regra (team) em que as pessoas importadas são incluídas ao final ("" = nenhuma).
+  // Alternativa: coluna da planilha mapeada para "Regra · Nome" (uma regra por linha).
+  const [teamId, setTeamId] = useState<string>("");
   // Arquivo preparado na simulação só vale para os mesmos parâmetros.
-  useEffect(() => setLastPrepared(null), [mapping, defaultWorkerTypeId, importMode, siteMode]);
+  useEffect(() => setLastPrepared(null), [mapping, defaultWorkerTypeId, importMode, siteMode, sheet, teamId]);
   const [selectedMappingId, setSelectedMappingId] = useState<string>("");
 
   const importActiveProfile = useActiveProfile();
@@ -334,6 +355,11 @@ function ImportPage() {
     }
     return (header: string): string => {
       const h = normalizeHeader(header);
+      if (["cliente", "client", "nome do cliente", "perfil"].includes(h)) return CLIENT_NAME_TARGET;
+      // Regra de acesso (team) por linha: incluída após a importação.
+      if (["regra", "regra de acesso", "regras", "team", "grupo", "grupo de acesso", "access rule", "role"].includes(h)) {
+        return TEAM_NAME_TARGET;
+      }
       if (["filial", "nome (employer)"].includes(h)) return EMPLOYER_NAME_TARGET;
       if (["codigo", "cod", "codigo (employer)"].includes(h)) return EMPLOYER_CODE_TARGET;
       // "Site" com o NOME do site (template Genetec) → resolve pelo catálogo ClearID.
@@ -391,7 +417,7 @@ function ImportPage() {
     lastMappingModeRef.current = siteMode;
     const suggest = siteMode === "employer" ? suggestEmployerTarget : suggestTarget;
     let alive = true;
-    readHeaders(file)
+    readHeaders(file, sheet || undefined)
       .then((hs) => {
         if (!alive) return;
         setHeaders(hs);
@@ -407,7 +433,31 @@ function ImportPage() {
     return () => {
       alive = false;
     };
-  }, [file, siteMode, usesColumnMapping, suggestTarget, suggestEmployerTarget]);
+  }, [file, sheet, siteMode, usesColumnMapping, suggestTarget, suggestEmployerTarget]);
+
+  // Abas do arquivo: sugere a primeira que parece tabela (pula capa/resumo).
+  useEffect(() => {
+    if (!file) {
+      setSheets([]);
+      setSheet("");
+      return;
+    }
+    let alive = true;
+    listSheets(file)
+      .then(({ names, suggested }) => {
+        if (!alive) return;
+        setSheets(names);
+        setSheet(suggested);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setSheets([]);
+        setSheet("");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [file]);
 
   const importScope = useUserScope();
   const sitesQuery = useQuery({
@@ -420,12 +470,83 @@ function ImportPage() {
     .slice()
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
 
+  // Regras (teams) do cliente ativo: do site escolhido (modo site único) ou todas do ambiente.
+  const teamSiteFilter = siteMode === "single" ? siteId || null : null;
+  const teamsQuery = useQuery({
+    queryKey: ["import-teams", importActiveProfile, teamSiteFilter],
+    queryFn: () => argusApi.listAllTeams({ siteId: teamSiteFilter }),
+    staleTime: 5 * 60 * 1000,
+  });
+  const teams = (teamsQuery.data ?? []).slice().sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
+  // Coluna da planilha mapeada para "Regra · Nome" (prevalece sobre a regra fixa).
+  const teamHeader = usesColumnMapping
+    ? Object.entries(mapping).find(([, tgt]) => tgt === TEAM_NAME_TARGET)?.[0]
+    : undefined;
+
+  /**
+   * Inclui as pessoas importadas (criadas/atualizadas) nas regras: a fixa escolhida
+   * na tela ou a da coluna "Regra · Nome" de cada linha. Resolve o nome no ambiente
+   * da linha e envia em lotes; falhas não desfazem a importação.
+   */
+  const includeInTeams = async (
+    results: { res: IdentityImportResult; env: string | null }[],
+    fileName: string,
+    fixedTeam: { teamId: string; name: string } | null,
+  ): Promise<ImportTeamSummary[]> => {
+    type Bucket = { name: string; env: string | null; ids: Set<string>; teamId?: string | null };
+    const buckets = new Map<string, Bucket>();
+    for (const { res, env } of results) {
+      for (const row of res.rows) {
+        if (!row.identityId || !/^(Created|Updated)$/i.test(row.action)) continue;
+        const name = (row.regra ?? "").trim() || fixedTeam?.name || "";
+        if (!name) continue;
+        const key = `${env ?? ""}|${normKey(name)}`;
+        const b = buckets.get(key) ?? { name, env, ids: new Set<string>(), teamId: !row.regra?.trim() && fixedTeam ? fixedTeam.teamId : undefined };
+        b.ids.add(row.identityId);
+        buckets.set(key, b);
+      }
+    }
+    const out: ImportTeamSummary[] = [];
+    for (const b of buckets.values()) {
+      const summary: ImportTeamSummary = { name: b.name, environment: b.env, requested: b.ids.size, added: 0 };
+      try {
+        let id = b.teamId ?? "";
+        if (!id) {
+          const found = (await argusApi.listTeams({ name: b.name, take: 200, environment: b.env ?? undefined })).filter((x) => !x.isDeleted);
+          const exact = found.filter((x) => normKey(x.name) === normKey(b.name));
+          const pick = exact.length === 1 ? exact[0] : found.length === 1 ? found[0] : undefined;
+          if (!pick) {
+            summary.unresolved = true;
+            out.push(summary);
+            continue;
+          }
+          id = pick.teamId;
+        }
+        summary.teamId = id;
+        const ids = [...b.ids];
+        for (let i = 0; i < ids.length; i += 100) {
+          const chunk = ids.slice(i, i + 100);
+          await argusApi.addTeamMembers(id, {
+            identityIds: chunk,
+            reason: `Importação ${fileName}`,
+            environment: b.env ?? undefined,
+          });
+          summary.added += chunk.length;
+        }
+      } catch (e) {
+        summary.error = e instanceof ArgusApiError ? e.message : (e as Error).message;
+      }
+      out.push(summary);
+    }
+    return out;
+  };
+
   const importMut = useMutation({
     mutationFn: async ({ file: f, selection }: { file: File; selection?: number[] }) => {
-      let prepared: File;
+      let groups: PreparedGroup[];
       if (selection?.length && lastPrepared) {
-        // Importar selecionados: usa o MESMO arquivo preparado na simulação.
-        prepared = lastPrepared;
+        // Importar selecionados: usa os MESMOS arquivos preparados na simulação.
+        groups = lastPrepared;
       } else if (siteMode === "mapped" || siteMode === "employer") {
         // Aplica o mapeamento coluna→campo definido na tela (Employer e mapeado). O tipo de trabalhador
         // padrão só é injetado quando a planilha não trouxer o tipo.
@@ -436,46 +557,141 @@ function ImportPage() {
         const clearIdSiteMap = new Map(
           (sitesQuery.data ?? []).map((s) => [(s.name ?? "").trim().toLowerCase(), s.siteId] as const),
         );
+        // Alvo "Cliente · Nome": catálogo de sites e tipos de trabalhador de CADA
+        // cliente citado na planilha (só os que o usuário pode usar).
+        const clientHeader = Object.entries(mapping).find(([, tgt]) => tgt === CLIENT_NAME_TARGET)?.[0];
+        const clients = importScope.visibleProfiles.map((p) => ({ code: p.code, label: p.label }));
+        const siteMapByClient = new Map<string, Map<string, string>>();
+        const workerTypesByClient = new Map<string, typeof workerTypes>();
+        if (clientHeader) {
+          const names = await readDistinctValues(f, clientHeader, sheet || undefined);
+          const norm = (x: string) => x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+          const codes = [...new Set(names.map((n) => clients.find((c) => norm(c.code) === norm(n) || norm(c.label) === norm(n))?.code).filter((c): c is string => Boolean(c)))];
+          await Promise.all(
+            codes.map(async (code) => {
+              const list = await argusApi.listSites(code);
+              siteMapByClient.set(code, new Map(list.map((s) => [(s.name ?? "").trim().toLowerCase(), s.siteId] as const)));
+            }),
+          );
+          if (codes.length) {
+            const { data: wts } = await supabase
+              .from("worker_types")
+              .select("id, name, code, name_i18n, argus_worker_type_code, profile")
+              .in("profile", codes)
+              .eq("is_active", true);
+            for (const w of wts ?? []) {
+              const arr = workerTypesByClient.get(w.profile) ?? [];
+              arr.push(w);
+              workerTypesByClient.set(w.profile, arr);
+            }
+          }
+        }
         const r = await applyColumnMapping(f, mapping, employerMap, {
           defaultWorkerTypeCode,
           defaultWorkerTypeId,
           clearIdSiteMap,
           workerTypes,
+          sheet: sheet || undefined,
+          clients,
+          activeClient: importActiveProfile,
+          siteMapByClient,
+          workerTypesByClient,
         });
         if (r.unresolved > 0) {
           toast.warning(t("import.employer.unresolved", { count: r.unresolved, total: r.total }));
         }
-        prepared = r.file;
+        if (r.unresolvedClients > 0) {
+          toast.warning(t("import.client.unresolved", { count: r.unresolvedClients, names: r.unknownClients.join(", ") || "—" }));
+        }
+        groups = r.groups;
       } else {
         // Injeta o site escolhido na coluna `siteId` de todas as linhas.
-        prepared = await withSiteId(f, siteId);
+        const prepared = await withSiteId(f, siteId, sheet || undefined);
+        groups = [{ client: null, label: "", file: prepared, origRows: [] }];
       }
-      // Processamento ASSÍNCRONO (background) + polling — evita timeout de gateway.
-      if (!selection?.length) setLastPrepared(prepared);
-      const jobId = await argusApi.startImportAsync(
-        prepared,
-        selection?.length
-          ? { dryRun: false, updateAfastamentoOnly: afastamentoOnly, importMode: "all", rowNumbers: selection }
-          : {
-              dryRun,
-              updateAfastamentoOnly: afastamentoOnly,
-              maxRows: Number(batchSize) > 0 ? Number(batchSize) : null,
-              importMode: afastamentoOnly ? "all" : importMode,
-            },
-      );
-      // Até ~20 min (600 × 2s), suficiente para lotes grandes.
-      for (let i = 0; i < 600; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        const job = await argusApi.getImportJob(jobId);
-        if (job.status === "Completed") {
-          if (!job.result) throw new ArgusApiError({ status: 0, message: "Job sem resultado." });
-          return job.result;
+      if (!selection?.length) setLastPrepared(groups);
+
+      // Uma importação por cliente (ambiente). Resultados somados; a linha volta a
+      // ter o número da planilha original e o nome do cliente.
+      const runOne = async (g: PreparedGroup): Promise<IdentityImportResult | null> => {
+        let rowNumbers: number[] | undefined;
+        if (selection?.length) {
+          const wanted = new Set(selection);
+          rowNumbers = g.origRows.length
+            ? g.origRows.map((orig, i) => (wanted.has(orig) ? i + 2 : -1)).filter((n) => n > 0)
+            : selection;
+          if (!rowNumbers.length) return null;
         }
-        if (job.status === "Failed") {
-          throw new ArgusApiError({ status: 0, message: job.error ?? "Falha na importação." });
+        const env = g.client ?? undefined;
+        // Processamento ASSÍNCRONO (background) + polling — evita timeout de gateway.
+        const jobId = await argusApi.startImportAsync(
+          g.file,
+          rowNumbers
+            ? { dryRun: false, updateAfastamentoOnly: afastamentoOnly, importMode: "all", rowNumbers, environment: env }
+            : {
+                dryRun,
+                updateAfastamentoOnly: afastamentoOnly,
+                maxRows: Number(batchSize) > 0 ? Number(batchSize) : null,
+                importMode: afastamentoOnly ? "all" : importMode,
+                environment: env,
+              },
+        );
+        // Até ~20 min (600 × 2s), suficiente para lotes grandes.
+        for (let i = 0; i < 600; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const job = await argusApi.getImportJob(jobId, env);
+          if (job.status === "Completed") {
+            if (!job.result) throw new ArgusApiError({ status: 0, message: "Job sem resultado." });
+            const res = job.result;
+            if (g.origRows.length || g.label || g.teamNames) {
+              res.rows = res.rows.map((row) => ({
+                ...row,
+                rowNumber: g.origRows.length ? (g.origRows[row.rowNumber - 2] ?? row.rowNumber) : row.rowNumber,
+                ...(g.label ? { cliente: g.label } : {}),
+                ...(g.teamNames ? { regra: g.teamNames[row.rowNumber - 2] ?? "" } : {}),
+              }));
+            }
+            return res;
+          }
+          if (job.status === "Failed") {
+            throw new ArgusApiError({ status: 0, message: job.error ?? "Falha na importação." });
+          }
+        }
+        throw new ArgusApiError({ status: 0, message: "Tempo excedido aguardando a importação." });
+      };
+      const results: IdentityImportResult[] = [];
+      // Ambiente (cliente) de cada resultado, para resolver/incluir na regra certa.
+      const resultEnvs: { res: IdentityImportResult; env: string | null }[] = [];
+      for (const g of groups) {
+        const res = await runOne(g);
+        if (res) {
+          results.push(res);
+          resultEnvs.push({ res, env: g.client });
         }
       }
-      throw new ArgusApiError({ status: 0, message: "Tempo excedido aguardando a importação." });
+      if (!results.length) throw new ArgusApiError({ status: 0, message: "Nenhuma linha a importar." });
+      // Inclusão nas regras só na importação real (a simulação não cria identidades).
+      const fixedTeam = teamHeader ? null : teams.find((x) => x.teamId === teamId) ?? null;
+      const wantsTeams = Boolean(teamHeader || fixedTeam);
+      const isDry = !selection?.length && dryRun;
+      const teamSummaries = wantsTeams && !isDry ? await includeInTeams(resultEnvs, f.name, fixedTeam) : undefined;
+      if (results.length === 1) return { ...results[0], ...(teamSummaries ? { teams: teamSummaries } : {}) };
+      const sum = (k: "totalRows" | "created" | "updated" | "skipped" | "failed") => results.reduce((n, r) => n + (r[k] ?? 0), 0);
+      const merged: IdentityImportResult = {
+        ...results[0],
+        environment: results.map((r) => r.environment).join(", "),
+        totalRows: sum("totalRows"),
+        created: sum("created"),
+        updated: sum("updated"),
+        skipped: sum("skipped"),
+        failed: sum("failed"),
+        alreadyImported: results.reduce((n, r) => n + (r.alreadyImported ?? 0), 0),
+        unchanged: results.reduce((n, r) => n + (r.unchanged ?? 0), 0),
+        notProcessed: results.reduce((n, r) => n + (r.notProcessed ?? 0), 0),
+        rows: results.flatMap((r) => r.rows).sort((a, b) => a.rowNumber - b.rowNumber),
+        ...(teamSummaries ? { teams: teamSummaries } : {}),
+      };
+      return merged;
     },
     onSuccess: (r) => {
       setResult(r);
@@ -488,6 +704,11 @@ function ImportPage() {
       });
       if (r.failed > 0) toast.warning(msg);
       else toast.success(msg);
+      for (const tm of r.teams ?? []) {
+        if (tm.unresolved) toast.warning(t("import.team.unresolved", { name: tm.name }));
+        else if (tm.error) toast.error(t("import.team.error", { name: tm.name, message: tm.error }));
+        else toast.success(t("import.team.added", { name: tm.name, count: tm.added }));
+      }
     },
     onError: (e) => {
       const message = e instanceof ArgusApiError ? e.message : (e as Error).message;
@@ -579,6 +800,23 @@ function ImportPage() {
                 <FileSpreadsheet className="h-4 w-4" />
                 {file.name} · {(file.size / 1024).toFixed(1)} KB
               </p>
+            )}
+            {file && sheets.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="sheet">{t("import.sheet.label")}</Label>
+                <Select value={sheet} onValueChange={setSheet} disabled={importMut.isPending}>
+                  <SelectTrigger id="sheet" className="w-full sm:w-80">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sheets.map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
           </div>
 
@@ -722,6 +960,12 @@ function ImportPage() {
                                   <SelectItem value={CLEARID_SITE_NAME_TARGET}>
                                     {t("import.map.clearIdSiteName")}
                                   </SelectItem>
+                                  <SelectItem value={CLIENT_NAME_TARGET}>
+                                    {t("import.map.clientName")}
+                                  </SelectItem>
+                                  <SelectItem value={TEAM_NAME_TARGET}>
+                                    {t("import.map.teamName")}
+                                  </SelectItem>
                                   <SelectItem value={WORKER_TYPE_TARGET}>
                                     {t("import.map.workerType")}
                                   </SelectItem>
@@ -776,6 +1020,30 @@ function ImportPage() {
               )}
             </div>
           )}
+
+          <div className="grid gap-3 sm:grid-cols-[320px_1fr] sm:items-start">
+            <div className="space-y-1.5">
+              <Label htmlFor="team">{t("import.team.label")}</Label>
+              <Select
+                value={teamHeader ? NO_TEAM : teamId || NO_TEAM}
+                onValueChange={(v) => setTeamId(v === NO_TEAM ? "" : v)}
+                disabled={importMut.isPending || teamsQuery.isLoading || Boolean(teamHeader)}
+              >
+                <SelectTrigger id="team">
+                  <SelectValue placeholder={teamsQuery.isLoading ? t("import.team.loading") : t("import.team.none")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_TEAM}>{t("import.team.none")}</SelectItem>
+                  {teams.map((tm) => (
+                    <SelectItem key={tm.teamId} value={tm.teamId}>{tm.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground sm:pt-7">
+              {teamHeader ? t("import.team.fromColumn", { column: teamHeader }) : t("import.team.hint")}
+            </p>
+          </div>
 
           <div className="grid gap-3 sm:grid-cols-[180px_1fr] sm:items-start">
             <div className="space-y-1.5">
@@ -971,6 +1239,25 @@ function ImportPage() {
               );
             })()}
 
+            {(result.teams?.length ?? 0) > 0 && (
+              <div className="space-y-1 rounded-lg border border-[var(--rm-line)] bg-[var(--rm-panel-2)] p-3 text-sm">
+                <span className="font-medium text-foreground">{t("import.team.resultTitle")}</span>
+                {result.teams!.map((tm) => (
+                  <p key={`${tm.environment ?? ""}|${tm.name}`} className="text-muted-foreground">
+                    {tm.unresolved
+                      ? t("import.team.unresolved", { name: tm.name })
+                      : tm.error
+                        ? t("import.team.error", { name: tm.name, message: tm.error })
+                        : t("import.team.added", { name: tm.name, count: tm.added })}
+                    {tm.environment ? ` · ${tm.environment}` : ""}
+                  </p>
+                ))}
+              </div>
+            )}
+            {result.dryRun && (teamHeader || teamId) && (
+              <p className="text-xs text-muted-foreground">{t("import.team.dryRunHint")}</p>
+            )}
+
             {result.unknownColumns.length > 0 && (
               <div className="rounded-lg border border-[var(--rm-line)] bg-[var(--rm-panel-2)] p-3 text-sm">
                 <span className="font-medium text-foreground">{t("import.unknownColumns")}</span>{" "}
@@ -1009,7 +1296,7 @@ function ImportPage() {
                         <TableCell>
                           <div className="text-sm text-foreground">{r.displayName || r.email || r.externalId || "—"}</div>
                           <div className="text-xs text-muted-foreground">
-                            {[r.email, r.externalId && `ext: ${r.externalId}`].filter(Boolean).join(" · ") || "—"}
+                            {[r.cliente && `cliente: ${r.cliente}`, r.email, r.externalId && `ext: ${r.externalId}`].filter(Boolean).join(" · ") || "—"}
                           </div>
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-muted-foreground">

@@ -11,11 +11,11 @@
  * todas as linhas de dados. Qualquer coluna de site pré-existente (em qualquer
  * caixa: SiteId, siteid…) é substituída, evitando colunas duplicadas.
  */
-export async function withSiteId(file: File, siteId: string): Promise<File> {
+export async function withSiteId(file: File, siteId: string, sheet?: string): Promise<File> {
   const XLSX = await import("xlsx");
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
-  const sheetName = wb.SheetNames[0];
+  const sheetName = pickSheetName(XLSX, wb, sheet);
   if (!sheetName) throw new Error("Planilha vazia ou ilegível.");
   const ws = wb.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
@@ -202,6 +202,61 @@ export const EMPLOYER_CODE_TARGET = "__employer_code__"; // resolve site pelo c�
 export const EMPLOYER_NAME_TARGET = "__employer_name__"; // resolve site pelo nome
 /** Resolve o site pelo NOME no catálogo do ClearID (ex.: "LA-BR-Itumbiara (ITU1)"). */
 export const CLEARID_SITE_NAME_TARGET = "__clearid_site_name__";
+/** Alvo "Cliente · Nome": a linha vai para o cliente (perfil ClearID) indicado na planilha. */
+export const CLIENT_NAME_TARGET = "__client_name__";
+/** Alvo "Regra · Nome": após importar, a pessoa é incluída na regra (team) indicada na planilha. */
+export const TEAM_NAME_TARGET = "__team_name__";
+
+/** Nome normalizado para comparar cliente/site: minúsculo, sem acento, só letras e números. */
+export function normKey(s: unknown): string {
+  return String(s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+type XlsxWorkbook = { SheetNames: string[]; Sheets: Record<string, unknown> };
+
+/**
+ * Escolhe a aba a importar: a preferida (quando existe) ou a primeira que parece
+ * uma tabela (linha 1 com 2+ cabeçalhos). Pula abas de capa/resumo.
+ */
+export function pickSheetName(XLSX: typeof import("xlsx"), wb: XlsxWorkbook, preferred?: string): string {
+  if (preferred && wb.SheetNames.includes(preferred)) return preferred;
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name] as import("xlsx").WorkSheet;
+    const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", range: 0 });
+    const first = (matrix[0] ?? []) as unknown[];
+    const headers = first.filter((h) => String(h ?? "").trim()).length;
+    if (headers >= 2) return name;
+  }
+  return wb.SheetNames[0];
+}
+
+/** Abas do arquivo e a sugerida (a primeira que parece tabela). */
+export async function listSheets(file: File): Promise<{ names: string[]; suggested: string }> {
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  if (!wb.SheetNames.length) throw new Error("Planilha vazia ou ilegível.");
+  return { names: wb.SheetNames, suggested: pickSheetName(XLSX, wb) };
+}
+
+/** Valores distintos (não vazios) de uma coluna da planilha. */
+export async function readDistinctValues(file: File, header: string, sheet?: string): Promise<string[]> {
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const ws = wb.Sheets[pickSheetName(XLSX, wb, sheet)];
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+  const out = new Set<string>();
+  for (const r of rows) {
+    const v = String(r[header] ?? "").trim();
+    if (v) out.add(v);
+  }
+  return [...out];
+}
 /** Alvo: tipo de trabalhador POR LINHA (nome ou código do tipo cadastrado no cliente). */
 export const WORKER_TYPE_TARGET = "__worker_type__";
 
@@ -223,11 +278,36 @@ export function resolveWorkerType(value: string, types: WorkerTypeRef[]): Worker
     const names: string[] = [t.name, t.code ?? ""];
     const i18n = t.name_i18n && typeof t.name_i18n === "object" ? Object.values(t.name_i18n as Record<string, unknown>) : [];
     for (const x of i18n) if (typeof x === "string") names.push(x);
-    if (names.some((n) => norm(n) === v)) return t;
+    // Igualdade normalizada; tolera singular/plural ("TERCEIRIZADO" x "Terceirizados").
+    const sing = (x: string) => x.replace(/s$/, "");
+    if (names.some((n) => norm(n) === v || sing(norm(n)) === sing(v))) return t;
   }
   return undefined;
 }
 /** Prefixos dos alvos: campo nativo do ClearID (coluna do import) e customizável. */
+/** Arquivo preparado para UM cliente; origRows[i] = linha da planilha original da linha i+2 do CSV. */
+export type PreparedGroup = {
+  client: string | null;
+  label: string;
+  file: File;
+  origRows: number[];
+  /** teamNames[i] = regra (team) da linha i+2 do CSV, quando a planilha traz a coluna "Regra · Nome". */
+  teamNames?: string[];
+};
+
+/** siteId pelo nome: igualdade (minúsculo) e, na falta, sem o código entre parênteses. */
+export function resolveSiteByName(map: Map<string, string>, siteName: string): string {
+  const raw = (siteName ?? "").trim().toLowerCase();
+  if (!raw) return "";
+  const direct = map.get(raw);
+  if (direct) return direct;
+  const wanted = normKey(raw.replace(/\(.*?\)/g, ""));
+  for (const [name, id] of map) {
+    if (normKey(name) === wanted || normKey(name.replace(/\(.*?\)/g, "")) === wanted) return id;
+  }
+  return "";
+}
+
 export const NATIVE_TARGET_PREFIX = "native:";
 export const CF_TARGET_PREFIX = "cf:";
 
@@ -235,11 +315,11 @@ export const CF_TARGET_PREFIX = "cf:";
 export const normalizeHeader = (s: string) => norm(s);
 
 /** Lê os cabeçalhos (primeira linha) da planilha, para montar a tela de mapeamento. */
-export async function readHeaders(file: File): Promise<string[]> {
+export async function readHeaders(file: File, sheet?: string): Promise<string[]> {
   const XLSX = await import("xlsx");
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
-  const sheetName = wb.SheetNames[0];
+  const sheetName = pickSheetName(XLSX, wb, sheet);
   if (!sheetName) throw new Error("Planilha vazia ou ilegível.");
   const ws = wb.Sheets[sheetName];
   const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
@@ -273,16 +353,47 @@ export async function applyColumnMapping(
     clearIdSiteMap?: Map<string, string>;
     /** Tipos de trabalhador do cliente (para o alvo "tipo de trabalhador" por linha). */
     workerTypes?: WorkerTypeRef[];
+    /** Aba a importar (default: a primeira que parece tabela). */
+    sheet?: string;
+    /** Alvo "Cliente · Nome": clientes que o usuário pode usar (código/rótulo do perfil ClearID). */
+    clients?: { code: string; label: string }[];
+    /** Cliente ativo (recebe o tipo padrão e as linhas sem coluna de cliente). */
+    activeClient?: string;
+    /** Por cliente: nome do site (minúsculo/trim) → siteId. */
+    siteMapByClient?: Map<string, Map<string, string>>;
+    /** Por cliente: tipos de trabalhador (para resolver o tipo por linha). */
+    workerTypesByClient?: Map<string, WorkerTypeRef[]>;
   },
-): Promise<{ file: File; unresolved: number; total: number }> {
+): Promise<{
+  file: File;
+  unresolved: number;
+  total: number;
+  /** Um arquivo preparado por cliente (client = código do perfil; null = cliente ativo). */
+  groups: PreparedGroup[];
+  /** Linhas cujo cliente não foi reconhecido (não entram em nenhum grupo). */
+  unresolvedClients: number;
+  unknownClients: string[];
+}> {
   const XLSX = await import("xlsx");
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
-  const sheetName = wb.SheetNames[0];
+  const sheetName = pickSheetName(XLSX, wb, opts?.sheet);
   if (!sheetName) throw new Error("Planilha vazia ou ilegível.");
   const ws = wb.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
   if (!rows.length) throw new Error("A planilha não contém linhas de dados.");
+  const usesClient = Object.values(mapping).some((t) => t === CLIENT_NAME_TARGET);
+  const clients = opts?.clients ?? [];
+  const clientByKey = new Map<string, { code: string; label: string }>();
+  for (const c of clients) {
+    clientByKey.set(normKey(c.code), c);
+    clientByKey.set(normKey(c.label), c);
+  }
+  const activeClient = opts?.activeClient ?? null;
+  const groups = new Map<string | null, { label: string; rows: Record<string, unknown>[]; origRows: number[]; teamNames: string[] }>();
+  const usesTeam = Object.values(mapping).some((t) => t === TEAM_NAME_TARGET);
+  let unresolvedClients = 0;
+  const unknownClients = new Set<string>();
 
   const usesEmployer = Object.values(mapping).some(
     (t) => t === EMPLOYER_CODE_TARGET || t === EMPLOYER_NAME_TARGET,
@@ -295,15 +406,28 @@ export async function applyColumnMapping(
   const workerTypes = opts?.workerTypes ?? [];
 
   let unresolved = 0;
-  const out = rows.map((row) => {
+  for (const row of rows) {
+    // Número da linha na planilha (sheet_to_json guarda o índice 0-based em __rowNum__).
+    const origRow = Number((row as { __rowNum__?: number }).__rowNum__ ?? NaN) + 1;
     const next: Record<string, unknown> = {};
     let codigo = "";
     let nome = "";
     let siteName = "";
     let cpf = "";
+    let clientName = "";
+    let teamName = "";
     for (const [key, value] of Object.entries(row)) {
+      if (key === "__rowNum__") continue;
       const target = mapping[key];
       if (!target) continue; // ignorada
+      if (target === CLIENT_NAME_TARGET) {
+        clientName = String(value ?? "").trim();
+        continue;
+      }
+      if (target === TEAM_NAME_TARGET) {
+        teamName = String(value ?? "").trim();
+        continue; // não vai para o import: usada na inclusão na regra após importar
+      }
       if (target === EMPLOYER_CODE_TARGET) {
         codigo = String(value ?? "").trim();
         continue;
@@ -318,7 +442,10 @@ export async function applyColumnMapping(
       }
       if (target === WORKER_TYPE_TARGET) {
         // Tipo por linha: quando reconhecido, prevalece sobre o tipo padrão do mapeamento.
-        const wt = resolveWorkerType(String(value ?? ""), workerTypes);
+        // Com coluna de cliente, usa os tipos DAQUELE cliente.
+        const rowClient = usesClient ? clientByKey.get(normKey(clientName)) : undefined;
+        const wtList = (rowClient && opts?.workerTypesByClient?.get(rowClient.code)) ?? workerTypes;
+        const wt = resolveWorkerType(String(value ?? ""), wtList);
         if (wt) {
           next.workerTypeCode = wt.name; // ClearID recebe a descrição do tipo
           next.supabaseWorkerTypeId = wt.id;
@@ -350,30 +477,67 @@ export async function applyColumnMapping(
       // Site não resolvido não apaga um siteId mapeado diretamente (native:siteId).
       if (siteId) next.siteId = siteId;
       else if (!String(next.siteId ?? "").trim()) unresolved++;
-    } else if (usesClearIdSite) {
-      // Nome do site → siteId pelo catálogo ClearID (normalizado).
-      const siteId = (siteName && clearIdSiteMap.get(siteName.toLowerCase())) || "";
+    }
+    // Cliente da linha (alvo "Cliente · Nome"): define em qual perfil a linha é importada.
+    let clientCode: string | null = null;
+    let clientLabel = "";
+    if (usesClient) {
+      const c = clientByKey.get(normKey(clientName));
+      if (!c) {
+        unresolvedClients++;
+        if (clientName) unknownClients.add(clientName);
+        continue; // sem cliente reconhecido não há onde importar
+      }
+      clientCode = c.code;
+      clientLabel = c.label;
+    }
+    if (usesClearIdSite) {
+      // Nome do site → siteId pelo catálogo ClearID do cliente da linha (tolera o
+      // código entre parênteses: "LA-BR-Alphaville" == "LA-BR-Alphaville (ALP-1)").
+      const map = (clientCode ? opts?.siteMapByClient?.get(clientCode) : undefined) ?? clearIdSiteMap;
+      const siteId = resolveSiteByName(map, siteName);
       if (siteId) next.siteId = siteId;
       else if (!String(next.siteId ?? "").trim()) unresolved++;
     }
-    // Tipo de trabalhador padrão: só quando a planilha não trouxe um valor.
+    // Tipo de trabalhador padrão: só quando a planilha não trouxe um valor e a
+    // linha é do cliente ativo (o tipo padrão é escolhido no cliente ativo).
     // Injeta o CÓDIGO (para o ClearID) e o ID exato (para o shadow no Supabase,
     // pois o código Argus é ambíguo entre Visitante/Terceiro).
-    if (defaultWtCode && !String(next.workerTypeCode ?? "").trim()) {
+    const defaultApplies = !usesClient || (activeClient != null && clientCode === activeClient);
+    if (defaultApplies && defaultWtCode && !String(next.workerTypeCode ?? "").trim()) {
       next.workerTypeCode = defaultWtCode;
       if (defaultWtId) next.supabaseWorkerTypeId = defaultWtId;
       // Padrão só vale para pessoas novas: quem já tem tipo no Supabase mantém o dela (a API decide).
       next.supabaseWorkerTypeIsDefault = "1";
     }
     ensureKeyFromCpf(next, cpf);
-    return next;
-  });
+    const g = groups.get(clientCode) ?? { label: clientLabel, rows: [], origRows: [], teamNames: [] };
+    g.rows.push(next);
+    g.origRows.push(Number.isFinite(origRow) ? origRow : g.rows.length + 1);
+    g.teamNames.push(teamName);
+    groups.set(clientCode, g);
+  }
 
-  const outWs = XLSX.utils.json_to_sheet(out);
-  const csv = XLSX.utils.sheet_to_csv(outWs);
   const baseName = file.name.replace(/\.(csv|xlsx|xls)$/i, "");
+  const prepared: PreparedGroup[] = [...groups.entries()].map(([client, g]) => {
+    const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(g.rows));
+    const suffix = client ? `-${client}` : "";
+    return {
+      client,
+      label: g.label,
+      file: new File([csv], `${baseName}${suffix}.csv`, { type: "text/csv" }),
+      origRows: g.origRows,
+      ...(usesTeam ? { teamNames: g.teamNames } : {}),
+    };
+  });
+  if (!prepared.length) {
+    prepared.push({ client: null, label: "", file: new File([""], `${baseName}.csv`, { type: "text/csv" }), origRows: [] });
+  }
   return {
-    file: new File([csv], `${baseName}.csv`, { type: "text/csv" }),
+    file: prepared[0].file,
+    groups: prepared,
+    unresolvedClients,
+    unknownClients: [...unknownClients],
     unresolved,
     total: rows.length,
   };
