@@ -108,6 +108,17 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (redirecting) return <AuthSplash label="Redirecionando ao login…" />;
   if (isError && !bypassAccessScope) {
+    // Já havia um usuário confirmado nesta aba (falha numa REverificação): mantém o app
+    // na tela, com uma faixa de aviso. Só a primeira verificação (sem usuário em cache)
+    // bloqueia a tela.
+    if (data && data.username) {
+      return (
+        <>
+          <AuthBanner failures={failures} fetching={isFetching} error={error} onRetry={() => void refetch()} />
+          {children}
+        </>
+      );
+    }
     return <AuthUnavailable failures={failures} fetching={isFetching} error={error} onRetry={() => void refetch()} />;
   }
 
@@ -127,15 +138,35 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function describeAuthError(error: unknown, t: (k: string, v?: Record<string, string | number>) => string): string {
+  const e = error instanceof AuthCheckError ? error : null;
+  if (!e) return t("authGuard.reason.unknown");
+  return e.kind === "http" ? t("authGuard.reason.http", { status: e.status ?? 0 }) : t(`authGuard.reason.${e.kind}`);
+}
+
+/** Faixa discreta no topo: a sessão continua, a API está instável; o usuário segue trabalhando. */
+function AuthBanner({
+  failures, fetching, error, onRetry,
+}: { failures: number; fetching: boolean; error: unknown; onRetry: () => void }) {
+  const { t } = useT();
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--rm-inactive-ink)]/30 bg-[var(--rm-inactive-ink)]/10 px-4 py-1.5 text-xs text-[var(--rm-inactive-ink)]">
+      <AlertTriangle className="h-3.5 w-3.5" />
+      <span>{t("authGuard.bannerUnstable")} {describeAuthError(error, t)}</span>
+      <span>{fetching ? t("authGuard.checking") : t("authGuard.retrying", { seconds: RETRY_INTERVAL_MS / 1000, attempts: failures })}</span>
+      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onRetry} disabled={fetching}>
+        {t("authGuard.retryNow")}
+      </Button>
+    </div>
+  );
+}
+
 /** API fora do ar ou lenta: mantém o usuário na tela, tenta de novo sozinho e oferece ações. */
 function AuthUnavailable({
   failures, fetching, error, onRetry,
 }: { failures: number; fetching: boolean; error: unknown; onRetry: () => void }) {
   const { t } = useT();
-  const e = error instanceof AuthCheckError ? error : null;
-  const reason = e
-    ? e.kind === "http" ? t("authGuard.reason.http", { status: e.status ?? 0 }) : t(`authGuard.reason.${e.kind}`)
-    : t("authGuard.reason.unknown");
+  const reason = describeAuthError(error, t);
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
       <AlertTriangle className="h-8 w-8 text-[var(--rm-inactive-ink)]" />

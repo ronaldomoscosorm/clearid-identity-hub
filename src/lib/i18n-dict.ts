@@ -5,6 +5,7 @@ import type { Lang } from "./i18n";
 export const dictionaries: Record<Lang, Record<string, string>> = {
   "pt-BR": {
     "authGuard.unavailable": "Não foi possível verificar sua sessão agora",
+    "authGuard.bannerUnstable": "Conexão com o servidor instável.",
     "authGuard.reason.timeout": "O servidor demorou para responder. Sua sessão foi mantida.",
     "authGuard.reason.network": "Sem conexão com o servidor. Sua sessão foi mantida.",
     "authGuard.reason.http": "O servidor respondeu com erro (HTTP {status}). Sua sessão foi mantida.",
@@ -451,6 +452,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
   },
   "en-US": {
     "authGuard.unavailable": "We could not verify your session right now",
+    "authGuard.bannerUnstable": "Unstable connection to the server.",
     "authGuard.reason.timeout": "The server took too long to respond. Your session was kept.",
     "authGuard.reason.network": "No connection to the server. Your session was kept.",
     "authGuard.reason.http": "The server returned an error (HTTP {status}). Your session was kept.",
@@ -893,6 +895,7 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
   },
   "es-ES": {
     "authGuard.unavailable": "No fue posible verificar su sesión ahora",
+    "authGuard.bannerUnstable": "Conexión inestable con el servidor.",
     "authGuard.reason.timeout": "El servidor tardó en responder. Su sesión se mantuvo.",
     "authGuard.reason.network": "Sin conexión con el servidor. Su sesión se mantuvo.",
     "authGuard.reason.http": "El servidor respondió con error (HTTP {status}). Su sesión se mantuvo.",
