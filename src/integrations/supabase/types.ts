@@ -652,6 +652,49 @@ export type Database = {
         }
         Relationships: []
       }
+      report_recipients: {
+        // Destinatários dos relatórios automáticos por cliente, tipo e site (null = todos).
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          is_active: boolean
+          name: string | null
+          notes: string | null
+          profile: string
+          report_type: string
+          site_id: string | null
+          site_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          is_active?: boolean
+          name?: string | null
+          notes?: string | null
+          profile: string
+          report_type: string
+          site_id?: string | null
+          site_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          is_active?: boolean
+          name?: string | null
+          notes?: string | null
+          profile?: string
+          report_type?: string
+          site_id?: string | null
+          site_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
           accent_color: string

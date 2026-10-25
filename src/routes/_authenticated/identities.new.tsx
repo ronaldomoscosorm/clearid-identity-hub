@@ -10,6 +10,7 @@ import {
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
 import { createIdentityAtomic } from "@/lib/identity-atomic";
+import { applySaveGuard, type SaveGuard } from "@/lib/save-guard";
 import { saveIdentityAttachments, type PendingAttachment } from "@/lib/attachments";
 import { Button } from "@/components/ui/button";
 import { IdentityForm } from "@/components/IdentityForm";
@@ -57,6 +58,7 @@ function NewIdentity() {
       workerTypeId: string | null;
       photo: Blob | null;
       attachments: PendingAttachment[];
+      guard: SaveGuard;
     }) => {
       // Verifica e-mail duplicado antes de criar (o ClearID rejeita com 400).
       const dupes = await argusApi.findIdentitiesByEmail(vars.data.email);
@@ -153,6 +155,16 @@ function NewIdentity() {
       // Espelhamento adicional no Supabase — valores de campos personalizados
       // por site. Mirror/company/workerType já foram gravados na etapa atomic.
       await saveIdentityCustomFields(data.identityId, vars.siteFieldValues);
+      // Guarda de gravação: afastamento em vigor ou validade vencida já na
+      // criação → a pessoa nasce inativa, com o motivo gravado.
+      try {
+        const action = await applySaveGuard(data.identityId, vars.guard, data.status ?? "Active");
+        if (action === "deactivated") {
+          toast.warning(t("identityForm.guard.deactivated", { reason: vars.guard.reason ?? "" }), { duration: 12000 });
+        }
+      } catch (e) {
+        toast.error(t("identityForm.guard.fail", { error: (e as Error).message }));
+      }
       // Anexos (Storage + versionamento) — após a identidade existir no Supabase.
       if (vars.attachments.length) {
         const { failed } = await saveIdentityAttachments(data.identityId, vars.attachments);
@@ -190,8 +202,8 @@ function NewIdentity() {
         submitting={mut.isPending}
         initialWorkerTypeId={workerTypeId}
         lockWorkerType={Boolean(workerTypeId)}
-        onSubmit={(data, siteFieldValues, companyId, wtId, photo, attachments) =>
-          mut.mutate({ data, siteFieldValues, companyId, workerTypeId: wtId, photo, attachments })
+        onSubmit={(data, siteFieldValues, companyId, wtId, photo, attachments, guard) =>
+          mut.mutate({ data, siteFieldValues, companyId, workerTypeId: wtId, photo, attachments, guard })
         }
         onCancel={() => navigate({ to: "/identities" })}
       />

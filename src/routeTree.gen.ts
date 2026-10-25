@@ -18,12 +18,14 @@ import { Route as AuthenticatedCampanhasFotoRouteImport } from './routes/_authen
 import { Route as AuthenticatedCamposDoSiteRouteImport } from './routes/_authenticated/campos-do-site'
 import { Route as AuthenticatedCamposPersonalizadosRouteImport } from './routes/_authenticated/campos-personalizados'
 import { Route as AuthenticatedConfiguracoesClienteRouteImport } from './routes/_authenticated/configuracoes-cliente'
+import { Route as AuthenticatedDestinatariosRelatoriosRouteImport } from './routes/_authenticated/destinatarios-relatorios'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedEmpresasRouteImport } from './routes/_authenticated/empresas'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
 import { Route as AuthenticatedImportarRouteImport } from './routes/_authenticated/importar'
 import { Route as AuthenticatedLayoutFormularioRouteImport } from './routes/_authenticated/layout-formulario'
 import { Route as AuthenticatedRegrasRouteImport } from './routes/_authenticated/regras'
+import { Route as AuthenticatedRelatoriosPessoasRouteImport } from './routes/_authenticated/relatorios-pessoas'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSitesEmployerRouteImport } from './routes/_authenticated/sites-employer'
 import { Route as AuthenticatedTiposTrabalhadorRouteImport } from './routes/_authenticated/tipos-trabalhador'
@@ -87,6 +89,12 @@ const AuthenticatedConfiguracoesClienteRoute =
     path: '/configuracoes-cliente',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDestinatariosRelatoriosRoute =
+  AuthenticatedDestinatariosRelatoriosRouteImport.update({
+    id: '/destinatarios-relatorios',
+    path: '/destinatarios-relatorios',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDiagnosticsRoute =
   AuthenticatedDiagnosticsRouteImport.update({
     id: '/diagnostics',
@@ -119,6 +127,12 @@ const AuthenticatedRegrasRoute = AuthenticatedRegrasRouteImport.update({
   path: '/regras',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedRelatoriosPessoasRoute =
+  AuthenticatedRelatoriosPessoasRouteImport.update({
+    id: '/relatorios-pessoas',
+    path: '/relatorios-pessoas',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -210,12 +224,14 @@ export interface FileRoutesByFullPath {
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
+  '/destinatarios-relatorios': typeof AuthenticatedDestinatariosRelatoriosRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/empresas': typeof AuthenticatedEmpresasRouteWithChildren
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/importar': typeof AuthenticatedImportarRoute
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
+  '/relatorios-pessoas': typeof AuthenticatedRelatoriosPessoasRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
@@ -240,10 +256,12 @@ export interface FileRoutesByTo {
   '/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
+  '/destinatarios-relatorios': typeof AuthenticatedDestinatariosRelatoriosRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/importar': typeof AuthenticatedImportarRoute
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
+  '/relatorios-pessoas': typeof AuthenticatedRelatoriosPessoasRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
@@ -270,12 +288,14 @@ export interface FileRoutesById {
   '/_authenticated/campos-do-site': typeof AuthenticatedCamposDoSiteRoute
   '/_authenticated/campos-personalizados': typeof AuthenticatedCamposPersonalizadosRoute
   '/_authenticated/configuracoes-cliente': typeof AuthenticatedConfiguracoesClienteRoute
+  '/_authenticated/destinatarios-relatorios': typeof AuthenticatedDestinatariosRelatoriosRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/_authenticated/empresas': typeof AuthenticatedEmpresasRouteWithChildren
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/importar': typeof AuthenticatedImportarRoute
   '/_authenticated/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
+  '/_authenticated/relatorios-pessoas': typeof AuthenticatedRelatoriosPessoasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/sites-employer': typeof AuthenticatedSitesEmployerRoute
   '/_authenticated/tipos-trabalhador': typeof AuthenticatedTiposTrabalhadorRoute
@@ -302,12 +322,14 @@ export interface FileRouteTypes {
     | '/campos-do-site'
     | '/campos-personalizados'
     | '/configuracoes-cliente'
+    | '/destinatarios-relatorios'
     | '/diagnostics'
     | '/empresas'
     | '/identities'
     | '/importar'
     | '/layout-formulario'
     | '/regras'
+    | '/relatorios-pessoas'
     | '/settings'
     | '/sites-employer'
     | '/tipos-trabalhador'
@@ -332,10 +354,12 @@ export interface FileRouteTypes {
     | '/campos-do-site'
     | '/campos-personalizados'
     | '/configuracoes-cliente'
+    | '/destinatarios-relatorios'
     | '/diagnostics'
     | '/importar'
     | '/layout-formulario'
     | '/regras'
+    | '/relatorios-pessoas'
     | '/settings'
     | '/sites-employer'
     | '/tipos-trabalhador'
@@ -361,12 +385,14 @@ export interface FileRouteTypes {
     | '/_authenticated/campos-do-site'
     | '/_authenticated/campos-personalizados'
     | '/_authenticated/configuracoes-cliente'
+    | '/_authenticated/destinatarios-relatorios'
     | '/_authenticated/diagnostics'
     | '/_authenticated/empresas'
     | '/_authenticated/identities'
     | '/_authenticated/importar'
     | '/_authenticated/layout-formulario'
     | '/_authenticated/regras'
+    | '/_authenticated/relatorios-pessoas'
     | '/_authenticated/settings'
     | '/_authenticated/sites-employer'
     | '/_authenticated/tipos-trabalhador'
@@ -454,6 +480,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConfiguracoesClienteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/destinatarios-relatorios': {
+      id: '/_authenticated/destinatarios-relatorios'
+      path: '/destinatarios-relatorios'
+      fullPath: '/destinatarios-relatorios'
+      preLoaderRoute: typeof AuthenticatedDestinatariosRelatoriosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/diagnostics': {
       id: '/_authenticated/diagnostics'
       path: '/diagnostics'
@@ -494,6 +527,13 @@ declare module '@tanstack/react-router' {
       path: '/regras'
       fullPath: '/regras'
       preLoaderRoute: typeof AuthenticatedRegrasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/relatorios-pessoas': {
+      id: '/_authenticated/relatorios-pessoas'
+      path: '/relatorios-pessoas'
+      fullPath: '/relatorios-pessoas'
+      preLoaderRoute: typeof AuthenticatedRelatoriosPessoasRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
@@ -640,12 +680,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCamposDoSiteRoute: typeof AuthenticatedCamposDoSiteRoute
   AuthenticatedCamposPersonalizadosRoute: typeof AuthenticatedCamposPersonalizadosRoute
   AuthenticatedConfiguracoesClienteRoute: typeof AuthenticatedConfiguracoesClienteRoute
+  AuthenticatedDestinatariosRelatoriosRoute: typeof AuthenticatedDestinatariosRelatoriosRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
   AuthenticatedEmpresasRoute: typeof AuthenticatedEmpresasRouteWithChildren
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
   AuthenticatedImportarRoute: typeof AuthenticatedImportarRoute
   AuthenticatedLayoutFormularioRoute: typeof AuthenticatedLayoutFormularioRoute
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
+  AuthenticatedRelatoriosPessoasRoute: typeof AuthenticatedRelatoriosPessoasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSitesEmployerRoute: typeof AuthenticatedSitesEmployerRoute
   AuthenticatedTiposTrabalhadorRoute: typeof AuthenticatedTiposTrabalhadorRoute
@@ -665,12 +707,15 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedCamposPersonalizadosRoute,
   AuthenticatedConfiguracoesClienteRoute:
     AuthenticatedConfiguracoesClienteRoute,
+  AuthenticatedDestinatariosRelatoriosRoute:
+    AuthenticatedDestinatariosRelatoriosRoute,
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
   AuthenticatedEmpresasRoute: AuthenticatedEmpresasRouteWithChildren,
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
   AuthenticatedImportarRoute: AuthenticatedImportarRoute,
   AuthenticatedLayoutFormularioRoute: AuthenticatedLayoutFormularioRoute,
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
+  AuthenticatedRelatoriosPessoasRoute: AuthenticatedRelatoriosPessoasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSitesEmployerRoute: AuthenticatedSitesEmployerRoute,
   AuthenticatedTiposTrabalhadorRoute: AuthenticatedTiposTrabalhadorRoute,

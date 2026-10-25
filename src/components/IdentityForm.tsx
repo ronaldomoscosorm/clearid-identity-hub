@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
-import { format, parse } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { AlertTriangle, CalendarIcon, Check, CheckCircle2, ChevronsUpDown, X } from "lucide-react";
+import { format } from "date-fns";
+import { AlertTriangle, Check, CheckCircle2, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useIdentityFieldLabels, STANDARD_IDENTITY_FIELDS } from "@/lib/identity-labels";
@@ -27,7 +26,7 @@ import { PhotoCapture } from "@/components/PhotoCapture";
 import { AttachmentField } from "@/components/AttachmentField";
 import type { PendingAttachment } from "@/lib/attachments";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar } from "@/components/ui/calendar";
+import { DatePickerField } from "@/components/DatePickerField";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
@@ -48,6 +47,7 @@ import type { IdentityUpsert } from "@/lib/argus-client";
 import { argusApi, useDefaultSiteId, useActiveProfile } from "@/lib/argus-client";
 import { useUserScope } from "@/lib/user-scope";
 import type { SiteFieldValue } from "@/lib/supabase-mirror";
+import { evaluateSaveGuard, isMotivoField, isGuardReason as isGuardReasonText, type GuardDate, type SaveGuard } from "@/lib/save-guard";
 
 type TFunc = (k: string, vars?: Record<string, string | number>) => string;
 
@@ -210,6 +210,7 @@ export type IdentityFormProps = {
     workerTypeId: string | null,
     photo: Blob | null,
     attachments: PendingAttachment[],
+    guard: SaveGuard,
   ) => void;
   onCancel?: () => void;
   extraActions?: React.ReactNode;
@@ -678,87 +679,9 @@ export function IdentityForm({
     onSet: (v: string) => void,
     disabled: boolean,
     trackExpiration = true,
-  ): ReactNode => {
-    const iso = toDateInputValue(value);
-    const selected = iso ? parse(iso, "yyyy-MM-dd", new Date()) : undefined;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isExpired = trackExpiration && !!selected && selected < today;
-    return (
-      <>
-        <div className="flex items-center gap-1">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                id={id}
-                type="button"
-                variant="outline"
-                disabled={disabled}
-                className={cn(
-                  "w-full justify-start text-left font-normal",
-                  !selected && "text-muted-foreground",
-                  isExpired &&
-                    "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
-                )}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {selected
-                  ? format(selected, "dd/MM/yyyy", { locale: ptBR })
-                  : t("identityForm.datePlaceholder")}
-                {isExpired && (
-                  <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
-                    {t("identityForm.expiredBadge")}
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                locale={ptBR}
-                selected={selected}
-                onSelect={(d) => onSet(d ? format(d, "yyyy-MM-dd") : "")}
-                initialFocus
-                className={cn("p-3 pointer-events-auto")}
-              />
-              {selected && !disabled && (
-                <div className="border-t p-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => onSet("")}
-                  >
-                    {t("identityForm.clear")}
-                  </Button>
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-          {/* X sempre visível quando há data: exclui o valor (grava nulo). */}
-          {selected && !disabled && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-              title={t("identityForm.clear")}
-              aria-label={t("identityForm.clear")}
-              onClick={() => onSet("")}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-        {isExpired && (
-          <p className="text-xs font-medium text-destructive">
-            {t("identityForm.expiredDate")}
-          </p>
-        )}
-      </>
-    );
-  };
+  ): ReactNode => (
+    <DatePickerField id={id} value={value} onChange={onSet} disabled={disabled} trackExpiration={trackExpiration} />
+  );
 
   const renderSiteField = (sf: SiteFieldLite) => {
     const name = sf.definition?.custom_field_name ?? sf.id;
@@ -1501,8 +1424,39 @@ export function IdentityForm({
       return;
     }
     setErrors({});
+
+    // Guarda de gravação: afastamento/férias em vigor ou validade vencida →
+    // a pessoa é inativada após salvar e o motivo vai para o campo "Motivo do
+    // Afastamento" do cliente (gravado junto com os campos do site).
+    const labelOfCf = (name: string): string => {
+      const sf = siteFields.find((x) => x.definition?.custom_field_name === name);
+      if (sf) return siteFieldLabel(sf);
+      const def = cfDefByName.get(name);
+      return alias(name, def?.displayName || name);
+    };
+    const guardDates: GuardDate[] = [...dateFieldNames]
+      .filter((name) => (cf[name] ?? "").trim() !== "")
+      .map((name) => ({ name, label: labelOfCf(name), value: cf[name], tracksExpiration: tracksExpiration(name) }));
+    const motivoFieldName =
+      siteFields.find((sf) => sf.definition && isMotivoField(sf.definition.custom_field_name))?.definition
+        ?.custom_field_name ??
+      [...cfDefByName.keys()].find((n) => isMotivoField(n)) ??
+      null;
+    const evaluation = evaluateSaveGuard(guardDates);
+    const guard: SaveGuard = {
+      ...evaluation,
+      motivoFieldName,
+      currentMotivo: String(initial?.customFields?.[motivoFieldName ?? ""] ?? customFields[motivoFieldName ?? ""] ?? ""),
+    };
+    if (motivoFieldName) {
+      if (guard.reason) cf[motivoFieldName] = guard.reason;
+      else if (mode === "edit" && guard.currentMotivo.trim() && isGuardReasonText(guard.currentMotivo)) cf[motivoFieldName] = "";
+    }
+    // Campos do site a gravar: os do layout + o motivo (mesmo fora do layout).
+    const cfToSave = new Set(consumedCf);
+    if (motivoFieldName && motivoFieldName in cf) cfToSave.add(motivoFieldName);
     const siteFieldValues: SiteFieldValue[] = siteFields
-      .filter((sf) => sf.definition && consumedCf.has(sf.definition.custom_field_name))
+      .filter((sf) => sf.definition && cfToSave.has(sf.definition.custom_field_name))
       .map((sf) => ({
         site_custom_field_id: sf.id,
         value: cf[sf.definition!.custom_field_name] ? cf[sf.definition!.custom_field_name] : null,
@@ -1564,6 +1518,7 @@ export function IdentityForm({
       workerTypeId || null,
       photo,
       pendingAttachments,
+      guard,
     );
   };
 
@@ -1723,75 +1678,13 @@ export function IdentityForm({
                           </Label>
                           {isDate(f.customFieldType) ? (
                             <>
-                              {(() => {
-                                const iso = toDateInputValue(value);
-                                const selected = iso
-                                  ? parse(iso, "yyyy-MM-dd", new Date())
-                                  : undefined;
-                                const today = new Date();
-                                today.setHours(0, 0, 0, 0);
-                                const isExpired = !!selected && selected < today;
-                                return (
-                                  <>
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <Button
-                                          id={`cf-${name}`}
-                                          type="button"
-                                          variant="outline"
-                                          disabled={f.isReadOnly}
-                                          className={cn(
-                                            "w-full justify-start rounded-full text-left font-normal",
-                                            !selected && "text-muted-foreground",
-                                            isExpired &&
-                                              "border-destructive bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
-                                          )}
-                                        >
-                                          <CalendarIcon className="mr-2 h-4 w-4" />
-                                          {selected
-                                            ? format(selected, "dd/MM/yyyy", { locale: ptBR })
-                                            : t("identityForm.datePlaceholder")}
-                                          {isExpired && (
-                                            <span className="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">
-                                              {t("identityForm.expiredBadge")}
-                                            </span>
-                                          )}
-                                        </Button>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                          mode="single"
-                                          locale={ptBR}
-                                          selected={selected}
-                                          onSelect={(d) =>
-                                            setField(name, d ? format(d, "yyyy-MM-dd") : "")
-                                          }
-                                          initialFocus
-                                          className={cn("p-3 pointer-events-auto")}
-                                        />
-                                        {selected && !f.isReadOnly && (
-                                          <div className="border-t p-2">
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="sm"
-                                              className="w-full"
-                                              onClick={() => setField(name, "")}
-                                            >
-                                              {t("identityForm.clear")}
-                                            </Button>
-                                          </div>
-                                        )}
-                                      </PopoverContent>
-                                    </Popover>
-                                    {isExpired && (
-                                      <p className="text-xs font-medium text-destructive">
-                                        {t("identityForm.expiredDate")}
-                                      </p>
-                                    )}
-                                  </>
-                                );
-                              })()}
+                              <DatePickerField
+                                id={`cf-${name}`}
+                                value={value}
+                                onChange={(v) => setField(name, v)}
+                                disabled={f.isReadOnly}
+                                inputClassName="rounded-full"
+                              />
                               {errors[`cf-${name}`] && (
                                 <p className="text-xs text-destructive">{errors[`cf-${name}`]}</p>
                               )}

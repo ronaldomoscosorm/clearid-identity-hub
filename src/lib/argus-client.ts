@@ -1189,6 +1189,100 @@ export function parseCredentialsResponse(raw: unknown): CredentialRecord[] {
 
 // ---- API helpers ----
 
+/** Parâmetros do relatório de pessoas. */
+export interface IdentityReportParams {
+  format: "csv" | "xlsx" | "json";
+  siteIds?: string[];
+  companies?: string[];
+  workerTypeCodes?: string[];
+  status?: "all" | "active" | "inactive";
+  includeCustomFields?: boolean;
+  /** PDF: inclui a foto de cada pessoa. */
+  /** Gera também o zip de fotos (identityId + extensão). */
+  photoZip?: boolean;
+  photoFormat?: "jpeg" | "png";
+}
+
+/** Job do relatório de pessoas (GET report/jobs/{id}). */
+export interface ReportJob {
+  id: string;
+  status: "Running" | "Completed" | "Failed";
+  client?: string | null;
+  format?: string | null;
+  fileName?: string | null;
+  contentType?: string | null;
+  rowCount?: number | null;
+  truncated?: boolean;
+  error?: string | null;
+  createdUtc?: string;
+  completedUtc?: string | null;
+  hasPhotoZip?: boolean;
+  photoZipFileName?: string | null;
+  photoCount?: number;
+}
+
+/** Página de dados tabulares de um job concluído. */
+export interface ReportJobData {
+  headers: string[];
+  rows: (string | null)[][];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  fileName?: string | null;
+  photoZipFileName?: string | null;
+  photoCount?: number;
+  /** Aviso sobre as fotos (ex.: conversão indisponível no servidor). */
+  photoNote?: string | null;
+  hasPhotoZip?: boolean;
+  truncated?: boolean;
+}
+
+/** Fetch autenticado (SSO/apiKey + ambiente ativo) que devolve o envelope JSON da API. */
+async function reportFetchJson(path: string, init: RequestInit): Promise<unknown> {
+  const cfg = getConfig();
+  if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+  let url = cfg.baseUrl.replace(/\/+$/, "") + path;
+  const headers = new Headers();
+  applyAuthHeader(headers, cfg);
+  headers.set("X-ClearId-Environment", getActiveProfile());
+  headers.set("Accept", "application/json");
+  const sys = getSystemObjectId();
+  if (sys) {
+    headers.set("X-System-Object-Id", sys);
+    url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
+  }
+  const res = await fetch(url, { ...init, credentials: "include", headers });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+    throw new ArgusApiError({ status: res.status, message, raw: body });
+  }
+  return body;
+}
+
+/** Fetch autenticado que devolve o corpo binário (download). */
+async function reportFetchBlob(path: string): Promise<Blob> {
+  const cfg = getConfig();
+  if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+  let url = cfg.baseUrl.replace(/\/+$/, "") + path;
+  const headers = new Headers();
+  applyAuthHeader(headers, cfg);
+  headers.set("X-ClearId-Environment", getActiveProfile());
+  const sys = getSystemObjectId();
+  if (sys) {
+    headers.set("X-System-Object-Id", sys);
+    url += (url.includes("?") ? "&" : "?") + "systemObjectId=" + encodeURIComponent(sys);
+  }
+  const res = await fetch(url, { credentials: "include", headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const message = (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+    throw new ArgusApiError({ status: res.status, message, raw: body });
+  }
+  return await res.blob();
+}
+
 export const argusApi = {
   listSites: async (environment?: string): Promise<ClearIdSite[]> => {
     const data = await unwrap<{ sites?: ClearIdSite[] } | ClearIdSite[]>(
@@ -2139,6 +2233,48 @@ export const argusApi = {
       ? (body as { data: ImportJob }).data
       : (body as ImportJob));
   },
+
+  // ---------- Relatório de pessoas (job assíncrono: csv/xlsx/json + zip de fotos) ----------
+
+  /** Dispara a geração do relatório de pessoas em background; devolve o jobId. */
+  startIdentityReportJob: async (params: IdentityReportParams): Promise<string> => {
+    const q = new URLSearchParams();
+    q.set("format", params.format);
+    if (params.siteIds?.length) q.set("siteIds", params.siteIds.join(","));
+    if (params.companies?.length) q.set("companies", params.companies.join("|"));
+    if (params.workerTypeCodes?.length) q.set("workerTypeCodes", params.workerTypeCodes.join("|"));
+    if (params.status && params.status !== "all") q.set("status", params.status);
+    q.set("includeCustomFields", params.includeCustomFields === false ? "false" : "true");
+    q.set("photoZip", params.photoZip ? "true" : "false");
+    if (params.photoFormat) q.set("photoFormat", params.photoFormat);
+    const body = await reportFetchJson(`/api/identities/report?${q.toString()}`, { method: "POST" });
+    const data = (body as { data?: { jobId?: string } }).data;
+    if (!data?.jobId) throw new ArgusApiError({ status: 0, message: "Resposta sem jobId." });
+    return data.jobId;
+  },
+
+  /** Status do job do relatório. */
+  getReportJob: async (jobId: string): Promise<ReportJob> => {
+    const body = await reportFetchJson(`/api/identities/report/jobs/${encodeURIComponent(jobId)}`, { method: "GET" });
+    return (body as { data: ReportJob }).data;
+  },
+
+  /** Dados tabulares (paginados) de um job concluído, para a tabela em tela. */
+  getReportJobData: async (jobId: string, page: number, pageSize: number): Promise<ReportJobData> => {
+    const body = await reportFetchJson(
+      `/api/identities/report/jobs/${encodeURIComponent(jobId)}/data?page=${page}&pageSize=${pageSize}`,
+      { method: "GET" },
+    );
+    return (body as { data: ReportJobData }).data;
+  },
+
+  /** Arquivo do relatório (csv/xlsx/json) de um job concluído. */
+  downloadReportJobFile: (jobId: string): Promise<Blob> =>
+    reportFetchBlob(`/api/identities/report/jobs/${encodeURIComponent(jobId)}/download`),
+
+  /** Zip de fotos de um job concluído com photoZip=true. */
+  downloadReportJobPhotos: (jobId: string): Promise<Blob> =>
+    reportFetchBlob(`/api/identities/report/jobs/${encodeURIComponent(jobId)}/photos`),
 
   /**
    * Diagnóstico: chama GET /api/diagnostics/test-connection. O backend define

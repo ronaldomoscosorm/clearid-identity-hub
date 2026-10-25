@@ -1,7 +1,7 @@
 import { audit } from "@/lib/audit";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle, MapPin, AlertTriangle , ScrollText } from "lucide-react";
+import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle, MapPin, AlertTriangle , ScrollText, Mail, FileBarChart } from "lucide-react";
 import { redirectToLogout } from "@/lib/portal-auth";
 import { getTheme, applyTheme } from "@/lib/theme";
 import { toast } from "sonner";
@@ -107,6 +107,15 @@ const NAV: NavEntry[] = [
       { to: "/campos-do-site", icon: SlidersHorizontal, key: "nav.campos-do-site" },
       { to: "/apelidos", icon: Tag, key: "nav.apelidos" },
       { to: "/layout-formulario", icon: LayoutGrid, key: "nav.layout-formulario" },
+      { to: "/destinatarios-relatorios", icon: Mail, key: "nav.destinatarios-relatorios" },
+    ],
+  },
+  {
+    kind: "group",
+    key: "nav.reports",
+    icon: FileBarChart,
+    items: [
+      { to: "/relatorios-pessoas", icon: Users, key: "nav.relatorios-pessoas" },
     ],
   },
   {

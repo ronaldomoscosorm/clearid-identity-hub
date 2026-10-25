@@ -12,6 +12,7 @@ import {
   type SiteFieldValue,
 } from "@/lib/supabase-mirror";
 import { updateIdentityAtomic } from "@/lib/identity-atomic";
+import { applySaveGuard, type SaveGuard } from "@/lib/save-guard";
 import { saveIdentityAttachments, type PendingAttachment } from "@/lib/attachments";
 import { clearIdToFormValues } from "@/lib/argus-client";
 import { useT } from "@/lib/i18n";
@@ -132,6 +133,7 @@ function IdentityDetail() {
       companyId: string | null;
       workerTypeId: string | null;
       attachments: PendingAttachment[];
+      guard: SaveGuard;
     }) => {
       // Snapshot ANTES do update para poder reverter no ClearID caso o
       // Supabase falhe. Se por acaso query.data ainda não estiver disponível
@@ -208,6 +210,18 @@ function IdentityDetail() {
         console.error("[mirror] falha pós-update:", err),
       );
       await saveIdentityCustomFields(id, vars.siteFieldValues);
+      // Guarda de gravação: afastamento em vigor ou validade vencida inativa a
+      // pessoa; regularização de validade reativa quem foi inativado pela guarda.
+      try {
+        const action = await applySaveGuard(id, vars.guard, updated.status ?? query.data?.status);
+        if (action === "deactivated") {
+          toast.warning(t("identityForm.guard.deactivated", { reason: vars.guard.reason ?? "" }), { duration: 12000 });
+        } else if (action === "activated") {
+          toast.success(t("identityForm.guard.activated"));
+        }
+      } catch (e) {
+        toast.error(t("identityForm.guard.fail", { error: (e as Error).message }));
+      }
       // Anexos (Storage + versionamento).
       if (vars.attachments.length) {
         const { failed } = await saveIdentityAttachments(id, vars.attachments);
@@ -322,7 +336,7 @@ function IdentityDetail() {
               },
             }}
             submitting={update.isPending}
-            onSubmit={(data, siteFieldValues, companyId, workerTypeId, _photo, attachments) => {
+            onSubmit={(data, siteFieldValues, companyId, workerTypeId, _photo, attachments, guard) => {
               const original = query.data!;
               // ClearID PUT é um replace completo. Preservamos os campos que
               // não estão no formulário para evitar 400 (Falha ao atualizar
@@ -341,6 +355,7 @@ function IdentityDetail() {
                 companyId,
                 workerTypeId,
                 attachments,
+                guard,
               });
             }}
             onCancel={() => navigate({ to: "/identities" })}

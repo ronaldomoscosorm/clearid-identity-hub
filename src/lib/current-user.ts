@@ -38,6 +38,23 @@ interface ApiResponse<T> {
   traceId?: string;
 }
 
+/** Falha TRANSITÓRIA ao verificar a sessão (timeout, rede, 5xx). Não significa "sem usuário". */
+export class AuthCheckError extends Error {
+  kind: "timeout" | "network" | "http";
+  status?: number;
+  elapsedMs: number;
+  constructor(kind: "timeout" | "network" | "http", elapsedMs: number, status?: number) {
+    super(kind === "http" ? `Falha ao consultar /api/auth/me (HTTP ${status})` : `Falha ao consultar /api/auth/me (${kind})`);
+    this.name = "AuthCheckError";
+    this.kind = kind;
+    this.status = status;
+    this.elapsedMs = elapsedMs;
+  }
+}
+
+/** Timeout da verificação de sessão. Cobre a subida a frio da API sem derrubar o usuário. */
+const AUTH_CHECK_TIMEOUT_MS = 20_000;
+
 async function fetchCurrentUser(): Promise<CurrentUser | null> {
   // Mock APENAS de desenvolvimento: quando o backend/Portal não estão acessíveis
   // (ex.: dev local com CORS bloqueando produção), permite testar as restrições
@@ -57,9 +74,12 @@ async function fetchCurrentUser(): Promise<CurrentUser | null> {
   const cfg = getConfig();
   const url = `${cfg.baseUrl.replace(/\/+$/, "")}/api/auth/me`;
 
-  // Timeout para o check não ficar pendente (ex.: CORS/preflight lento em dev).
+  // Timeout para o check não ficar pendente. Timeout, erro de rede e 5xx são falhas
+  // TRANSITÓRIAS (AuthCheckError): o AuthGuard tenta de novo e mantém a sessão.
+  // Só 401/403 significam "sem usuário" e levam ao login do Portal.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  const timer = setTimeout(() => controller.abort(), AUTH_CHECK_TIMEOUT_MS);
+  const started = performance.now();
   let res: Response;
   try {
     res = await fetch(url, {
@@ -69,6 +89,10 @@ async function fetchCurrentUser(): Promise<CurrentUser | null> {
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
+  } catch (e) {
+    const elapsed = Math.round(performance.now() - started);
+    if ((e as Error)?.name === "AbortError") throw new AuthCheckError("timeout", elapsed);
+    throw new AuthCheckError("network", elapsed);
   } finally {
     clearTimeout(timer);
   }
@@ -77,7 +101,7 @@ async function fetchCurrentUser(): Promise<CurrentUser | null> {
     return null;
   }
   if (!res.ok) {
-    throw new Error(`Falha ao consultar /api/auth/me (HTTP ${res.status})`);
+    throw new AuthCheckError("http", Math.round(performance.now() - started), res.status);
   }
 
   const envelope = (await res.json()) as ApiResponse<CurrentUser>;
@@ -95,7 +119,9 @@ export function useCurrentUser() {
     queryKey: ["auth", "me"],
     queryFn: fetchCurrentUser,
     staleTime: 5 * 60_000,
-    retry: false,
+    // Falha transitória: até 2 novas tentativas (1,5 s e 3 s) antes de avisar o usuário.
+    retry: (count, err) => count < 2 && err instanceof AuthCheckError,
+    retryDelay: (attempt) => 1500 * 2 ** attempt,
   });
 }
 
