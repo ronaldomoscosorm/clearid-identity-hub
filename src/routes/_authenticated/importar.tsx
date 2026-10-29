@@ -211,13 +211,38 @@ function ImportPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("employer_sites")
-        .select("site_id, nome, codigo")
+        .select("id, site_id, nome, codigo")
         .eq("profile", importActiveProfile);
       if (error) throw new Error(error.message);
       return data ?? [];
     },
     enabled: Boolean(importActiveProfile),
   });
+  // Regras de acesso vinculadas aos sites da Employer (modo "employer"): siteId → regras.
+  const employerSiteTeamsQuery = useQuery({
+    queryKey: ["employer-site-teams", importActiveProfile],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employer_site_teams")
+        .select("employer_site_id, team_id, team_name")
+        .eq("profile", importActiveProfile);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    enabled: Boolean(importActiveProfile),
+  });
+  const employerSiteTeams = useMemo(() => {
+    const siteByLink = new Map((employerSitesQuery.data ?? []).map((r) => [r.id, r.site_id] as const));
+    const out = new Map<string, { teamId: string; name: string }[]>();
+    for (const r of employerSiteTeamsQuery.data ?? []) {
+      const siteId = siteByLink.get(r.employer_site_id);
+      if (!siteId) continue;
+      const list = out.get(siteId) ?? [];
+      if (!list.some((x) => x.teamId === r.team_id)) list.push({ teamId: r.team_id, name: r.team_name ?? r.team_id });
+      out.set(siteId, list);
+    }
+    return out;
+  }, [employerSitesQuery.data, employerSiteTeamsQuery.data]);
   const employerMap: EmployerSiteMap = useMemo(() => {
     const byCodigo = new Map<string, string>();
     const byNome = new Map<string, string>();
@@ -485,13 +510,15 @@ function ImportPage() {
 
   /**
    * Inclui as pessoas importadas (criadas/atualizadas) nas regras: a fixa escolhida
-   * na tela ou a da coluna "Regra · Nome" de cada linha. Resolve o nome no ambiente
+   * na tela ou a da coluna "Regra · Nome" de cada linha e, no modo Employer, as
+   * regras vinculadas ao site resolvido para a linha. Resolve o nome no ambiente
    * da linha e envia em lotes; falhas não desfazem a importação.
    */
   const includeInTeams = async (
     results: { res: IdentityImportResult; env: string | null }[],
     fileName: string,
     fixedTeam: { teamId: string; name: string } | null,
+    siteTeams: Map<string, { teamId: string; name: string }[]>,
   ): Promise<ImportTeamSummary[]> => {
     type Bucket = { name: string; env: string | null; ids: Set<string>; teamId?: string | null };
     const buckets = new Map<string, Bucket>();
@@ -499,11 +526,19 @@ function ImportPage() {
       for (const row of res.rows) {
         if (!row.identityId || !/^(Created|Updated)$/i.test(row.action)) continue;
         const name = (row.regra ?? "").trim() || fixedTeam?.name || "";
-        if (!name) continue;
-        const key = `${env ?? ""}|${normKey(name)}`;
-        const b = buckets.get(key) ?? { name, env, ids: new Set<string>(), teamId: !row.regra?.trim() && fixedTeam ? fixedTeam.teamId : undefined };
-        b.ids.add(row.identityId);
-        buckets.set(key, b);
+        if (name) {
+          const key = `${env ?? ""}|${normKey(name)}`;
+          const b = buckets.get(key) ?? { name, env, ids: new Set<string>(), teamId: !row.regra?.trim() && fixedTeam ? fixedTeam.teamId : undefined };
+          b.ids.add(row.identityId);
+          buckets.set(key, b);
+        }
+        // Regras do site da Employer (teamId conhecido: não precisa resolver pelo nome).
+        for (const tm of siteTeams.get(row.employerSiteId ?? "") ?? []) {
+          const key = `${env ?? ""}|id:${tm.teamId}`;
+          const b = buckets.get(key) ?? { name: tm.name, env, ids: new Set<string>(), teamId: tm.teamId };
+          b.ids.add(row.identityId);
+          buckets.set(key, b);
+        }
       }
     }
     const out: ImportTeamSummary[] = [];
@@ -643,12 +678,13 @@ function ImportPage() {
           if (job.status === "Completed") {
             if (!job.result) throw new ArgusApiError({ status: 0, message: "Job sem resultado." });
             const res = job.result;
-            if (g.origRows.length || g.label || g.teamNames) {
+            if (g.origRows.length || g.label || g.teamNames || g.employerSiteIds) {
               res.rows = res.rows.map((row) => ({
                 ...row,
                 rowNumber: g.origRows.length ? (g.origRows[row.rowNumber - 2] ?? row.rowNumber) : row.rowNumber,
                 ...(g.label ? { cliente: g.label } : {}),
                 ...(g.teamNames ? { regra: g.teamNames[row.rowNumber - 2] ?? "" } : {}),
+                ...(g.employerSiteIds ? { employerSiteId: g.employerSiteIds[row.rowNumber - 2] ?? "" } : {}),
               }));
             }
             return res;
@@ -672,9 +708,11 @@ function ImportPage() {
       if (!results.length) throw new ArgusApiError({ status: 0, message: "Nenhuma linha a importar." });
       // Inclusão nas regras só na importação real (a simulação não cria identidades).
       const fixedTeam = teamHeader ? null : teams.find((x) => x.teamId === teamId) ?? null;
-      const wantsTeams = Boolean(teamHeader || fixedTeam);
+      // Modo Employer: regras vinculadas aos sites da Employer, por linha.
+      const siteTeams = siteMode === "employer" ? employerSiteTeams : new Map<string, { teamId: string; name: string }[]>();
+      const wantsTeams = Boolean(teamHeader || fixedTeam || siteTeams.size);
       const isDry = !selection?.length && dryRun;
-      const teamSummaries = wantsTeams && !isDry ? await includeInTeams(resultEnvs, f.name, fixedTeam) : undefined;
+      const teamSummaries = wantsTeams && !isDry ? await includeInTeams(resultEnvs, f.name, fixedTeam, siteTeams) : undefined;
       if (results.length === 1) return { ...results[0], ...(teamSummaries ? { teams: teamSummaries } : {}) };
       const sum = (k: "totalRows" | "created" | "updated" | "skipped" | "failed") => results.reduce((n, r) => n + (r[k] ?? 0), 0);
       const merged: IdentityImportResult = {
@@ -1040,9 +1078,12 @@ function ImportPage() {
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground sm:pt-7">
-              {teamHeader ? t("import.team.fromColumn", { column: teamHeader }) : t("import.team.hint")}
-            </p>
+            <div className="space-y-1 text-xs text-muted-foreground sm:pt-7">
+              <p>{teamHeader ? t("import.team.fromColumn", { column: teamHeader }) : t("import.team.hint")}</p>
+              {siteMode === "employer" && employerSiteTeams.size > 0 && (
+                <p>{t("import.employer.siteTeams", { count: employerSiteTeams.size })}</p>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-[180px_1fr] sm:items-start">
@@ -1254,7 +1295,7 @@ function ImportPage() {
                 ))}
               </div>
             )}
-            {result.dryRun && (teamHeader || teamId) && (
+            {result.dryRun && (teamHeader || teamId || (siteMode === "employer" && employerSiteTeams.size > 0)) && (
               <p className="text-xs text-muted-foreground">{t("import.team.dryRunHint")}</p>
             )}
 

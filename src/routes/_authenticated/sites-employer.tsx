@@ -6,12 +6,14 @@ import { Plus, RefreshCw, Pencil, Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import { useActiveProfile } from "@/lib/argus-client";
+import { argusApi, useActiveProfile } from "@/lib/argus-client";
 import { corporateData } from "@/lib/corporatedata-client";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -30,7 +32,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -46,8 +54,16 @@ export const Route = createFileRoute("/_authenticated/sites-employer")({
 });
 
 type EmployerSite = Database["public"]["Tables"]["employer_sites"]["Row"];
-type FormState = { id: string | null; site_id: string; nome: string; codigo: string };
-const EMPTY_FORM: FormState = { id: null, site_id: "", nome: "", codigo: "" };
+type EmployerSiteTeam = Database["public"]["Tables"]["employer_site_teams"]["Row"];
+// teams = regras de acesso (teamId → nome) em que as pessoas deste site são incluídas na importação.
+type FormState = {
+  id: string | null;
+  site_id: string;
+  nome: string;
+  codigo: string;
+  teams: Map<string, string>;
+};
+const EMPTY_FORM: FormState = { id: null, site_id: "", nome: "", codigo: "", teams: new Map() };
 
 function EmployerSitesPage() {
   const { t } = useT();
@@ -72,6 +88,44 @@ function EmployerSitesPage() {
     enabled: Boolean(activeProfile),
   });
   const rows = listQuery.data ?? [];
+
+  // Regras de acesso vinculadas a cada site da Employer (por cliente).
+  const teamsLinkQuery = useQuery({
+    queryKey: ["employer-site-teams", activeProfile],
+    queryFn: async (): Promise<EmployerSiteTeam[]> => {
+      const { data, error } = await supabase
+        .from("employer_site_teams")
+        .select("*")
+        .eq("profile", activeProfile);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    enabled: Boolean(activeProfile),
+  });
+  const teamsByLink = useMemo(() => {
+    const m = new Map<string, EmployerSiteTeam[]>();
+    for (const r of teamsLinkQuery.data ?? [])
+      m.set(r.employer_site_id, [...(m.get(r.employer_site_id) ?? []), r]);
+    return m;
+  }, [teamsLinkQuery.data]);
+
+  // Regras (teams) do site escolhido no diálogo.
+  const siteTeamsQuery = useQuery({
+    queryKey: ["employer-site-teams-options", activeProfile, form.site_id],
+    queryFn: () => argusApi.listAllTeams({ siteId: form.site_id }),
+    enabled: dialogOpen && Boolean(form.site_id),
+    staleTime: 5 * 60_000,
+  });
+  const siteTeams = (siteTeamsQuery.data ?? [])
+    .slice()
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "pt-BR"));
+  const toggleTeam = (teamId: string, name: string, checked: boolean) =>
+    setForm((f) => {
+      const teams = new Map(f.teams);
+      if (checked) teams.set(teamId, name);
+      else teams.delete(teamId);
+      return { ...f, teams };
+    });
 
   // Sites do ClearID (via CorporateData) para escolher o siteId no vínculo.
   const clientesQuery = useQuery({
@@ -109,12 +163,35 @@ function EmployerSitesPage() {
         nome: f.nome.trim() || null,
         codigo: f.codigo.trim() || null,
       };
-      if (f.id) {
-        const { error } = await supabase.from("employer_sites").update(payload).eq("id", f.id);
+      let linkId = f.id;
+      if (linkId) {
+        const { error } = await supabase.from("employer_sites").update(payload).eq("id", linkId);
         if (error) throw new Error(error.message);
       } else {
-        const { error } = await supabase.from("employer_sites").insert(payload);
+        const { data, error } = await supabase
+          .from("employer_sites")
+          .insert(payload)
+          .select("id")
+          .single();
         if (error) throw new Error(error.message);
+        linkId = data.id;
+      }
+      // Regras do vínculo: substitui o conjunto pelo selecionado no diálogo.
+      const { error: delErr } = await supabase
+        .from("employer_site_teams")
+        .delete()
+        .eq("employer_site_id", linkId);
+      if (delErr) throw new Error(delErr.message);
+      if (f.teams.size) {
+        const { error: insErr } = await supabase.from("employer_site_teams").insert(
+          [...f.teams.entries()].map(([team_id, team_name]) => ({
+            employer_site_id: linkId,
+            profile: activeProfile,
+            team_id,
+            team_name,
+          })),
+        );
+        if (insErr) throw new Error(insErr.message);
       }
     },
     onSuccess: () => {
@@ -128,6 +205,7 @@ function EmployerSitesPage() {
       });
       toast.success(t("employerSites.toast.saved"));
       qc.invalidateQueries({ queryKey: ["employer-sites", activeProfile] });
+      qc.invalidateQueries({ queryKey: ["employer-site-teams", activeProfile] });
       setDialogOpen(false);
     },
     onError: (e) => toast.error((e as Error).message),
@@ -142,6 +220,7 @@ function EmployerSitesPage() {
       auditDelete("employer_site", String(id), null, "o vínculo de site da Employer");
       toast.success(t("employerSites.toast.removed"));
       qc.invalidateQueries({ queryKey: ["employer-sites", activeProfile] });
+      qc.invalidateQueries({ queryKey: ["employer-site-teams", activeProfile] });
       setToDelete(null);
     },
     onError: (e) => toast.error((e as Error).message),
@@ -152,7 +231,15 @@ function EmployerSitesPage() {
     setDialogOpen(true);
   };
   const openEdit = (r: EmployerSite) => {
-    setForm({ id: r.id, site_id: r.site_id, nome: r.nome ?? "", codigo: r.codigo ?? "" });
+    setForm({
+      id: r.id,
+      site_id: r.site_id,
+      nome: r.nome ?? "",
+      codigo: r.codigo ?? "",
+      teams: new Map(
+        (teamsByLink.get(r.id) ?? []).map((x) => [x.team_id, x.team_name ?? x.team_id]),
+      ),
+    });
     setDialogOpen(true);
   };
   const submit = () => {
@@ -209,6 +296,7 @@ function EmployerSitesPage() {
                     <TableHead>{t("employerSites.col.codigo")}</TableHead>
                     <TableHead>{t("employerSites.col.nome")}</TableHead>
                     <TableHead>{t("employerSites.col.site")}</TableHead>
+                    <TableHead>{t("employerSites.col.teams")}</TableHead>
                     <TableHead className="text-right">{t("common.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -222,6 +310,19 @@ function EmployerSitesPage() {
                           <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
                           {siteName(r.site_id)}
                         </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {(teamsByLink.get(r.id) ?? []).length === 0 ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            (teamsByLink.get(r.id) ?? []).map((x) => (
+                              <Badge key={x.id} variant="secondary">
+                                {x.team_name ?? x.team_id}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -250,9 +351,7 @@ function EmployerSitesPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {form.id ? t("employerSites.edit") : t("employerSites.add")}
-            </DialogTitle>
+            <DialogTitle>{form.id ? t("employerSites.edit") : t("employerSites.add")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-3">
@@ -277,7 +376,14 @@ function EmployerSitesPage() {
               <Label>{t("employerSites.col.site")}</Label>
               <Select
                 value={form.site_id}
-                onValueChange={(v) => setForm((f) => ({ ...f, site_id: v }))}
+                // Trocar o site limpa as regras (são do site anterior).
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    site_id: v,
+                    teams: v === f.site_id ? f.teams : new Map(),
+                  }))
+                }
                 disabled={sitesQuery.isLoading}
               >
                 <SelectTrigger>
@@ -296,6 +402,34 @@ function EmployerSitesPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">{t("employerSites.siteHint")}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("employerSites.col.teams")}</Label>
+              {!form.site_id ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("employerSites.teamsSelectSite")}
+                </p>
+              ) : siteTeamsQuery.isLoading ? (
+                <p className="text-xs text-muted-foreground">{t("employerSites.teamsLoading")}</p>
+              ) : siteTeams.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t("employerSites.teamsEmpty")}</p>
+              ) : (
+                <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-md border p-2">
+                  {siteTeams.map((tm) => (
+                    <label
+                      key={tm.teamId}
+                      className="flex cursor-pointer items-center gap-2 text-sm"
+                    >
+                      <Checkbox
+                        checked={form.teams.has(tm.teamId)}
+                        onCheckedChange={(c) => toggleTeam(tm.teamId, tm.name, c === true)}
+                      />
+                      <span>{tm.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">{t("employerSites.teamsHint")}</p>
             </div>
           </div>
           <DialogFooter>

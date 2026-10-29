@@ -274,6 +274,8 @@ export interface IdentityImportRow {
   changedFields?: string[];
   /** Regra (team) em que a pessoa deve ser incluída após a importação (coluna mapeada). */
   regra?: string | null;
+  /** Site resolvido pela Employer para a linha (define as regras de acesso por site). */
+  employerSiteId?: string | null;
 }
 
 /** Resultado da inclusão nas regras (teams) após a importação. */

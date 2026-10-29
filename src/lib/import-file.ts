@@ -293,6 +293,8 @@ export type PreparedGroup = {
   origRows: number[];
   /** teamNames[i] = regra (team) da linha i+2 do CSV, quando a planilha traz a coluna "Regra · Nome". */
   teamNames?: string[];
+  /** employerSiteIds[i] = siteId resolvido pela Employer para a linha i+2 do CSV ("" = sem site). */
+  employerSiteIds?: string[];
 };
 
 /** siteId pelo nome: igualdade (minúsculo) e, na falta, sem o código entre parênteses. */
@@ -390,7 +392,7 @@ export async function applyColumnMapping(
     clientByKey.set(normKey(c.label), c);
   }
   const activeClient = opts?.activeClient ?? null;
-  const groups = new Map<string | null, { label: string; rows: Record<string, unknown>[]; origRows: number[]; teamNames: string[] }>();
+  const groups = new Map<string | null, { label: string; rows: Record<string, unknown>[]; origRows: number[]; teamNames: string[]; siteIds: string[] }>();
   const usesTeam = Object.values(mapping).some((t) => t === TEAM_NAME_TARGET);
   let unresolvedClients = 0;
   const unknownClients = new Set<string>();
@@ -511,10 +513,11 @@ export async function applyColumnMapping(
       next.supabaseWorkerTypeIsDefault = "1";
     }
     ensureKeyFromCpf(next, cpf);
-    const g = groups.get(clientCode) ?? { label: clientLabel, rows: [], origRows: [], teamNames: [] };
+    const g = groups.get(clientCode) ?? { label: clientLabel, rows: [], origRows: [], teamNames: [], siteIds: [] };
     g.rows.push(next);
     g.origRows.push(Number.isFinite(origRow) ? origRow : g.rows.length + 1);
     g.teamNames.push(teamName);
+    g.siteIds.push(String(next.siteId ?? "").trim());
     groups.set(clientCode, g);
   }
 
@@ -528,6 +531,7 @@ export async function applyColumnMapping(
       file: new File([csv], `${baseName}${suffix}.csv`, { type: "text/csv" }),
       origRows: g.origRows,
       ...(usesTeam ? { teamNames: g.teamNames } : {}),
+      ...(usesEmployer ? { employerSiteIds: g.siteIds } : {}),
     };
   });
   if (!prepared.length) {

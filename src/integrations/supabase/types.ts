@@ -189,6 +189,41 @@ export type Database = {
         }
         Relationships: []
       }
+      employer_site_teams: {
+        Row: {
+          created_at: string
+          employer_site_id: string
+          id: string
+          profile: string
+          team_id: string
+          team_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          employer_site_id: string
+          id?: string
+          profile: string
+          team_id: string
+          team_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          employer_site_id?: string
+          id?: string
+          profile?: string
+          team_id?: string
+          team_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employer_site_teams_employer_site_id_fkey"
+            columns: ["employer_site_id"]
+            isOneToOne: false
+            referencedRelation: "employer_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employer_sites: {
         Row: {
           codigo: string | null
