@@ -790,6 +790,36 @@ export type Database = {
         }
         Relationships: []
       }
+      site_date_rules: {
+        Row: {
+          block_company_validity: boolean
+          block_identity_validity: boolean
+          created_at: string
+          id: string
+          profile: string
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          block_company_validity?: boolean
+          block_identity_validity?: boolean
+          created_at?: string
+          id?: string
+          profile: string
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          block_company_validity?: boolean
+          block_identity_validity?: boolean
+          created_at?: string
+          id?: string
+          profile?: string
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       site_custom_fields: {
         Row: {
           created_at: string

@@ -1,6 +1,8 @@
 // Guarda de gravação da identidade: ao salvar, avalia as datas de afastamento/
-// férias e as datas de validade (certidões, cursos, ASO…) preenchidas. Se
-// houver afastamento em vigor ou alguma validade vencida, a pessoa é inativada
+// férias e as datas de validade (certidões, cursos, ASO…) preenchidas, incluindo
+// as validades da empresa vinculada (empresa vencida bloqueia o colaborador),
+// conforme as regras do site (site_date_rules: site sem bloqueio não bloqueia por
+// validade). Se houver afastamento em vigor ou alguma validade vencida, a pessoa é inativada
 // no ClearID e o motivo é gravado no campo "Motivo do Afastamento" do cliente
 // (identity_custom_fields). Quando a situação é regularizada numa gravação
 // posterior, a pessoa inativada por ESTA regra é reativada e o motivo limpo.

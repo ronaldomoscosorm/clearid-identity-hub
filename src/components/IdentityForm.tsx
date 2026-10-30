@@ -600,6 +600,67 @@ export function IdentityForm({
     enabled: Boolean(companyId),
   });
 
+  // Datas de validade da empresa selecionada (campos de data com vencimento ligado):
+  // empresa vencida bloqueia o colaborador na gravação, independentemente das datas dele.
+  const companyValidityQuery = useQuery({
+    queryKey: ["company-validity-values", companyId],
+    queryFn: async (): Promise<GuardDate[]> => {
+      const { data, error } = await supabase
+        .from("company_custom_fields")
+        .select(
+          "value, site_custom_fields!inner(entity_type, is_active, display_name_override, definition:custom_field_definitions(custom_field_name, display_name, custom_field_type, expiration_enabled))",
+        )
+        .eq("company_id", companyId)
+        .eq("site_custom_fields.entity_type", "company")
+        .eq("site_custom_fields.is_active", true)
+        .returns<
+          {
+            value: string | null;
+            site_custom_fields: {
+              display_name_override: Json;
+              definition: {
+                custom_field_name: string;
+                display_name: Json;
+                custom_field_type: string | null;
+                expiration_enabled: boolean;
+              } | null;
+            } | null;
+          }[]
+        >();
+      if (error) throw new Error(error.message);
+      const name = companies.find((c) => c.id === companyId)?.name ?? "";
+      const out: GuardDate[] = [];
+      for (const r of data ?? []) {
+        const def = r.site_custom_fields?.definition;
+        if (!def || siteFieldKind(def.custom_field_type) !== "date" || def.expiration_enabled === false) continue;
+        const value = String(r.value ?? "").slice(0, 10);
+        if (!value) continue;
+        const label = pickLang(r.site_custom_fields?.display_name_override) || pickLang(def.display_name) || def.custom_field_name;
+        out.push({ name: `company:${def.custom_field_name}`, label: `Empresa ${name}: ${label}`, value, tracksExpiration: true });
+      }
+      return out;
+    },
+    enabled: Boolean(companyId),
+  });
+
+  // Regras de bloqueio por validade do site escolhido (Configurações do cliente):
+  // sem linha para o site, nenhuma validade (própria ou da empresa) bloqueia.
+  const siteDateRuleQuery = useQuery({
+    queryKey: ["site-date-rules", activeProfile, siteId],
+    queryFn: async (): Promise<{ blockIdentity: boolean; blockCompany: boolean }> => {
+      const { data, error } = await supabase
+        .from("site_date_rules")
+        .select("block_identity_validity, block_company_validity")
+        .eq("profile", activeProfile)
+        .eq("site_id", siteId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return { blockIdentity: data?.block_identity_validity ?? false, blockCompany: data?.block_company_validity ?? false };
+    },
+    enabled: Boolean(activeProfile && siteId),
+    staleTime: 60 * 1000,
+  });
+
   // Preenche os campos de identidade relacionados com o valor da empresa.
   useEffect(() => {
     const rows = companyRelatedQuery.data;
@@ -1434,9 +1495,21 @@ export function IdentityForm({
       const def = cfDefByName.get(name);
       return alias(name, def?.displayName || name);
     };
-    const guardDates: GuardDate[] = [...dateFieldNames]
-      .filter((name) => (cf[name] ?? "").trim() !== "")
-      .map((name) => ({ name, label: labelOfCf(name), value: cf[name], tracksExpiration: tracksExpiration(name) }));
+    // Regras do site: só as validades que o site bloqueia entram como vencimento
+    // (as datas próprias continuam na lista para a regra de afastamento/férias).
+    const siteRule = siteDateRuleQuery.data ?? { blockIdentity: false, blockCompany: false };
+    const guardDates: GuardDate[] = [
+      // Validade da empresa primeiro: vencida, bloqueia todos os colaboradores.
+      ...(companyId && siteRule.blockCompany ? companyValidityQuery.data ?? [] : []),
+      ...[...dateFieldNames]
+        .filter((name) => (cf[name] ?? "").trim() !== "")
+        .map((name) => ({
+          name,
+          label: labelOfCf(name),
+          value: cf[name],
+          tracksExpiration: siteRule.blockIdentity && tracksExpiration(name),
+        })),
+    ];
     const motivoFieldName =
       siteFields.find((sf) => sf.definition && isMotivoField(sf.definition.custom_field_name))?.definition
         ?.custom_field_name ??
