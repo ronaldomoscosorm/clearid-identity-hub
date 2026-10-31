@@ -225,8 +225,18 @@ function ClientSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {sitesQuery.isLoading || rulesQuery.isLoading ? (
+          {rulesQuery.isError && (
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              Não foi possível ler as regras salvas (tabela <code>site_date_rules</code>): {(rulesQuery.error as Error).message}.
+              Verifique se a migration foi aplicada no Supabase.
+            </p>
+          )}
+          {sitesQuery.isLoading ? (
             <p className="text-sm text-muted-foreground">Carregando sites…</p>
+          ) : sitesQuery.isError ? (
+            <p className="text-sm text-destructive">
+              Não foi possível carregar os sites do ClearID: {(sitesQuery.error as Error).message || "sem detalhes (verifique a sessão e a API)"}
+            </p>
           ) : sites.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhum site disponível para este cliente.</p>
           ) : (

@@ -530,6 +530,52 @@ interface ApiEnvelope<T> {
   data: T;
 }
 
+export interface LeaveReactivationJobStart {
+  jobId: string;
+  /** true quando a API reaproveitou um job que já estava em execução. */
+  reused: boolean;
+}
+
+export interface LeaveReactivationItem {
+  identityId: string;
+  displayName?: string | null;
+  email?: string | null;
+  siteId?: string | null;
+  companyName?: string | null;
+  previousStatus?: string | null;
+  reason?: string | null;
+  /** Reactivated | Cleared | Deactivated | ReasonUpdated | Skipped | Failed */
+  action: string;
+  message?: string | null;
+}
+
+export interface LeaveReactivationResult {
+  profile: string;
+  dryRun: boolean;
+  companyId?: string | null;
+  checked: number;
+  reactivated: number;
+  cleared: number;
+  deactivated: number;
+  reasonUpdated: number;
+  skipped: number;
+  failed: number;
+  warning?: string | null;
+  items: LeaveReactivationItem[];
+}
+
+export interface LeaveReactivationJob {
+  id: string;
+  status: "Running" | "Completed" | "Failed";
+  profile: string;
+  dryRun: boolean;
+  companyId?: string | null;
+  result?: LeaveReactivationResult | null;
+  error?: string | null;
+  createdUtc: string;
+  completedUtc?: string | null;
+}
+
 /** Payload de criação/edição enviado ao backend. */
 export interface IdentityUpsert {
   externalId: string;
@@ -1286,6 +1332,33 @@ async function reportFetchBlob(path: string): Promise<Blob> {
 }
 
 export const argusApi = {
+  /**
+   * Inicia a rotina de datas em segundo plano (POST leave-reactivation/jobs).
+   * Com `companyId`, avalia só a validade dos colaboradores da empresa (própria e da
+   * empresa) — usado ao alterar as datas de validade no cadastro de empresas.
+   */
+  startLeaveReactivationJob: async (
+    opts: { companyId?: string | null; dryRun?: boolean; environment?: string } = {},
+  ): Promise<LeaveReactivationJobStart> => {
+    const q = new URLSearchParams();
+    if (opts.dryRun) q.set("dryRun", "true");
+    if (opts.companyId) q.set("companyId", opts.companyId);
+    const qs = q.toString();
+    return unwrap<LeaveReactivationJobStart>(
+      argusFetch(`/api/identities/leave-reactivation/jobs${qs ? `?${qs}` : ""}`, { method: "POST", body: "{}" }, {
+        environment: opts.environment,
+        allSites: true,
+      }),
+    );
+  },
+  /** Status/resultado de um job da rotina de datas. */
+  getLeaveReactivationJob: async (jobId: string, environment?: string): Promise<LeaveReactivationJob> =>
+    unwrap<LeaveReactivationJob>(
+      argusFetch(`/api/identities/leave-reactivation/jobs/${encodeURIComponent(jobId)}`, undefined, {
+        environment,
+        allSites: true,
+      }),
+    ),
   listSites: async (environment?: string): Promise<ClearIdSite[]> => {
     const data = await unwrap<{ sites?: ClearIdSite[] } | ClearIdSite[]>(
       argusFetch(`/api/sites`, undefined, { environment, allSites: true }),

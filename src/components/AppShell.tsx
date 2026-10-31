@@ -126,6 +126,7 @@ const NAV: NavEntry[] = [
       { to: "/diagnostics", icon: Activity, key: "nav.diagnostics" },
       { to: "/settings", icon: SettingsIcon, key: "nav.settings" },
       { to: "/branding", icon: Palette, key: "nav.branding" },
+      { to: "/configuracoes-cliente", icon: Settings2, key: "nav.configuracoes-cliente" },
       { to: "/auditoria", icon: ScrollText, key: "nav.auditoria" },
     ],
   },

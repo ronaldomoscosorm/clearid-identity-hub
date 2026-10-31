@@ -1,5 +1,5 @@
 import { auditSave } from "@/lib/audit";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, FileCheck2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import type { Database, Json } from "@/integrations/supabase/types";
 import { useT, type TFn } from "@/lib/i18n";
 import { typeOf, pickLang, optionsOf, isTruthy } from "@/lib/custom-fields";
 import { useSpecialFields } from "@/lib/special-fields";
+import { runCompanyValidityRoutine } from "@/lib/company-validity-routine";
 import {
   listCompanyCurrentAttachmentDefinitions,
   uploadCompanyAttachmentVersion,
@@ -131,6 +132,8 @@ export function CompanyForm({
   const [form, setForm] = useState<FormState>(company ? toForm(company) : EMPTY_FORM);
   // Valores começam VAZIOS: só o que já está gravado para a empresa é carregado.
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  // Valores gravados antes da edição: para saber se alguma data de validade mudou.
+  const savedValuesRef = useRef<Record<string, string>>({});
   const [stagedFiles, setStagedFiles] = useState<Record<string, File | null>>({});
   const [existingAttachments, setExistingAttachments] = useState<Set<string>>(new Set());
 
@@ -176,6 +179,7 @@ export function CompanyForm({
   useEffect(() => {
     setForm(company ? toForm(company) : EMPTY_FORM);
     setCustomValues({});
+    savedValuesRef.current = {};
     setStagedFiles({});
     setExistingAttachments(new Set());
     if (!company) return;
@@ -186,7 +190,9 @@ export function CompanyForm({
       .eq("company_id", company.id)
       .then(({ data }) => {
         if (!alive) return;
-        setCustomValues(Object.fromEntries((data ?? []).map((r) => [r.site_custom_field_id, r.value ?? ""])));
+        const loaded = Object.fromEntries((data ?? []).map((r) => [r.site_custom_field_id, r.value ?? ""]));
+        savedValuesRef.current = loaded;
+        setCustomValues(loaded);
       });
     listCompanyCurrentAttachmentDefinitions(company.id)
       .then((s) => alive && setExistingAttachments(s))
@@ -195,6 +201,16 @@ export function CompanyForm({
       alive = false;
     };
   }, [company]);
+
+  // Alguma data com vencimento ligado mudou em relação ao que estava gravado?
+  const validityDatesChanged = () =>
+    siteFields.some((sf) => {
+      const def = sf.definition;
+      if (!def || typeOf(def.custom_field_type) !== "date" || def.expiration_enabled === false) return false;
+      const before = String(savedValuesRef.current[sf.id] ?? "").trim();
+      const after = String(customValues[sf.id] ?? "").trim();
+      return before !== after;
+    });
 
   const save = useMutation({
     mutationFn: async () => {
@@ -258,6 +274,14 @@ export function CompanyForm({
       qc.invalidateQueries({ queryKey: ["companies"] });
       qc.invalidateQueries({ queryKey: ["company"] });
       qc.invalidateQueries({ queryKey: ["company-attachments"] });
+      // Data de validade alterada: roda a rotina de datas só para os colaboradores da
+      // empresa (bloqueia se venceu, desbloqueia quem estava "Vencido:" por ela).
+      if (company && companyId && validityDatesChanged()) {
+        const name = form.name.trim();
+        void runCompanyValidityRoutine({ companyId, companyName: name, profile, t }).then((r) => {
+          if (r) qc.invalidateQueries({ queryKey: ["identities"] });
+        });
+      }
       onSaved();
     },
     onError: (e) => toast.error((e as Error).message),

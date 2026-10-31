@@ -1,14 +1,16 @@
 import { auditDelete } from "@/lib/audit";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, RefreshCw, Pencil, Trash2 } from "lucide-react";
+import { Plus, RefreshCw, Pencil, Trash2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProfile } from "@/lib/argus-client";
 import { useT } from "@/lib/i18n";
+import { matchesSearch } from "@/lib/text-search";
 import type { Company } from "@/components/CompanyForm";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +44,7 @@ function EmpresasPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [toDelete, setToDelete] = useState<Company | null>(null);
+  const [search, setSearch] = useState("");
 
   // Empresas do CLIENTE ativo — cada empresa pertence a um cliente (perfil).
   const query = useQuery({
@@ -71,7 +74,12 @@ function EmpresasPage() {
     onError: (e) => toast.error((e as Error).message),
   });
 
-  const items = query.data ?? [];
+  const all = useMemo(() => query.data ?? [], [query.data]);
+  // Filtro local por nome, razão social ou CNPJ (sem acentos, vários termos).
+  const items = useMemo(
+    () => all.filter((c) => matchesSearch(search, c.name, c.legal_name, c.tax_id)),
+    [all, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -104,14 +112,36 @@ function EmpresasPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="gap-3 sm:flex sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
           <CardTitle className="text-base">
             {query.data
-              ? items.length === 1
-                ? t("companies.count.one", { count: items.length })
-                : t("companies.count.other", { count: items.length })
+              ? search.trim()
+                ? t("companies.count.filtered", { count: items.length, total: all.length })
+                : items.length === 1
+                  ? t("companies.count.one", { count: items.length })
+                  : t("companies.count.other", { count: items.length })
               : t("companies.title")}
           </CardTitle>
+          <div className="relative w-full sm:w-80">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("companies.searchPlaceholder")}
+              aria-label={t("companies.searchPlaceholder")}
+              className="pl-8 pr-8"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label={t("common.clear")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {query.isLoading ? (
@@ -125,7 +155,11 @@ function EmpresasPage() {
               {(query.error as Error).message}
             </div>
           ) : items.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">{t("companies.emptyState")}</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {all.length === 0
+                ? t("companies.emptyState")
+                : t("companies.searchEmpty", { query: search.trim() })}
+            </p>
           ) : (
             <Table>
               <TableHeader>
