@@ -23,8 +23,10 @@ import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedEmpresasRouteImport } from './routes/_authenticated/empresas'
 import { Route as AuthenticatedIdentitiesRouteImport } from './routes/_authenticated/identities'
 import { Route as AuthenticatedImportarRouteImport } from './routes/_authenticated/importar'
+import { Route as AuthenticatedImportarEventosRouteImport } from './routes/_authenticated/importar-eventos'
 import { Route as AuthenticatedLayoutFormularioRouteImport } from './routes/_authenticated/layout-formulario'
 import { Route as AuthenticatedRegrasRouteImport } from './routes/_authenticated/regras'
+import { Route as AuthenticatedRelatoriosEventosRouteImport } from './routes/_authenticated/relatorios-eventos'
 import { Route as AuthenticatedRelatoriosPessoasRouteImport } from './routes/_authenticated/relatorios-pessoas'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSitesEmployerRouteImport } from './routes/_authenticated/sites-employer'
@@ -116,6 +118,12 @@ const AuthenticatedImportarRoute = AuthenticatedImportarRouteImport.update({
   path: '/importar',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedImportarEventosRoute =
+  AuthenticatedImportarEventosRouteImport.update({
+    id: '/importar-eventos',
+    path: '/importar-eventos',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedLayoutFormularioRoute =
   AuthenticatedLayoutFormularioRouteImport.update({
     id: '/layout-formulario',
@@ -127,6 +135,12 @@ const AuthenticatedRegrasRoute = AuthenticatedRegrasRouteImport.update({
   path: '/regras',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedRelatoriosEventosRoute =
+  AuthenticatedRelatoriosEventosRouteImport.update({
+    id: '/relatorios-eventos',
+    path: '/relatorios-eventos',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedRelatoriosPessoasRoute =
   AuthenticatedRelatoriosPessoasRouteImport.update({
     id: '/relatorios-pessoas',
@@ -229,8 +243,10 @@ export interface FileRoutesByFullPath {
   '/empresas': typeof AuthenticatedEmpresasRouteWithChildren
   '/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/importar': typeof AuthenticatedImportarRoute
+  '/importar-eventos': typeof AuthenticatedImportarEventosRoute
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
+  '/relatorios-eventos': typeof AuthenticatedRelatoriosEventosRoute
   '/relatorios-pessoas': typeof AuthenticatedRelatoriosPessoasRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/sites-employer': typeof AuthenticatedSitesEmployerRoute
@@ -259,8 +275,10 @@ export interface FileRoutesByTo {
   '/destinatarios-relatorios': typeof AuthenticatedDestinatariosRelatoriosRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/importar': typeof AuthenticatedImportarRoute
+  '/importar-eventos': typeof AuthenticatedImportarEventosRoute
   '/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/regras': typeof AuthenticatedRegrasRoute
+  '/relatorios-eventos': typeof AuthenticatedRelatoriosEventosRoute
   '/relatorios-pessoas': typeof AuthenticatedRelatoriosPessoasRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/sites-employer': typeof AuthenticatedSitesEmployerRoute
@@ -293,8 +311,10 @@ export interface FileRoutesById {
   '/_authenticated/empresas': typeof AuthenticatedEmpresasRouteWithChildren
   '/_authenticated/identities': typeof AuthenticatedIdentitiesRouteWithChildren
   '/_authenticated/importar': typeof AuthenticatedImportarRoute
+  '/_authenticated/importar-eventos': typeof AuthenticatedImportarEventosRoute
   '/_authenticated/layout-formulario': typeof AuthenticatedLayoutFormularioRoute
   '/_authenticated/regras': typeof AuthenticatedRegrasRoute
+  '/_authenticated/relatorios-eventos': typeof AuthenticatedRelatoriosEventosRoute
   '/_authenticated/relatorios-pessoas': typeof AuthenticatedRelatoriosPessoasRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/sites-employer': typeof AuthenticatedSitesEmployerRoute
@@ -327,8 +347,10 @@ export interface FileRouteTypes {
     | '/empresas'
     | '/identities'
     | '/importar'
+    | '/importar-eventos'
     | '/layout-formulario'
     | '/regras'
+    | '/relatorios-eventos'
     | '/relatorios-pessoas'
     | '/settings'
     | '/sites-employer'
@@ -357,8 +379,10 @@ export interface FileRouteTypes {
     | '/destinatarios-relatorios'
     | '/diagnostics'
     | '/importar'
+    | '/importar-eventos'
     | '/layout-formulario'
     | '/regras'
+    | '/relatorios-eventos'
     | '/relatorios-pessoas'
     | '/settings'
     | '/sites-employer'
@@ -390,8 +414,10 @@ export interface FileRouteTypes {
     | '/_authenticated/empresas'
     | '/_authenticated/identities'
     | '/_authenticated/importar'
+    | '/_authenticated/importar-eventos'
     | '/_authenticated/layout-formulario'
     | '/_authenticated/regras'
+    | '/_authenticated/relatorios-eventos'
     | '/_authenticated/relatorios-pessoas'
     | '/_authenticated/settings'
     | '/_authenticated/sites-employer'
@@ -515,6 +541,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedImportarRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/importar-eventos': {
+      id: '/_authenticated/importar-eventos'
+      path: '/importar-eventos'
+      fullPath: '/importar-eventos'
+      preLoaderRoute: typeof AuthenticatedImportarEventosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/layout-formulario': {
       id: '/_authenticated/layout-formulario'
       path: '/layout-formulario'
@@ -527,6 +560,13 @@ declare module '@tanstack/react-router' {
       path: '/regras'
       fullPath: '/regras'
       preLoaderRoute: typeof AuthenticatedRegrasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/relatorios-eventos': {
+      id: '/_authenticated/relatorios-eventos'
+      path: '/relatorios-eventos'
+      fullPath: '/relatorios-eventos'
+      preLoaderRoute: typeof AuthenticatedRelatoriosEventosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/relatorios-pessoas': {
@@ -685,8 +725,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedEmpresasRoute: typeof AuthenticatedEmpresasRouteWithChildren
   AuthenticatedIdentitiesRoute: typeof AuthenticatedIdentitiesRouteWithChildren
   AuthenticatedImportarRoute: typeof AuthenticatedImportarRoute
+  AuthenticatedImportarEventosRoute: typeof AuthenticatedImportarEventosRoute
   AuthenticatedLayoutFormularioRoute: typeof AuthenticatedLayoutFormularioRoute
   AuthenticatedRegrasRoute: typeof AuthenticatedRegrasRoute
+  AuthenticatedRelatoriosEventosRoute: typeof AuthenticatedRelatoriosEventosRoute
   AuthenticatedRelatoriosPessoasRoute: typeof AuthenticatedRelatoriosPessoasRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSitesEmployerRoute: typeof AuthenticatedSitesEmployerRoute
@@ -713,8 +755,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedEmpresasRoute: AuthenticatedEmpresasRouteWithChildren,
   AuthenticatedIdentitiesRoute: AuthenticatedIdentitiesRouteWithChildren,
   AuthenticatedImportarRoute: AuthenticatedImportarRoute,
+  AuthenticatedImportarEventosRoute: AuthenticatedImportarEventosRoute,
   AuthenticatedLayoutFormularioRoute: AuthenticatedLayoutFormularioRoute,
   AuthenticatedRegrasRoute: AuthenticatedRegrasRoute,
+  AuthenticatedRelatoriosEventosRoute: AuthenticatedRelatoriosEventosRoute,
   AuthenticatedRelatoriosPessoasRoute: AuthenticatedRelatoriosPessoasRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSitesEmployerRoute: AuthenticatedSitesEmployerRoute,

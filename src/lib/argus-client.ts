@@ -7,36 +7,56 @@ import { getSsoToken } from "./sso-token";
 // --- Armazenamento: helpers localStorage (padrão) e sessionStorage (override) ---
 function lsGet(key: string): string | null {
   if (typeof window === "undefined") return null;
-  try { return window.localStorage.getItem(key); } catch { return null; }
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 function lsSet(key: string, val: string | null) {
   if (typeof window === "undefined") return;
   try {
     if (val) window.localStorage.setItem(key, val);
     else window.localStorage.removeItem(key);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 function ssGet(key: string): string | null {
   if (typeof window === "undefined") return null;
-  try { return window.sessionStorage.getItem(key); } catch { return null; }
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 function ssSet(key: string, val: string) {
   if (typeof window === "undefined") return;
-  try { window.sessionStorage.setItem(key, val); } catch { /* ignore */ }
+  try {
+    window.sessionStorage.setItem(key, val);
+  } catch {
+    /* ignore */
+  }
 }
 function ssRemove(key: string) {
   if (typeof window === "undefined") return;
-  try { window.sessionStorage.removeItem(key); } catch { /* ignore */ }
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
 }
 
 // --- Site: padrão configurado (localStorage/Configurações) vs seleção da sessão
 // (sessionStorage/topbar). O site "em efeito" (usado nas requisições) é o override
 // da sessão quando houver, senão o padrão configurado. Alterar o site no topbar
 // NÃO altera o padrão salvo em Configurações. ---
-const SITE_KEY = "argus.defaultSiteId";          // padrão (persistente)
-const SITE_SESSION_KEY = "argus.sessionSiteId";  // override da sessão (topbar)
+const SITE_KEY = "argus.defaultSiteId"; // padrão (persistente)
+const SITE_SESSION_KEY = "argus.sessionSiteId"; // override da sessão (topbar)
 const siteListeners = new Set<() => void>();
-function notifySite() { for (const cb of siteListeners) cb(); }
+function notifySite() {
+  for (const cb of siteListeners) cb();
+}
 
 /** Site padrão configurado em Configurações (persistente). */
 export function getConfiguredSiteId(): string | null {
@@ -81,12 +101,20 @@ function subscribeSite(cb: () => void) {
 
 /** React hook: site em efeito (sessão ?? padrão). */
 export function useDefaultSiteId(): string | null {
-  return useSyncExternalStore(subscribeSite, () => getDefaultSiteId(), () => null);
+  return useSyncExternalStore(
+    subscribeSite,
+    () => getDefaultSiteId(),
+    () => null,
+  );
 }
 
 /** React hook: site padrão configurado (para Configurações). */
 export function useConfiguredSiteId(): string | null {
-  return useSyncExternalStore(subscribeSite, () => getConfiguredSiteId(), () => null);
+  return useSyncExternalStore(
+    subscribeSite,
+    () => getConfiguredSiteId(),
+    () => null,
+  );
 }
 
 // --- AccountId cache (preenchido pelo /api/diagnostics/environment) ---
@@ -99,7 +127,9 @@ export function getAccountId(): string | null {
     try {
       const stored = window.localStorage.getItem("argus.accountId");
       if (stored) cachedAccountId = stored;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   return cachedAccountId;
 }
@@ -110,7 +140,9 @@ export function setAccountId(id: string | null) {
     try {
       if (id) window.localStorage.setItem("argus.accountId", id);
       else window.localStorage.removeItem("argus.accountId");
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   for (const cb of accountIdListeners) cb(cachedAccountId);
 }
@@ -132,7 +164,9 @@ export function getSystemObjectId(): string | null {
     try {
       const stored = window.localStorage.getItem(SYSTEM_KEY);
       if (stored) cachedSystemObjectId = stored;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   return cachedSystemObjectId;
 }
@@ -143,7 +177,9 @@ export function setSystemObjectId(id: string | null) {
     try {
       if (id) window.localStorage.setItem(SYSTEM_KEY, id);
       else window.localStorage.removeItem(SYSTEM_KEY);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   for (const cb of systemListeners) cb();
 }
@@ -185,10 +221,12 @@ export const CLEARID_PROFILES: ClearIdProfile[] = [
 ];
 
 const DEFAULT_PROFILE = "RM";
-const PROFILE_KEY = "argus.profile";               // padrão (persistente/Configurações)
+const PROFILE_KEY = "argus.profile"; // padrão (persistente/Configurações)
 const PROFILE_SESSION_KEY = "argus.sessionProfile"; // override da sessão (topbar)
 const profileListeners = new Set<() => void>();
-function notifyProfile() { for (const cb of profileListeners) cb(); }
+function notifyProfile() {
+  for (const cb of profileListeners) cb();
+}
 
 /** Perfil padrão configurado em Configurações. */
 export function getDefaultProfile(): string {
@@ -290,6 +328,29 @@ export interface ImportTeamSummary {
   /** Regra não encontrada pelo nome. */
   unresolved?: boolean;
   error?: string | null;
+}
+
+/** Erro de uma linha na importação de eventos de acesso. */
+export interface AccessEventsImportError {
+  line?: number | null;
+  message: string;
+}
+
+/** Resumo da importação de um arquivo de eventos de acesso (POST /api/access-events/import). */
+export interface AccessEventsImportResult {
+  profile: string;
+  fileName: string;
+  dryRun: boolean;
+  rows: number;
+  imported: number;
+  updated: number;
+  duplicates: number;
+  failed: number;
+  from?: string | null;
+  to?: string | null;
+  unknownEventTypes: string[];
+  unresolvedSites: string[];
+  errors: AccessEventsImportError[];
 }
 
 export interface IdentityImportResult {
@@ -641,9 +702,7 @@ function normalizeCreateIdentityPayload(data: IdentityUpsert): IdentityUpsert {
       ? data.status.toLowerCase()
       : data.status) as IdentityUpsert["status"],
     identityType:
-      typeof data.identityType === "string"
-        ? data.identityType.toLowerCase()
-        : data.identityType,
+      typeof data.identityType === "string" ? data.identityType.toLowerCase() : data.identityType,
   };
 }
 
@@ -666,9 +725,12 @@ function customFieldsToClearIdArray(
     // Não envie "" para campos tipados (Date/Boolean/Numeric) — o ClearID
     // rejeita com 400. Preserve o valor original se existir, senão pule.
     const isTypedField =
-      typeLc === "date" || typeLc === "datetime" ||
-      typeLc === "bool" || typeLc === "boolean" ||
-      typeLc === "numeric" || typeLc === "number";
+      typeLc === "date" ||
+      typeLc === "datetime" ||
+      typeLc === "bool" ||
+      typeLc === "boolean" ||
+      typeLc === "numeric" ||
+      typeLc === "number";
     if (isTypedField && !trimmed) {
       const prev = existingByName.get(customFieldName);
       if (prev && prev.customFieldValue) merged.push(prev);
@@ -725,9 +787,7 @@ export function serializeCustomFieldsForPatch(
       if (!iso) continue; // ignora datas inválidas
       serialized = iso;
     } else if (typeLc === "bool" || typeLc === "boolean") {
-      serialized = ["true", "1", "yes", "sim"].includes(raw.toLowerCase())
-        ? "true"
-        : "false";
+      serialized = ["true", "1", "yes", "sim"].includes(raw.toLowerCase()) ? "true" : "false";
     } else if (typeLc === "numeric" || typeLc === "number") {
       const cleaned = raw.replace(/[^0-9.\-]/g, "");
       serialized = cleaned || null;
@@ -747,7 +807,10 @@ function toClearIdName(value: string | null | undefined, fallback: string) {
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
-function pickDefined<T extends Record<string, unknown>>(source: Record<string, unknown> | null | undefined, keys: string[]): Partial<T> | undefined {
+function pickDefined<T extends Record<string, unknown>>(
+  source: Record<string, unknown> | null | undefined,
+  keys: string[],
+): Partial<T> | undefined {
   if (!source) return undefined;
   const out: Record<string, unknown> = {};
   for (const key of keys) {
@@ -770,7 +833,8 @@ function normalizeUpdateIdentityPayload(data: IdentityUpsert): Record<string, un
   if (!data.eTag) {
     throw new ArgusApiError({
       status: 0,
-      message: "Não foi possível atualizar: versão da identidade não carregada. Aguarde a foto atualizar e tente novamente.",
+      message:
+        "Não foi possível atualizar: versão da identidade não carregada. Aguarde a foto atualizar e tente novamente.",
     });
   }
 
@@ -1044,7 +1108,8 @@ export interface VisitEvent {
 }
 
 // ---- Auditoria de atividades ----
-export type AuditAction = "created" | "updated" | "deleted" | "imported" | "login" | "logout" | "other" | (string & {});
+export type AuditAction =
+  "created" | "updated" | "deleted" | "imported" | "login" | "logout" | "other" | (string & {});
 export interface AuditEvent {
   action: AuditAction;
   entityType?: string | null;
@@ -1158,31 +1223,37 @@ const credentialFieldSchema = z.object({
   value: z.union([z.string(), z.number(), z.null()]).optional(),
 });
 
-const credentialFormatSchema = z.object({
-  formatId: z.string().optional().nullable(),
-  facilityCode: z.union([z.string(), z.number(), z.null()]).optional(),
-  cardNumber: z.union([z.string(), z.number(), z.null()]).optional(),
-  fields: z.array(credentialFieldSchema).optional().nullable(),
-}).passthrough();
+const credentialFormatSchema = z
+  .object({
+    formatId: z.string().optional().nullable(),
+    facilityCode: z.union([z.string(), z.number(), z.null()]).optional(),
+    cardNumber: z.union([z.string(), z.number(), z.null()]).optional(),
+    fields: z.array(credentialFieldSchema).optional().nullable(),
+  })
+  .passthrough();
 
-const credentialStatusSchema = z.object({
-  state: z.string().optional().nullable(),
-  activationDateUtc: z.string().optional().nullable(),
-  expirationDateUtc: z.string().optional().nullable(),
-  expirationMode: z.string().optional().nullable(),
-  expirationDurationInDays: z.number().nullable().optional(),
-}).passthrough();
+const credentialStatusSchema = z
+  .object({
+    state: z.string().optional().nullable(),
+    activationDateUtc: z.string().optional().nullable(),
+    expirationDateUtc: z.string().optional().nullable(),
+    expirationMode: z.string().optional().nullable(),
+    expirationDurationInDays: z.number().nullable().optional(),
+  })
+  .passthrough();
 
-const credentialItemSchema = z.object({
-  globalId: z.string().optional(),
-  credentialId: z.string().optional(),
-  identityId: z.string().optional(),
-  name: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  credentialType: z.string().nullable().optional(),
-  credentialFormat: credentialFormatSchema.optional().nullable(),
-  status: credentialStatusSchema.optional().nullable(),
-}).passthrough();
+const credentialItemSchema = z
+  .object({
+    globalId: z.string().optional(),
+    credentialId: z.string().optional(),
+    identityId: z.string().optional(),
+    name: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
+    credentialType: z.string().nullable().optional(),
+    credentialFormat: credentialFormatSchema.optional().nullable(),
+    status: credentialStatusSchema.optional().nullable(),
+  })
+  .passthrough();
 
 const credentialsResponseSchema = z.union([
   z.array(credentialItemSchema),
@@ -1204,9 +1275,7 @@ export function parseCredentialsResponse(raw: unknown): CredentialRecord[] {
   if (!parsed.success) {
     throw new Error(`Resposta inválida de credenciais: ${parsed.error.message}`);
   }
-  const items = Array.isArray(parsed.data)
-    ? parsed.data
-    : (parsed.data.credentials ?? []);
+  const items = Array.isArray(parsed.data) ? parsed.data : (parsed.data.credentials ?? []);
   return items.map((it) => {
     const fmt = it.credentialFormat ?? undefined;
     const st = it.status ?? undefined;
@@ -1303,7 +1372,9 @@ async function reportFetchJson(path: string, init: RequestInit): Promise<unknown
   const res = await fetch(url, { ...init, credentials: "include", headers });
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    const message = (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+    const message =
+      (body && typeof body === "object" && (body as { message?: string }).message) ||
+      res.statusText;
     throw new ArgusApiError({ status: res.status, message, raw: body });
   }
   return body;
@@ -1325,7 +1396,9 @@ async function reportFetchBlob(path: string): Promise<Blob> {
   const res = await fetch(url, { credentials: "include", headers });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    const message = (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+    const message =
+      (body && typeof body === "object" && (body as { message?: string }).message) ||
+      res.statusText;
     throw new ArgusApiError({ status: res.status, message, raw: body });
   }
   return await res.blob();
@@ -1345,19 +1418,30 @@ export const argusApi = {
     if (opts.companyId) q.set("companyId", opts.companyId);
     const qs = q.toString();
     return unwrap<LeaveReactivationJobStart>(
-      argusFetch(`/api/identities/leave-reactivation/jobs${qs ? `?${qs}` : ""}`, { method: "POST", body: "{}" }, {
-        environment: opts.environment,
-        allSites: true,
-      }),
+      argusFetch(
+        `/api/identities/leave-reactivation/jobs${qs ? `?${qs}` : ""}`,
+        { method: "POST", body: "{}" },
+        {
+          environment: opts.environment,
+          allSites: true,
+        },
+      ),
     );
   },
   /** Status/resultado de um job da rotina de datas. */
-  getLeaveReactivationJob: async (jobId: string, environment?: string): Promise<LeaveReactivationJob> =>
+  getLeaveReactivationJob: async (
+    jobId: string,
+    environment?: string,
+  ): Promise<LeaveReactivationJob> =>
     unwrap<LeaveReactivationJob>(
-      argusFetch(`/api/identities/leave-reactivation/jobs/${encodeURIComponent(jobId)}`, undefined, {
-        environment,
-        allSites: true,
-      }),
+      argusFetch(
+        `/api/identities/leave-reactivation/jobs/${encodeURIComponent(jobId)}`,
+        undefined,
+        {
+          environment,
+          allSites: true,
+        },
+      ),
     ),
   listSites: async (environment?: string): Promise<ClearIdSite[]> => {
     const data = await unwrap<{ sites?: ClearIdSite[] } | ClearIdSite[]>(
@@ -1369,26 +1453,28 @@ export const argusApi = {
 
   listSystems: async (environment?: string): Promise<ClearIdSystem[]> => {
     const q = new URLSearchParams();
-    const data = await unwrap<
-      { systems?: unknown[] } | unknown[]
-    >(argusFetch(`/api/systems?${q.toString()}`, undefined, { allSites: true, environment }));
+    const data = await unwrap<{ systems?: unknown[] } | unknown[]>(
+      argusFetch(`/api/systems?${q.toString()}`, undefined, { allSites: true, environment }),
+    );
     const raw = Array.isArray(data) ? data : (data?.systems ?? []);
-    return (raw as Array<Record<string, unknown>>).map((s) => ({
-      systemObjectId:
-        (s.systemObjectId as string | undefined) ??
-        (s.SystemObjectId as string | undefined) ??
-        (s.systemId as string | undefined) ??
-        (s.id as string | undefined) ??
-        "",
-      name:
-        (s.name as string | undefined) ??
-        (s.Name as string | undefined) ??
-        (s.displayName as string | undefined) ??
-        "",
-      description: (s.description as string | undefined) ?? null,
-      accountId: s.accountId as string | undefined,
-      ...s,
-    })).filter((s) => s.systemObjectId);
+    return (raw as Array<Record<string, unknown>>)
+      .map((s) => ({
+        systemObjectId:
+          (s.systemObjectId as string | undefined) ??
+          (s.SystemObjectId as string | undefined) ??
+          (s.systemId as string | undefined) ??
+          (s.id as string | undefined) ??
+          "",
+        name:
+          (s.name as string | undefined) ??
+          (s.Name as string | undefined) ??
+          (s.displayName as string | undefined) ??
+          "",
+        description: (s.description as string | undefined) ?? null,
+        accountId: s.accountId as string | undefined,
+        ...s,
+      }))
+      .filter((s) => s.systemObjectId);
   },
 
   listTeams: async (params?: {
@@ -1417,7 +1503,10 @@ export const argusApi = {
    * Todas as regras (teams) do ambiente: sem `siteId` a API pagina (Team Service,
    * `continuation`); segue as páginas até o fim. Com `siteId`, pesquisa pelo site.
    */
-  listAllTeams: async (params?: { siteId?: string | null; environment?: string }): Promise<ClearIdTeam[]> => {
+  listAllTeams: async (params?: {
+    siteId?: string | null;
+    environment?: string;
+  }): Promise<ClearIdTeam[]> => {
     const out: ClearIdTeam[] = [];
     let continuation: string | null = null;
     for (let i = 0; i < 50; i++) {
@@ -1425,13 +1514,16 @@ export const argusApi = {
       q.set("includeDeleted", "false");
       q.set("take", "100");
       if (continuation) q.set("continuation", continuation);
-      const data: { teams?: ClearIdTeam[]; continuationToken?: string | null; continuation?: string | null } | null =
-        await unwrap(
-          argusFetch(`/api/teams?${q.toString()}`, undefined, {
-            siteId: params?.siteId,
-            environment: params?.environment,
-          }),
-        );
+      const data: {
+        teams?: ClearIdTeam[];
+        continuationToken?: string | null;
+        continuation?: string | null;
+      } | null = await unwrap(
+        argusFetch(`/api/teams?${q.toString()}`, undefined, {
+          siteId: params?.siteId,
+          environment: params?.environment,
+        }),
+      );
       const page = data?.teams ?? [];
       out.push(...page);
       continuation = data?.continuationToken ?? data?.continuation ?? null;
@@ -1452,22 +1544,27 @@ export const argusApi = {
     return data?.teamMembers ?? [];
   },
 
-  listLocations: async (params?: { skip?: number; take?: number }): Promise<ClearIdLocation[]> => {
+  /** Locations (áreas) do site informado; sem `siteId`, usa o site padrão da sessão. */
+  listLocations: async (params?: {
+    skip?: number;
+    take?: number;
+    siteId?: string | null;
+  }): Promise<ClearIdLocation[]> => {
     const q = new URLSearchParams();
     q.set("skip", String(params?.skip ?? 0));
     q.set("take", String(params?.take ?? 200));
-    const data = await unwrap<
-      { results?: ClearIdLocation[] } | ClearIdLocation[]
-    >(argusFetch(`/api/locations?${q.toString()}`));
+    const data = await unwrap<{ results?: ClearIdLocation[] } | ClearIdLocation[]>(
+      argusFetch(`/api/locations?${q.toString()}`, undefined, { siteId: params?.siteId }),
+    );
     if (Array.isArray(data)) return data;
     return data?.results ?? [];
   },
 
   listCustomFields: async (): Promise<ClearIdCustomFieldDef[]> => {
     const q = new URLSearchParams();
-    const data = await unwrap<
-      { customFields?: ClearIdCustomFieldDef[] } | ClearIdCustomFieldDef[]
-    >(argusFetch(`/api/custom-fields?${q.toString()}`, undefined, { allSites: true }));
+    const data = await unwrap<{ customFields?: ClearIdCustomFieldDef[] } | ClearIdCustomFieldDef[]>(
+      argusFetch(`/api/custom-fields?${q.toString()}`, undefined, { allSites: true }),
+    );
     if (Array.isArray(data)) return data;
     return data?.customFields ?? [];
   },
@@ -1552,9 +1649,13 @@ export const argusApi = {
     synchronizationEnabled: boolean;
   }) =>
     unwrap<ClearIdCustomFieldDef>(
-      argusFetch(`/api/custom-fields`, { method: "POST", body: JSON.stringify(payload) }, {
-        allSites: true,
-      }),
+      argusFetch(
+        `/api/custom-fields`,
+        { method: "POST", body: JSON.stringify(payload) },
+        {
+          allSites: true,
+        },
+      ),
     ),
 
   /** Atualiza uma definição (nome e tipo não são alteráveis pela API). */
@@ -1632,10 +1733,9 @@ export const argusApi = {
     const q = new URLSearchParams({ storage: opts.storage });
     if (opts.profile) q.set("profile", opts.profile);
     return unwrap<unknown>(
-      argusFetch(
-        `/api/custom-fields/sections/${encodeURIComponent(sectionName)}?${q.toString()}`,
-        { method: "DELETE" },
-      ),
+      argusFetch(`/api/custom-fields/sections/${encodeURIComponent(sectionName)}?${q.toString()}`, {
+        method: "DELETE",
+      }),
     );
   },
 
@@ -1645,7 +1745,9 @@ export const argusApi = {
     const arr = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
     return arr.map((s) => ({
       sectionName: String(s.identityCustomFieldsSectionName ?? s.sectionName ?? ""),
-      displayName: String(s.displayName ?? s.identityCustomFieldsSectionName ?? s.sectionName ?? ""),
+      displayName: String(
+        s.displayName ?? s.identityCustomFieldsSectionName ?? s.sectionName ?? "",
+      ),
       index: typeof s.index === "number" ? s.index : 0,
       eTag: typeof s.eTag === "string" ? s.eTag : null,
       fields: Array.isArray(s.identityCustomFields)
@@ -1705,16 +1807,12 @@ export const argusApi = {
       }),
     ),
 
-  getCustomFieldSection: async (
-    sectionName: string,
-  ): Promise<ClearIdCustomFieldSection | null> => {
+  getCustomFieldSection: async (sectionName: string): Promise<ClearIdCustomFieldSection | null> => {
     try {
       const data = await unwrap<ClearIdCustomFieldSection>(
-        argusFetch(
-          `/api/custom-fields/sections/${encodeURIComponent(sectionName)}`,
-          undefined,
-          { allSites: true },
-        ),
+        argusFetch(`/api/custom-fields/sections/${encodeURIComponent(sectionName)}`, undefined, {
+          allSites: true,
+        }),
       );
       return data ?? null;
     } catch {
@@ -1727,17 +1825,11 @@ export const argusApi = {
    * campo. Nunca envie string vazia para tipos Date/Boolean/Numeric — use
    * null. Este endpoint substitui o PUT completo para salvar documentos.
    */
-  patchIdentityCustomFields: (
-    id: string,
-    values: CustomFieldPatchValue[],
-  ) =>
-    argusFetch<unknown>(
-      `/api/identities/${encodeURIComponent(id)}/custom-fields`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ values }),
-      },
-    ),
+  patchIdentityCustomFields: (id: string, values: CustomFieldPatchValue[]) =>
+    argusFetch<unknown>(`/api/identities/${encodeURIComponent(id)}/custom-fields`, {
+      method: "PATCH",
+      body: JSON.stringify({ values }),
+    }),
 
   addTeamMembers: (
     teamId: string,
@@ -1809,9 +1901,7 @@ export const argusApi = {
    * Garante que a identidade tenha ao menos uma regra: se não tiver nenhuma e
    * houver uma regra padrão configurada, atribui a padrão.
    */
-  ensureDefaultRule: async (
-    id: string,
-  ): Promise<{ assigned: boolean; ruleName?: string }> => {
+  ensureDefaultRule: async (id: string): Promise<{ assigned: boolean; ruleName?: string }> => {
     const cfg = getConfig();
     const ruleId = cfg.defaultRuleId;
     if (!ruleId) return { assigned: false };
@@ -1882,13 +1972,13 @@ export const argusApi = {
     // busca. Sem filtros, usamos um coringa para trazer os primeiros registros.
     const hasCriterion = Boolean(
       params?.query ||
-        params?.firstName ||
-        params?.lastName ||
-        params?.email ||
-        params?.company ||
-        params?.jobTitle ||
-        params?.department ||
-        params?.status,
+      params?.firstName ||
+      params?.lastName ||
+      params?.email ||
+      params?.company ||
+      params?.jobTitle ||
+      params?.department ||
+      params?.status,
     );
     // Sem critério de texto, usa um coringa para trazer um conjunto base — tanto
     // em "todos os sites" quanto ao filtrar por um site específico (o backend
@@ -1996,9 +2086,9 @@ export const argusApi = {
     if (params?.status) q.set("status", params.status);
     if (params?.identityId) q.set("identityId", params.identityId);
     if (params?.futureOnly) q.set("futureOnly", "true");
-    const data = await unwrap<{ visitEvents?: VisitEvent[]; results?: VisitEvent[] } | VisitEvent[]>(
-      argusFetch(`/api/visits?${q.toString()}`),
-    );
+    const data = await unwrap<
+      { visitEvents?: VisitEvent[]; results?: VisitEvent[] } | VisitEvent[]
+    >(argusFetch(`/api/visits?${q.toString()}`));
     if (Array.isArray(data)) return data;
     return data?.visitEvents ?? data?.results ?? [];
   },
@@ -2008,7 +2098,11 @@ export const argusApi = {
 
   /** Registra uma atividade do usuário (gravações do front direto no Supabase, login/logout). */
   logAudit: (event: AuditEvent) =>
-    argusFetch<unknown>(`/api/audit`, { method: "POST", body: JSON.stringify(event) }, { allSites: true }),
+    argusFetch<unknown>(
+      `/api/audit`,
+      { method: "POST", body: JSON.stringify(event) },
+      { allSites: true },
+    ),
 
   /** Consulta a auditoria (administrador). */
   searchAudit: async (params: AuditSearchParams): Promise<AuditSearchResult> => {
@@ -2017,7 +2111,9 @@ export const argusApi = {
       if (v === undefined || v === null || v === "" || v === false) continue;
       qs.set(k, String(v));
     }
-    const data = await unwrap<AuditSearchResult | null>(argusFetch(`/api/audit?${qs.toString()}`, undefined, { allSites: true }));
+    const data = await unwrap<AuditSearchResult | null>(
+      argusFetch(`/api/audit?${qs.toString()}`, undefined, { allSites: true }),
+    );
     return data ?? { items: [], total: 0, page: 1, pageSize: 50 };
   },
 
@@ -2030,9 +2126,15 @@ export const argusApi = {
   },
 
   /** Grava/atualiza os visitantes de uma visita no cadastro (conta uma visita). */
-  upsertVisitors: async (visitors: VisitorUpsertItem[], countVisit = true): Promise<VisitorRecord[]> => {
+  upsertVisitors: async (
+    visitors: VisitorUpsertItem[],
+    countVisit = true,
+  ): Promise<VisitorRecord[]> => {
     const data = await unwrap<VisitorRecord[] | null>(
-      argusFetch(`/api/visitors`, { method: "POST", body: JSON.stringify({ visitors, countVisit }) }),
+      argusFetch(`/api/visitors`, {
+        method: "POST",
+        body: JSON.stringify({ visitors, countVisit }),
+      }),
     );
     return data ?? [];
   },
@@ -2115,15 +2217,10 @@ export const argusApi = {
     }
     if (payload.expirationDateUtc) {
       status.expirationDateUtc = payload.expirationDateUtc;
-      const start = payload.activationDateUtc
-        ? new Date(payload.activationDateUtc)
-        : new Date();
+      const start = payload.activationDateUtc ? new Date(payload.activationDateUtc) : new Date();
       const end = new Date(payload.expirationDateUtc);
       if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
-        const days = Math.max(
-          0,
-          Math.round((end.getTime() - start.getTime()) / 86400000),
-        );
+        const days = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
         status.expirationDurationInDays = days;
       }
     }
@@ -2231,9 +2328,42 @@ export const argusApi = {
         res.statusText;
       throw new ArgusApiError({ status: res.status, message, raw: body });
     }
-    return (body && typeof body === "object" && "data" in body
+    return body && typeof body === "object" && "data" in body
       ? (body as { data: IdentityImportResult }).data
-      : (body as IdentityImportResult));
+      : (body as IdentityImportResult);
+  },
+
+  /**
+   * Importa relatórios de eventos de acesso do Security Center (CSV/XLSX) para o
+   * Supabase via POST /api/access-events/import (multipart, campo `files`).
+   * `dryRun` simula sem gravar. Retorna um resumo por arquivo.
+   */
+  importAccessEvents: async (
+    files: File[],
+    opts?: { dryRun?: boolean },
+  ): Promise<AccessEventsImportResult[]> => {
+    const cfg = getConfig();
+    if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
+    let url = cfg.baseUrl.replace(/\/+$/, "") + `/api/access-events/import`;
+    if (opts?.dryRun) url += "?dryRun=true";
+    const form = new FormData();
+    for (const f of files) form.append("files", f, f.name);
+    const headers = new Headers();
+    applyAuthHeader(headers, cfg);
+    headers.set("X-ClearId-Environment", getActiveProfile());
+    const res = await fetch(url, { method: "POST", credentials: "include", headers, body: form });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const message =
+        (body && typeof body === "object" && (body as { message?: string }).message) ||
+        res.statusText;
+      throw new ArgusApiError({ status: res.status, message, raw: body });
+    }
+    return (
+      (body && typeof body === "object" && "data" in body
+        ? (body as { data: AccessEventsImportResult[] }).data
+        : (body as AccessEventsImportResult[])) ?? []
+    );
   },
 
   /**
@@ -2279,12 +2409,13 @@ export const argusApi = {
     const body = await res.json().catch(() => null);
     if (!res.ok) {
       const message =
-        (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+        (body && typeof body === "object" && (body as { message?: string }).message) ||
+        res.statusText;
       throw new ArgusApiError({ status: res.status, message, raw: body });
     }
-    const data = (body && typeof body === "object" && "data" in body ? (body as { data: unknown }).data : body) as
-      | { jobId?: string }
-      | null;
+    const data = (
+      body && typeof body === "object" && "data" in body ? (body as { data: unknown }).data : body
+    ) as { jobId?: string } | null;
     if (!data?.jobId) throw new ArgusApiError({ status: 0, message: "jobId ausente na resposta." });
     return data.jobId;
   },
@@ -2293,7 +2424,8 @@ export const argusApi = {
   getImportJob: async (jobId: string, environment?: string): Promise<ImportJob> => {
     const cfg = getConfig();
     if (!cfg.baseUrl) throw new ArgusApiError({ status: 0, message: "Base URL não configurada" });
-    const url = cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import/jobs/${encodeURIComponent(jobId)}`;
+    const url =
+      cfg.baseUrl.replace(/\/+$/, "") + `/api/identities/import/jobs/${encodeURIComponent(jobId)}`;
     const headers = new Headers();
     applyAuthHeader(headers, cfg);
     headers.set("X-ClearId-Environment", environment ?? getActiveProfile());
@@ -2301,12 +2433,13 @@ export const argusApi = {
     const body = await res.json().catch(() => null);
     if (!res.ok) {
       const message =
-        (body && typeof body === "object" && (body as { message?: string }).message) || res.statusText;
+        (body && typeof body === "object" && (body as { message?: string }).message) ||
+        res.statusText;
       throw new ArgusApiError({ status: res.status, message, raw: body });
     }
-    return (body && typeof body === "object" && "data" in body
+    return body && typeof body === "object" && "data" in body
       ? (body as { data: ImportJob }).data
-      : (body as ImportJob));
+      : (body as ImportJob);
   },
 
   // ---------- Relatório de pessoas (job assíncrono: csv/xlsx/json + zip de fotos) ----------
@@ -2322,7 +2455,9 @@ export const argusApi = {
     q.set("includeCustomFields", params.includeCustomFields === false ? "false" : "true");
     q.set("photoZip", params.photoZip ? "true" : "false");
     if (params.photoFormat) q.set("photoFormat", params.photoFormat);
-    const body = await reportFetchJson(`/api/identities/report?${q.toString()}`, { method: "POST" });
+    const body = await reportFetchJson(`/api/identities/report?${q.toString()}`, {
+      method: "POST",
+    });
     const data = (body as { data?: { jobId?: string } }).data;
     if (!data?.jobId) throw new ArgusApiError({ status: 0, message: "Resposta sem jobId." });
     return data.jobId;
@@ -2330,12 +2465,18 @@ export const argusApi = {
 
   /** Status do job do relatório. */
   getReportJob: async (jobId: string): Promise<ReportJob> => {
-    const body = await reportFetchJson(`/api/identities/report/jobs/${encodeURIComponent(jobId)}`, { method: "GET" });
+    const body = await reportFetchJson(`/api/identities/report/jobs/${encodeURIComponent(jobId)}`, {
+      method: "GET",
+    });
     return (body as { data: ReportJob }).data;
   },
 
   /** Dados tabulares (paginados) de um job concluído, para a tabela em tela. */
-  getReportJobData: async (jobId: string, page: number, pageSize: number): Promise<ReportJobData> => {
+  getReportJobData: async (
+    jobId: string,
+    page: number,
+    pageSize: number,
+  ): Promise<ReportJobData> => {
     const body = await reportFetchJson(
       `/api/identities/report/jobs/${encodeURIComponent(jobId)}/data?page=${page}&pageSize=${pageSize}`,
       { method: "GET" },
@@ -2364,12 +2505,20 @@ export const argusApi = {
         argusFetch<Record<string, unknown>>(`/api/diagnostics/environment`).catch(() => null),
       ]);
       const latencyMs = Math.round(performance.now() - start);
-      const connBody = (conn && typeof conn === "object" && "data" in conn && conn.data && typeof conn.data === "object"
-        ? (conn.data as Record<string, unknown>)
-        : conn) as Record<string, unknown>;
-      const envBody = (env && typeof env === "object" && "data" in env && env.data && typeof env.data === "object"
-        ? (env.data as Record<string, unknown>)
-        : (env ?? {})) as Record<string, unknown>;
+      const connBody = (
+        conn &&
+        typeof conn === "object" &&
+        "data" in conn &&
+        conn.data &&
+        typeof conn.data === "object"
+          ? (conn.data as Record<string, unknown>)
+          : conn
+      ) as Record<string, unknown>;
+      const envBody = (
+        env && typeof env === "object" && "data" in env && env.data && typeof env.data === "object"
+          ? (env.data as Record<string, unknown>)
+          : (env ?? {})
+      ) as Record<string, unknown>;
       const environment =
         (envBody.environment as string | undefined) ??
         (connBody.environment as string | undefined) ??
@@ -2379,7 +2528,8 @@ export const argusApi = {
         (envBody.AccountId as string | undefined) ??
         (envBody.clientCode as string | undefined);
       // Não cacheamos mais o accountId: a conta é derivada do perfil no backend.
-      const message = (conn?.message as string | undefined) ?? (connBody.message as string | undefined);
+      const message =
+        (conn?.message as string | undefined) ?? (connBody.message as string | undefined);
       return {
         environment,
         clientCode,
@@ -2403,11 +2553,16 @@ export const argusApi = {
 
 export function customFieldsToRecord(cf?: ClearIdCustomField[] | null): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const f of cf ?? []) if (f.customFieldName) out[f.customFieldName] = f.customFieldValue ?? "";
+  for (const f of cf ?? [])
+    if (f.customFieldName) out[f.customFieldName] = f.customFieldValue ?? "";
   return out;
 }
 
-export function getClearIdExternalId(i: Pick<ClearIdIdentity, "externalId" | "systemData"> | Pick<IdentityUpsert, "externalId" | "systemData">): string {
+export function getClearIdExternalId(
+  i:
+    | Pick<ClearIdIdentity, "externalId" | "systemData">
+    | Pick<IdentityUpsert, "externalId" | "systemData">,
+): string {
   const systemExternalId = i.systemData?.externalId;
   if (typeof systemExternalId === "string" && systemExternalId.trim()) return systemExternalId;
   return i.externalId ?? "";
@@ -2427,15 +2582,16 @@ export function clearIdToFormValues(i: ClearIdIdentity): IdentityUpsert & { iden
     firstName: i.firstName ?? "",
     lastName: i.lastName ?? "",
     email: i.email ?? "",
-    status: (String(i.status ?? "").toLowerCase() === "inactive" ? "Inactive" : "Active") as "Active" | "Inactive",
+    status: (String(i.status ?? "").toLowerCase() === "inactive" ? "Inactive" : "Active") as
+      "Active" | "Inactive",
     customFields: customFieldsToRecord(i.systemData?.customFields),
     // Site conforme o ClearID: companyData.siteId (onde é gravado) → topo →
     // systemData.siteId. Se nenhum existir, fica indefinido (o form pede escolha).
     siteId:
       siteIdFromCompany ??
-      ((i as unknown as { siteId?: string }).siteId ??
-        (i.systemData as { siteId?: string } | null | undefined)?.siteId ??
-        undefined),
+      (i as unknown as { siteId?: string }).siteId ??
+      (i.systemData as { siteId?: string } | null | undefined)?.siteId ??
+      undefined,
     workerTypeCode: workerTypeFromCompany ?? i.workerTypeCode ?? undefined,
     // Dados aninhados/adicionais preservados para o formulário completo.
     middleName: i.middleName ?? undefined,

@@ -1,7 +1,41 @@
 import { audit } from "@/lib/audit";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Shield, Activity, Settings as SettingsIcon, Settings2, Users, Palette, ShieldCheck, Check, ChevronDown, Globe, ListChecks, RefreshCw, Hourglass, Building2, SlidersHorizontal, Tag, Camera, Cog, Database, Wrench, ClipboardList, DoorOpen, LayoutGrid, BriefcaseBusiness, Upload, LogOut, UserCircle, MapPin, AlertTriangle , ScrollText, Mail, FileBarChart } from "lucide-react";
+import {
+  Shield,
+  Activity,
+  Settings as SettingsIcon,
+  Settings2,
+  Users,
+  Palette,
+  ShieldCheck,
+  Check,
+  ChevronDown,
+  Globe,
+  ListChecks,
+  RefreshCw,
+  Hourglass,
+  Building2,
+  SlidersHorizontal,
+  Tag,
+  Camera,
+  Cog,
+  Database,
+  Wrench,
+  ClipboardList,
+  DoorOpen,
+  LayoutGrid,
+  BriefcaseBusiness,
+  Upload,
+  LogOut,
+  UserCircle,
+  MapPin,
+  AlertTriangle,
+  ScrollText,
+  Mail,
+  FileBarChart,
+  FileUp,
+} from "lucide-react";
 import { redirectToLogout } from "@/lib/portal-auth";
 import { getTheme, applyTheme } from "@/lib/theme";
 import { toast } from "sonner";
@@ -86,6 +120,7 @@ const NAV: NavEntry[] = [
     items: [
       { to: "/campanhas-foto", icon: Camera, key: "nav.campanhas-foto" },
       { to: "/importar", icon: Upload, key: "nav.importar" },
+      { to: "/importar-eventos", icon: FileUp, key: "nav.importar-eventos" },
     ],
   },
   {
@@ -116,6 +151,7 @@ const NAV: NavEntry[] = [
     icon: FileBarChart,
     items: [
       { to: "/relatorios-pessoas", icon: Users, key: "nav.relatorios-pessoas" },
+      { to: "/relatorios-eventos", icon: DoorOpen, key: "nav.relatorios-eventos" },
     ],
   },
   {
@@ -280,9 +316,7 @@ function EnvBadge({ env }: { env: string }) {
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
-        isProd
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted text-muted-foreground",
+        isProd ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
       )}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -396,7 +430,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         defaultRuleName: d.defaultRuleName ?? undefined,
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientDefaults.data, activeProfile]);
 
   // Menus exibidos: filtrados pelas keys permitidas ao usuário (do backend).
@@ -577,9 +610,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       title={currentUser.username}
                     >
                       <UserCircle className="h-4 w-4 text-muted-foreground" />
-                      <span className="max-w-[160px] truncate text-xs">
-                        {currentUser.username}
-                      </span>
+                      <span className="max-w-[160px] truncate text-xs">{currentUser.username}</span>
                       <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -595,7 +626,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => {
-                        audit({ action: "logout", entityType: "session", summary: "Saiu do sistema" });
+                        audit({
+                          action: "logout",
+                          entityType: "session",
+                          summary: "Saiu do sistema",
+                        });
                         // dá um instante para o registro sair antes de derrubar a sessão
                         setTimeout(() => redirectToLogout(), 250);
                       }}
@@ -719,7 +754,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {visibleSites.length ? (
                     [...visibleSites]
                       .sort((a, b) =>
-                        (a.name ?? a.siteId).localeCompare(b.name ?? b.siteId, "pt-BR", { sensitivity: "base" }),
+                        (a.name ?? a.siteId).localeCompare(b.name ?? b.siteId, "pt-BR", {
+                          sensitivity: "base",
+                        }),
                       )
                       .map((s) => {
                         const active = s.siteId === siteId;

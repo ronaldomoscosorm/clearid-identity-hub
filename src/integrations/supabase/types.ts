@@ -820,6 +820,125 @@ export type Database = {
         }
         Relationships: []
       }
+      access_event_types: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          sdk_code: number | null
+          sdk_name: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sdk_code?: number | null
+          sdk_name?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sdk_code?: number | null
+          sdk_name?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      access_events: {
+        Row: {
+          area_name: string | null
+          created_at: string
+          credential: string | null
+          credential_code: string | null
+          dedupe_key: string
+          door: string
+          event_timestamp: string
+          event_type_id: string
+          external_id: string | null
+          first_name: string | null
+          home_site_id: string | null
+          home_site_name: string | null
+          id: number
+          identity_id: string | null
+          imported_by: string | null
+          last_name: string | null
+          profile: string
+          side: string | null
+          source: string
+          source_file: string | null
+          time_zone: string | null
+          visitor_identity_id: string | null
+        }
+        Insert: {
+          area_name?: string | null
+          created_at?: string
+          credential?: string | null
+          credential_code?: string | null
+          dedupe_key?: string
+          door: string
+          event_timestamp: string
+          event_type_id: string
+          external_id?: string | null
+          first_name?: string | null
+          home_site_id?: string | null
+          home_site_name?: string | null
+          id?: never
+          identity_id?: string | null
+          imported_by?: string | null
+          last_name?: string | null
+          profile: string
+          side?: string | null
+          source?: string
+          source_file?: string | null
+          time_zone?: string | null
+          visitor_identity_id?: string | null
+        }
+        Update: {
+          area_name?: string | null
+          created_at?: string
+          credential?: string | null
+          credential_code?: string | null
+          dedupe_key?: string
+          door?: string
+          event_timestamp?: string
+          event_type_id?: string
+          external_id?: string | null
+          first_name?: string | null
+          home_site_id?: string | null
+          home_site_name?: string | null
+          id?: never
+          identity_id?: string | null
+          imported_by?: string | null
+          last_name?: string | null
+          profile?: string
+          side?: string | null
+          source?: string
+          source_file?: string | null
+          time_zone?: string | null
+          visitor_identity_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_events_event_type_id_fkey"
+            columns: ["event_type_id"]
+            isOneToOne: false
+            referencedRelation: "access_event_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_custom_fields: {
         Row: {
           created_at: string
@@ -964,10 +1083,45 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      access_events_view: {
+        Row: {
+          area_name: string | null
+          created_at: string | null
+          credential: string | null
+          credential_code: string | null
+          door: string | null
+          event_category: string | null
+          event_name: string | null
+          event_sdk_name: string | null
+          event_timestamp: string | null
+          external_id: string | null
+          first_name: string | null
+          full_name: string | null
+          home_site_id: string | null
+          home_site_name: string | null
+          id: number | null
+          identity_id: string | null
+          imported_by: string | null
+          last_name: string | null
+          profile: string | null
+          side: string | null
+          source: string | null
+          source_file: string | null
+          time_zone: string | null
+          visitor_identity_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      access_events_catalog: {
+        Args: { p_profile: string }
+        Returns: Json
+      }
+      access_events_purge: {
+        Args: { retain_days?: number }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
