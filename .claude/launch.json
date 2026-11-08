@@ -23,6 +23,17 @@
         "http://localhost:5081"
       ],
       "port": 5081
+    },
+    {
+      "name": "portal-front",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/ronaldomoscoso/Projects/portal-argus-frontend",
+        "run",
+        "dev"
+      ],
+      "port": 5173
     }
   ]
 }

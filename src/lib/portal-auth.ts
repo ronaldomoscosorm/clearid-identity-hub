@@ -45,33 +45,29 @@ export function redirectToPortalLogin(currentUrl?: string): void {
 }
 
 /**
- * URL de logout do Portal Argus: o ENDPOINT DA API ArthosMFA
- * (`{API}/auth/logout?returnUrl=…`), que apaga o cookie SSO `rmtecho_token`
- * (.rmtecho.com.br, some de todos os apps) e redireciona ao destino.
+ * URL de logout do Portal Argus: a rota `/logout` da SPA do Portal (mesma
+ * origem do login). Essa página limpa o token do Portal (localStorage de
+ * portalargus), chama o endpoint da API que apaga o cookie SSO `rmtecho_token`
+ * (.rmtecho.com.br) e cai na tela de login. `returnUrl` (padrão: origem do
+ * ClearID) é repassado ao login para o usuário voltar ao ClearID após entrar.
  *
- * IMPORTANTE: NÃO é a rota `/logout` da SPA do Portal — essa rota não existe
- * (o catch-all da SPA cairia no dashboard, sem apagar o cookie). Só o endpoint
- * de servidor consegue expirar o cookie HttpOnly.
- *
- * `returnUrl` deve ser https de domínio rmtecho.com.br (o backend valida). Por
- * padrão volta para a origem do clearid, que ao ver a sessão encerrada
- * redireciona sozinho para o login.
+ * IMPORTANTE: NÃO chamar só o endpoint da API (`{API}/auth/logout`): ele apaga o
+ * cookie, mas o Portal continua "logado" pelo localStorage e a tela de login,
+ * ao receber `returnUrl`, devolve o usuário ao ClearID sem pedir senha.
  */
 export function getPortalArgusLogoutUrl(returnUrl?: string): string {
-  const apiBase =
-    (import.meta.env.VITE_PORTAL_ARGUS_API_URL as string | undefined)?.replace(/\/+$/, "") ??
-    "https://portal.rmtecho.com.br/api";
+  const loginUrl = new URL(getPortalArgusLoginUrl());
   const dest =
     returnUrl ??
     (typeof window !== "undefined" ? window.location.origin : "https://clearid.rmtecho.com.br");
-  const url = new URL(`${apiBase}/auth/logout`);
+  const url = new URL("/logout", loginUrl.origin);
   url.searchParams.set("returnUrl", dest);
   return url.toString();
 }
 
 /**
- * Encerra a sessão: navega para o logout do Portal (limpa localStorage do portalargus
- * + cookie SSO compartilhado) e cai no login — sempre, mesmo se já estava logado.
+ * Encerra a sessão: limpa o token local e navega para o logout do Portal (que limpa
+ * o localStorage do portalargus + cookie SSO compartilhado) e cai no login.
  */
 export function redirectToLogout(): void {
   if (typeof window === "undefined") return;

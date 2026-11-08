@@ -29,7 +29,7 @@ export function AccessDenied({
       : "Peça ao administrador para vincular ao menos um site (cliente + unidade) ao seu usuário no Portal Argus.";
 
   const portalUrl = getPortalArgusLoginUrl();
-  // Logout: endpoint do Portal (API) que apaga o cookie SSO e volta ao login.
+  // Logout: rota /logout da SPA do Portal (limpa sessão do Portal + cookie SSO) e volta ao login.
   const logoutUrl = getPortalArgusLogoutUrl();
 
   return (
