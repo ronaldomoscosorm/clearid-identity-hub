@@ -517,6 +517,20 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "requiredDefaults.retry": "Tentar novamente",
     "requiredDefaults.saved": "Padrões salvos.",
     "requiredDefaults.saveError": "Falha ao salvar os padrões: {message}",
+    "defaultRule.hint.rule": "Regra atribuída ao salvar, se a pessoa não tiver nenhuma: {rule}.",
+    "defaultRule.hint.otherSite": "Site diferente do seu padrão ({site}).",
+    "defaultRule.hint.choose": "A regra será escolhida ao salvar.",
+    "defaultRule.missing":
+      "regra (a pessoa ficou sem regra: o site dela é diferente do seu site padrão — atribua em Regras)",
+    "siteMismatch.title": "Site diferente do seu padrão",
+    "siteMismatch.description":
+      "Você está cadastrando {name} no site {site}, diferente do seu site padrão ({ownSite}). Confira se o site está correto antes de continuar.",
+    "siteMismatch.rule": "Regra que será atribuída: {rule}",
+    "siteMismatch.chooseRule": "Regra desta pessoa",
+    "siteMismatch.noRule":
+      "Nenhuma regra será atribuída automaticamente. Atribua a regra da pessoa em Regras depois de salvar.",
+    "siteMismatch.cancel": "Voltar e corrigir",
+    "siteMismatch.confirm": "Confirmar cadastro",
     "settings.client.label": "Cliente",
     "settings.client.hint":
       "Ao trocar o cliente, os sites e demais seleções são recarregados no contexto dele.",
@@ -1121,6 +1135,20 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "requiredDefaults.retry": "Try again",
     "requiredDefaults.saved": "Defaults saved.",
     "requiredDefaults.saveError": "Failed to save the defaults: {message}",
+    "defaultRule.hint.rule": "Rule assigned on save, if the person has none: {rule}.",
+    "defaultRule.hint.otherSite": "Site different from your default ({site}).",
+    "defaultRule.hint.choose": "The rule will be chosen on save.",
+    "defaultRule.missing":
+      "rule (the person has no rule: their site differs from your default site — assign one in Rules)",
+    "siteMismatch.title": "Site different from your default",
+    "siteMismatch.description":
+      "You are registering {name} at site {site}, which differs from your default site ({ownSite}). Check that the site is correct before continuing.",
+    "siteMismatch.rule": "Rule that will be assigned: {rule}",
+    "siteMismatch.chooseRule": "Rule for this person",
+    "siteMismatch.noRule":
+      "No rule will be assigned automatically. Assign the person's rule in Rules after saving.",
+    "siteMismatch.cancel": "Go back and fix",
+    "siteMismatch.confirm": "Confirm registration",
     "settings.client.label": "Client",
     "settings.client.hint":
       "Switching the client reloads sites and other selections in its context.",
@@ -1729,6 +1757,20 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "requiredDefaults.retry": "Intentar de nuevo",
     "requiredDefaults.saved": "Valores predeterminados guardados.",
     "requiredDefaults.saveError": "Error al guardar los valores predeterminados: {message}",
+    "defaultRule.hint.rule": "Regla asignada al guardar, si la persona no tiene ninguna: {rule}.",
+    "defaultRule.hint.otherSite": "Sitio diferente de su predeterminado ({site}).",
+    "defaultRule.hint.choose": "La regla se elegirá al guardar.",
+    "defaultRule.missing":
+      "regla (la persona quedó sin regla: su sitio es diferente de su sitio predeterminado — asígnela en Reglas)",
+    "siteMismatch.title": "Sitio diferente de su predeterminado",
+    "siteMismatch.description":
+      "Está registrando a {name} en el sitio {site}, diferente de su sitio predeterminado ({ownSite}). Verifique que el sitio sea correcto antes de continuar.",
+    "siteMismatch.rule": "Regla que se asignará: {rule}",
+    "siteMismatch.chooseRule": "Regla de esta persona",
+    "siteMismatch.noRule":
+      "No se asignará ninguna regla automáticamente. Asigne la regla de la persona en Reglas después de guardar.",
+    "siteMismatch.cancel": "Volver y corregir",
+    "siteMismatch.confirm": "Confirmar registro",
     "settings.client.label": "Cliente",
     "settings.client.hint":
       "Al cambiar el cliente, los sitios y demás selecciones se recargan en su contexto.",

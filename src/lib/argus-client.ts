@@ -1904,17 +1904,28 @@ export const argusApi = {
   },
 
   /**
-   * Garante que a identidade tenha ao menos uma regra: se não tiver nenhuma e
-   * houver uma regra padrão configurada, atribui a padrão.
+   * Garante que a identidade tenha ao menos uma regra: se não tiver nenhuma,
+   * atribui `rule`. Sem `rule` (undefined), usa a regra padrão do operador;
+   * `null` = não há regra a atribuir para o site da pessoa — nesse caso
+   * `missing` indica que ela ficou sem nenhuma.
    */
-  ensureDefaultRule: async (id: string): Promise<{ assigned: boolean; ruleName?: string }> => {
+  ensureDefaultRule: async (
+    id: string,
+    rule?: { ruleId: string; ruleName?: string } | null,
+  ): Promise<{ assigned: boolean; ruleName?: string; missing?: boolean }> => {
     const cfg = getConfig();
-    const ruleId = cfg.defaultRuleId;
-    if (!ruleId) return { assigned: false };
+    const target =
+      rule === undefined
+        ? cfg.defaultRuleId
+          ? { ruleId: cfg.defaultRuleId, ruleName: cfg.defaultRuleName }
+          : null
+        : rule;
+    if (!target && rule === undefined) return { assigned: false };
     const teams = await argusApi.getIdentityTeams(id);
     if (teams.length > 0) return { assigned: false };
-    await argusApi.addTeamMembers(ruleId, { identityIds: [id] });
-    return { assigned: true, ruleName: cfg.defaultRuleName };
+    if (!target) return { assigned: false, missing: true };
+    await argusApi.addTeamMembers(target.ruleId, { identityIds: [id] });
+    return { assigned: true, ruleName: target.ruleName };
   },
 
   // ---- Campanhas de atualização de foto (admin) ----

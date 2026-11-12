@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n";
 import { useIdentityFieldLabels, STANDARD_IDENTITY_FIELDS } from "@/lib/identity-labels";
 import { useFormLayoutConfig, layoutForWorkerType } from "@/lib/form-layout";
 import { useSpecialFields, type DropdownOption } from "@/lib/special-fields";
+import { DefaultRuleHint } from "@/components/DefaultRuleHint";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import {
@@ -1201,6 +1202,13 @@ export function IdentityForm({
               </SelectContent>
             </Select>
             {errors.siteId && <p className="text-xs text-destructive">{errors.siteId}</p>}
+            {!isEdit && (
+              <DefaultRuleHint
+                profile={activeProfile}
+                siteId={siteId}
+                siteName={sites.find((s) => s.siteId === siteId)?.name}
+              />
+            )}
           </div>
         );
       case "company_id": {

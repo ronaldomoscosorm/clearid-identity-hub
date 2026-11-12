@@ -23,12 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  argusApi,
-  type ClearIdProfile,
-  type ClearIdSite,
-  type ClearIdTeam,
-} from "@/lib/argus-client";
+import { argusApi, type ClearIdProfile, type ClearIdSite } from "@/lib/argus-client";
+import { suggestGeneralAccessRule } from "@/lib/default-rule";
 import {
   applyUserClientDefaults,
   useUpdateUserClientDefaults,
@@ -37,23 +33,8 @@ import {
 } from "@/lib/user-defaults";
 import { useT } from "@/lib/i18n";
 
-const norm = (s: string) => s.replace(/[^a-z0-9]/gi, "").toLowerCase();
 const byName = (a: { name?: string | null }, b: { name?: string | null }) =>
   (a.name ?? "").localeCompare(b.name ?? "", "pt-BR", { sensitivity: "base" });
-
-/**
- * Regra "General Access" do site, pelo código entre parênteses no nome do site
- * (ex.: "LA-BR-Itumbiara (ITU1)" → "LA-BR-ITU1-General Access"). Só sugere
- * quando há exatamente uma candidata.
- */
-function suggestRule(siteName: string | undefined, teams: ClearIdTeam[]): ClearIdTeam | null {
-  const code = norm(/\(([^)]+)\)\s*$/.exec(siteName ?? "")?.[1] ?? "");
-  if (!code) return null;
-  const hits = teams.filter(
-    (t) => /general\s*access/i.test(t.name ?? "") && norm(t.name ?? "").includes(code),
-  );
-  return hits.length === 1 ? hits[0] : null;
-}
 
 export function RequiredDefaultsDialog({
   userKey,
@@ -106,7 +87,7 @@ export function RequiredDefaultsDialog({
   // Sugere a regra General Access do site escolhido e o sistema, quando único.
   useEffect(() => {
     if (ruleId || !teamsQuery.data) return;
-    const hit = suggestRule(site?.name, teams);
+    const hit = suggestGeneralAccessRule(site?.name, teams);
     if (hit) setRuleId(hit.teamId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamsQuery.data, siteId]);

@@ -1,10 +1,25 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { pickLang } from "@/lib/custom-fields";
-import { argusApi, ArgusApiError, useActiveProfile, type IdentityUpsert } from "@/lib/argus-client";
+import {
+  argusApi,
+  ArgusApiError,
+  useActiveProfile,
+  type ClearIdSite,
+  type IdentityUpsert,
+} from "@/lib/argus-client";
+import { getConfig } from "@/lib/argus-env";
+import {
+  differsFromOwnSite,
+  fetchDefaultRuleForSite,
+  type DefaultRule,
+  type DefaultRuleResolution,
+} from "@/lib/default-rule";
+import { SiteMismatchDialog } from "@/components/SiteMismatchDialog";
 import {
   saveIdentityCustomFields,
   type SiteFieldValue,
@@ -23,6 +38,18 @@ export const Route = createFileRoute("/_authenticated/identities/new")({
   }),
   component: NewIdentity,
 });
+
+type CreateVars = {
+  data: IdentityUpsert;
+  siteFieldValues: SiteFieldValue[];
+  companyId: string | null;
+  workerTypeId: string | null;
+  photo: Blob | null;
+  attachments: PendingAttachment[];
+  guard: SaveGuard;
+  /** Regra da pessoa quando o site difere do site padrão do operador (`null` = nenhuma). */
+  defaultRule?: DefaultRule | null;
+};
 
 function NewIdentity() {
   const { t, lang } = useT();
@@ -51,15 +78,7 @@ function NewIdentity() {
       ? t("identityNew.newOf", { type: pickLang(wt.name_i18n, lang) || wt.name })
       : t("identityNew.title");
   const mut = useMutation({
-    mutationFn: async (vars: {
-      data: IdentityUpsert;
-      siteFieldValues: SiteFieldValue[];
-      companyId: string | null;
-      workerTypeId: string | null;
-      photo: Blob | null;
-      attachments: PendingAttachment[];
-      guard: SaveGuard;
-    }) => {
+    mutationFn: async (vars: CreateVars) => {
       // Verifica e-mail duplicado antes de criar (o ClearID rejeita com 400).
       const dupes = await argusApi.findIdentitiesByEmail(vars.data.email);
       if (dupes.length) {
@@ -121,15 +140,17 @@ function NewIdentity() {
         }
       }
 
-      // Etapa 4 — regra padrão (se não houver nenhuma).
+      // Etapa 4 — regra padrão (se não houver nenhuma). Pessoa de outro site
+      // recebe a regra confirmada para o site dela, não a padrão do operador.
       try {
-        const rule = await argusApi.ensureDefaultRule(data.identityId);
+        const rule = await argusApi.ensureDefaultRule(data.identityId, vars.defaultRule);
         if (rule.assigned)
           ok.push(
             t("identityNew.step.defaultRule", {
               rule: rule.ruleName ?? t("identityNew.defaultRuleFallback"),
             }),
           );
+        else if (rule.missing) fail.push(t("defaultRule.missing"));
       } catch (e) {
         fail.push(t("identityNew.fail.defaultRule", { error: (e as Error).message }));
       }
@@ -185,8 +206,52 @@ function NewIdentity() {
     },
   });
 
+  // Site diferente do site padrão do operador: confirma antes de criar e define
+  // a regra pelo site da pessoa.
+  const [resolving, setResolving] = useState(false);
+  const [mismatch, setMismatch] = useState<{
+    vars: CreateVars;
+    siteName: string;
+    resolution: DefaultRuleResolution;
+  } | null>(null);
+  const handleSubmit = async (vars: CreateVars) => {
+    const siteId = vars.data.siteId;
+    if (!differsFromOwnSite(siteId)) {
+      mut.mutate(vars);
+      return;
+    }
+    const siteName =
+      qc.getQueryData<ClearIdSite[]>(["sites"])?.find((s) => s.siteId === siteId)?.name ??
+      siteId ??
+      "";
+    setResolving(true);
+    let resolution: DefaultRuleResolution;
+    try {
+      resolution = await fetchDefaultRuleForSite(qc, activeProfile, siteId, siteName);
+    } catch {
+      // Regras do site indisponíveis: segue sem regra automática (avisado na confirmação).
+      resolution = { kind: "choose", candidates: [] };
+    } finally {
+      setResolving(false);
+    }
+    setMismatch({ vars, siteName, resolution });
+  };
+
   return (
     <div className="space-y-6">
+      {mismatch && (
+        <SiteMismatchDialog
+          personName={mismatch.vars.data.displayName || mismatch.vars.data.firstName || ""}
+          siteName={mismatch.siteName}
+          ownSiteName={getConfig().defaultSiteName ?? ""}
+          resolution={mismatch.resolution}
+          onCancel={() => setMismatch(null)}
+          onConfirm={(rule) => {
+            mut.mutate({ ...mismatch.vars, defaultRule: rule });
+            setMismatch(null);
+          }}
+        />
+      )}
       <div>
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link to="/identities">
@@ -199,11 +264,19 @@ function NewIdentity() {
       <IdentityForm
         key={workerTypeId ?? "novo"}
         mode="create"
-        submitting={mut.isPending}
+        submitting={mut.isPending || resolving}
         initialWorkerTypeId={workerTypeId}
         lockWorkerType={Boolean(workerTypeId)}
         onSubmit={(data, siteFieldValues, companyId, wtId, photo, attachments, guard) =>
-          mut.mutate({ data, siteFieldValues, companyId, workerTypeId: wtId, photo, attachments, guard })
+          void handleSubmit({
+            data,
+            siteFieldValues,
+            companyId,
+            workerTypeId: wtId,
+            photo,
+            attachments,
+            guard,
+          })
         }
         onCancel={() => navigate({ to: "/identities" })}
       />

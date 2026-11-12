@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { argusApi, ArgusApiError, useActiveProfile, useDefaultSiteId } from "@/lib/argus-client";
 import { useUserScope } from "@/lib/user-scope";
 import {
+  differsFromOwnSite,
+  fetchDefaultRuleForSite,
+  type DefaultRule,
+} from "@/lib/default-rule";
+import {
   mirrorIdentities,
   saveIdentityCustomFields,
   loadIdentityCustomFields,
@@ -174,15 +179,25 @@ function IdentityDetail() {
         }
       }
 
-      // Etapa — regra padrão (se não houver nenhuma).
+      // Etapa — regra padrão (se não houver nenhuma). Pessoa de outro site
+      // recebe a General Access do site dela, não a regra padrão do operador;
+      // sem candidata única, nada é atribuído (o operador escolhe em Regras).
       try {
-        const rule = await argusApi.ensureDefaultRule(id);
+        const personSiteId = vars.data.siteId ?? identitySiteId;
+        let siteRule: DefaultRule | null | undefined;
+        if (differsFromOwnSite(personSiteId)) {
+          const personSiteName = sitesQuery.data?.find((s) => s.siteId === personSiteId)?.name;
+          const r = await fetchDefaultRuleForSite(qc, activeProfile, personSiteId, personSiteName);
+          siteRule = r.kind === "site" || r.kind === "own" ? r.rule : null;
+        }
+        const rule = await argusApi.ensureDefaultRule(id, siteRule);
         if (rule.assigned)
           ok.push(
             t("identityDetail.defaultRuleAssigned", {
               rule: rule.ruleName ?? t("identityDetail.rule"),
             }),
           );
+        else if (rule.missing) fail.push(t("defaultRule.missing"));
       } catch (e) {
         fail.push(t("identityDetail.defaultRuleFail", { error: (e as Error).message }));
       }
