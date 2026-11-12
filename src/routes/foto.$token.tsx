@@ -56,7 +56,7 @@ function PhotoUpdatePage() {
   // Carrega o branding do site (logo/nome/cores) via usuário técnico do Supabase.
   useEffect(() => {
     ensureTechnicalSession()
-      .then((ok) => (ok ? hydrateSettings() : undefined))
+      .then((ok) => (ok ? hydrateSettings({ includeBranding: true }) : undefined))
       .catch(() => {});
   }, []);
 

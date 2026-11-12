@@ -60,6 +60,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_branding: {
+        Row: {
+          accent_color: string
+          client_logo: string
+          client_name: string
+          created_at: string
+          primary_color: string
+          profile: string
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          accent_color?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          primary_color?: string
+          profile: string
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          accent_color?: string
+          client_logo?: string
+          client_name?: string
+          created_at?: string
+          primary_color?: string
+          profile?: string
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
       user_client_defaults: {
         Row: {
           created_at: string
@@ -67,6 +100,7 @@ export type Database = {
           default_rule_name: string | null
           default_site_id: string | null
           default_site_name: string | null
+          link_visitor_to_identity: boolean
           profile: string
           system_object_id: string | null
           updated_at: string
@@ -78,6 +112,7 @@ export type Database = {
           default_rule_name?: string | null
           default_site_id?: string | null
           default_site_name?: string | null
+          link_visitor_to_identity?: boolean
           profile: string
           system_object_id?: string | null
           updated_at?: string
@@ -89,6 +124,7 @@ export type Database = {
           default_rule_name?: string | null
           default_site_id?: string | null
           default_site_name?: string | null
+          link_visitor_to_identity?: boolean
           profile?: string
           system_object_id?: string | null
           updated_at?: string
@@ -1022,6 +1058,7 @@ export type Database = {
           id: string
           label: string | null
           options: Json
+          profile: string
           updated_at: string
         }
         Insert: {
@@ -1030,6 +1067,7 @@ export type Database = {
           id?: string
           label?: string | null
           options?: Json
+          profile: string
           updated_at?: string
         }
         Update: {
@@ -1038,6 +1076,7 @@ export type Database = {
           id?: string
           label?: string | null
           options?: Json
+          profile?: string
           updated_at?: string
         }
         Relationships: []

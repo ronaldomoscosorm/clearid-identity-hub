@@ -1,9 +1,11 @@
 // Campos customizáveis "especiais": dropdowns vinculados a campos do ClearID.
 // O ClearID não tem tipo lista; guardamos as opções (value + label) na tabela
 // special_custom_fields e, no cadastro, o campo vira um select que grava a
-// string do `value` escolhido no campo do ClearID.
+// string do `value` escolhido no campo do ClearID. Cada cliente (profile) tem
+// os seus dropdowns.
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useActiveProfile } from "./argus-client";
 
 export type DropdownOption = { value: string; label: string; isDefault?: boolean };
 export type SpecialField = {
@@ -30,10 +32,11 @@ export function parseOptions(raw: unknown): DropdownOption[] {
   return out;
 }
 
-async function fetchSpecialFields(): Promise<SpecialField[]> {
+async function fetchSpecialFields(profile: string): Promise<SpecialField[]> {
   const { data, error } = await supabase
     .from("special_custom_fields")
-    .select("custom_field_name, label, options");
+    .select("custom_field_name, label, options")
+    .eq("profile", profile);
   // Tabela ainda não criada / sem acesso → simplesmente sem dropdowns especiais.
   if (error) return [];
   return (data ?? []).map((r) => {
@@ -47,10 +50,13 @@ async function fetchSpecialFields(): Promise<SpecialField[]> {
   });
 }
 
+/** Dropdowns especiais do cliente ativo. */
 export function useSpecialFields() {
+  const profile = useActiveProfile();
   const query = useQuery({
-    queryKey: ["special-custom-fields"],
-    queryFn: fetchSpecialFields,
+    queryKey: ["special-custom-fields", profile],
+    queryFn: () => fetchSpecialFields(profile),
+    enabled: !!profile,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

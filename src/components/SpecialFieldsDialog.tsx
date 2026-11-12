@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { useSpecialFields, type DropdownOption } from "@/lib/special-fields";
 import { useT } from "@/lib/i18n";
+import { useActiveProfile } from "@/lib/argus-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,7 @@ export function SpecialFieldsDialog({
 }) {
   const { t } = useT();
   const qc = useQueryClient();
+  const activeProfile = useActiveProfile();
   const { list } = useSpecialFields();
   const [draft, setDraft] = useState<Draft | null>(null);
 
@@ -57,11 +59,12 @@ export function SpecialFieldsDialog({
         .from("special_custom_fields")
         .upsert(
           {
+            profile: activeProfile,
             custom_field_name: d.custom_field_name,
             label: d.label.trim() || null,
             options: options as unknown as Json,
           },
-          { onConflict: "custom_field_name" },
+          { onConflict: "profile,custom_field_name" },
         );
       if (error) throw new Error(error.message);
     },
@@ -78,6 +81,7 @@ export function SpecialFieldsDialog({
       const { error } = await supabase
         .from("special_custom_fields")
         .delete()
+        .eq("profile", activeProfile)
         .eq("custom_field_name", name);
       if (error) throw new Error(error.message);
     },

@@ -507,6 +507,16 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "settings.client.title": "Cliente padrão",
     "settings.client.description":
       "Define qual conta ClearID (cliente) é usada nas requisições. Os sites abaixo são os desse cliente.",
+    "requiredDefaults.title": "Configure seus padrões para começar",
+    "requiredDefaults.description":
+      "Antes de iniciar o trabalho no cliente {client}, defina o seu site, a sua regra e o seu sistema padrão. Eles valem só para o seu usuário e podem ser alterados depois em Configurações.",
+    "requiredDefaults.ruleHint":
+      "Regra atribuída automaticamente às pessoas que você cadastrar sem nenhuma regra.",
+    "requiredDefaults.save": "Salvar e continuar",
+    "requiredDefaults.logout": "Sair",
+    "requiredDefaults.retry": "Tentar novamente",
+    "requiredDefaults.saved": "Padrões salvos.",
+    "requiredDefaults.saveError": "Falha ao salvar os padrões: {message}",
     "settings.client.label": "Cliente",
     "settings.client.hint":
       "Ao trocar o cliente, os sites e demais seleções são recarregados no contexto dele.",
@@ -1101,6 +1111,16 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "settings.client.title": "Default client",
     "settings.client.description":
       "Sets which ClearID account (client) is used for requests. The sites below belong to this client.",
+    "requiredDefaults.title": "Set your defaults to get started",
+    "requiredDefaults.description":
+      "Before you start working on client {client}, choose your default site, rule and system. They apply only to your user and can be changed later in Settings.",
+    "requiredDefaults.ruleHint":
+      "Rule automatically assigned to people you register without any rule.",
+    "requiredDefaults.save": "Save and continue",
+    "requiredDefaults.logout": "Sign out",
+    "requiredDefaults.retry": "Try again",
+    "requiredDefaults.saved": "Defaults saved.",
+    "requiredDefaults.saveError": "Failed to save the defaults: {message}",
     "settings.client.label": "Client",
     "settings.client.hint":
       "Switching the client reloads sites and other selections in its context.",
@@ -1699,6 +1719,16 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "settings.client.title": "Cliente predeterminado",
     "settings.client.description":
       "Define qué cuenta ClearID (cliente) se usa en las solicitudes. Los sitios de abajo son de ese cliente.",
+    "requiredDefaults.title": "Configure sus valores predeterminados para comenzar",
+    "requiredDefaults.description":
+      "Antes de empezar a trabajar en el cliente {client}, defina su sitio, su regla y su sistema predeterminados. Valen solo para su usuario y se pueden cambiar después en Configuración.",
+    "requiredDefaults.ruleHint":
+      "Regla asignada automáticamente a las personas que registre sin ninguna regla.",
+    "requiredDefaults.save": "Guardar y continuar",
+    "requiredDefaults.logout": "Salir",
+    "requiredDefaults.retry": "Intentar de nuevo",
+    "requiredDefaults.saved": "Valores predeterminados guardados.",
+    "requiredDefaults.saveError": "Error al guardar los valores predeterminados: {message}",
     "settings.client.label": "Cliente",
     "settings.client.hint":
       "Al cambiar el cliente, los sitios y demás selecciones se recargan en su contexto.",

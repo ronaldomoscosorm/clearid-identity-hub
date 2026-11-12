@@ -34,6 +34,23 @@
         "dev"
       ],
       "port": 5173
+    },
+    {
+      "name": "argus-clearid-api",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DOTNET_ROLL_FORWARD=Major",
+        "AuthenticationSettings__Enabled=false",
+        "ASPNETCORE_ENVIRONMENT=Development",
+        "dotnet",
+        "run",
+        "--project",
+        "../ArgusClearID/ArgusClearId.Api/ArgusClearId.Api.csproj",
+        "--no-launch-profile",
+        "--urls",
+        "http://localhost:5098"
+      ],
+      "port": 5098
     }
   ]
 }

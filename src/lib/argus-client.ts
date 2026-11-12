@@ -70,6 +70,12 @@ export function setConfiguredSiteId(id: string | null) {
   notifySite();
 }
 
+/** Remove o site padrão sem mexer na seleção da sessão (topbar). */
+export function clearConfiguredSiteId() {
+  lsSet(SITE_KEY, null);
+  notifySite();
+}
+
 /**
  * Define o site da SESSÃO (seletor do topbar). Não altera o padrão de
  * Configurações. `null` = "sem site" explícito (força escolher), gravado como

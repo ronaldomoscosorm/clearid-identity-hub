@@ -52,8 +52,8 @@ function Settings() {
   const { data: currentUser } = useCurrentUser();
   const userKey = currentUser?.username || undefined;
 
-  // Defaults por (USUÁRIO + CLIENTE): site/regra/system. Ao trocar o cliente
-  // configurado, o formulário reflete os defaults salvos do usuário no cliente.
+  // Defaults por (USUÁRIO + CLIENTE): site/regra/system/visitas. Ao trocar o
+  // cliente configurado, o formulário reflete os defaults salvos do usuário no cliente.
   const clientDefaultsQuery = useUserClientDefaults(userKey, configuredProfile);
   const updateUserClientDefaults = useUpdateUserClientDefaults();
   const updateUserDefaultProfile = useUpdateUserDefaultProfile();
@@ -61,15 +61,17 @@ function Settings() {
   useEffect(() => {
     const d = clientDefaultsQuery.data;
     if (!d) return;
-    if (loadedRef.current === configuredProfile) return; // já populou este cliente
-    loadedRef.current = configuredProfile;
+    const loadedKey = `${userKey ?? ""}|${configuredProfile}`;
+    if (loadedRef.current === loadedKey) return; // já populou este usuário/cliente
+    loadedRef.current = loadedKey;
     setSiteId(d.defaultSiteId ?? "");
     setSystemObjectIdState(d.systemObjectId ?? "");
     setRuleId(d.defaultRuleId ?? "");
+    setCfg((c) => ({ ...c, linkVisitorToIdentity: d.linkVisitorToIdentity }));
     // Aplica também na topbar (default do usuário naquele cliente).
     setConfiguredSiteId(d.defaultSiteId ?? null);
     setSystemObjectId(d.systemObjectId ?? null);
-  }, [clientDefaultsQuery.data, configuredProfile]);
+  }, [clientDefaultsQuery.data, configuredProfile, userKey]);
 
   // Troca o cliente PADRÃO do usuário (persistido no servidor por user_key) e
   // limpa o override de sessão. Reseta o ref para o form recarregar os defaults
@@ -137,6 +139,7 @@ function Settings() {
     qc.invalidateQueries();
 
     // Persiste os defaults por (USUÁRIO + CLIENTE) — o que reaplica ao logar.
+    // Nada disso vai para a linha compartilhada de `settings` (só a conexão).
     if (!userKey) {
       toast.warning(
         "Não foi possível identificar o usuário (username vazio no /me) — defaults por usuário NÃO gravados.",
@@ -152,6 +155,7 @@ function Settings() {
             defaultRuleId: ruleId || null,
             defaultRuleName: ruleName ?? null,
             systemObjectId: systemObjectId || null,
+            linkVisitorToIdentity: Boolean(cfg.linkVisitorToIdentity),
           },
         },
         {

@@ -472,11 +472,12 @@ export function IdentityForm({
   // O comprovante vale para qualquer campo do layout, seja ele renderizado como
   // campo do site, definição do catálogo ou dropdown especial.
   const attachmentFlagsQuery = useQuery({
-    queryKey: ["cfd-attachment-flags"],
+    queryKey: ["cfd-attachment-flags", activeProfile],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_field_definitions")
         .select("id, custom_field_name, attachment_required, attachment_accept")
+        .eq("profile", activeProfile)
         .eq("attachment_enabled", true);
       if (error) throw new Error(error.message);
       return data ?? [];

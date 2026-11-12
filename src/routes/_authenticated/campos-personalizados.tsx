@@ -142,13 +142,14 @@ function CustomFieldsPage() {
   };
   const reloadSections = () => qc.invalidateQueries({ queryKey: ["custom-field-sections"] });
 
-  // Campos de Anexo (locais — só do sistema).
+  // Campos de Anexo (locais — só do sistema), do cliente ativo.
   const attachmentsQuery = useQuery({
-    queryKey: ["local-attachment-fields"],
+    queryKey: ["local-attachment-fields", activeProfile],
     queryFn: async (): Promise<LocalAttachmentDef[]> => {
       const { data, error } = await supabase
         .from("custom_field_definitions")
         .select("id, custom_field_name, display_name, attachment_accept")
+        .eq("profile", activeProfile)
         .eq("is_local", true)
         .eq("is_deleted", false)
         .order("custom_field_name", { ascending: true });
@@ -750,17 +751,19 @@ function FieldAttachmentDialog({
   onSaved: () => void;
 }) {
   const { t } = useT();
+  const activeProfile = useActiveProfile();
   const open = Boolean(field);
   const [enabled, setEnabled] = useState(false);
   const [required, setRequired] = useState(false);
   const [accept, setAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
 
   const current = useQuery({
-    queryKey: ["cfd-attachment", field?.customFieldName],
+    queryKey: ["cfd-attachment", activeProfile, field?.customFieldName],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_field_definitions")
         .select("id, attachment_enabled, attachment_required, attachment_accept")
+        .eq("profile", activeProfile)
         .eq("custom_field_name", field!.customFieldName)
         .maybeSingle();
       if (error) throw new Error(error.message);
@@ -787,12 +790,14 @@ function FieldAttachmentDialog({
       const { data, error } = await supabase
         .from("custom_field_definitions")
         .update(patch)
+        .eq("profile", activeProfile)
         .eq("custom_field_name", field!.customFieldName)
         .select("id");
       if (error) throw new Error(error.message);
       // Definição ainda não catalogada (não mirrada): cria uma mínima.
       if (!data || data.length === 0) {
         const { error: eIns } = await supabase.from("custom_field_definitions").insert({
+          profile: activeProfile,
           custom_field_name: field!.customFieldName,
           display_name: (field!.displayName ? { default: field!.displayName } : {}) as Json,
           custom_field_type: field!.customFieldType ?? null,
@@ -881,6 +886,7 @@ function AttachmentDefDialog({
   onSaved: () => void;
 }) {
   const { t } = useT();
+  const activeProfile = useActiveProfile();
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [accept, setAccept] = useState<string>(ACCEPT_OPTIONS[0].value);
@@ -912,6 +918,7 @@ function AttachmentDefDialog({
         return;
       }
       const { error } = await supabase.from("custom_field_definitions").insert({
+        profile: activeProfile,
         custom_field_name: cleanName,
         display_name,
         custom_field_type: ATTACHMENT_FIELD_TYPE,

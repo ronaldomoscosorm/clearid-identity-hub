@@ -51,7 +51,7 @@ export function resetBranding() {
   notify();
 }
 
-/** O usuário tem configuração PRÓPRIA (salva neste navegador)? */
+/** O usuário tem configuração PRÓPRIA (espelhada neste navegador)? */
 export function hasOwnBranding(): boolean {
   if (!isBrowser()) return false;
   try {
@@ -59,6 +59,89 @@ export function hasOwnBranding(): boolean {
   } catch {
     return false;
   }
+}
+
+// ---------- Configuração PRÓPRIA por (usuário, cliente) (tabela user_branding) ----------
+// Chave = username do usuário real (a sessão do Supabase é técnica e compartilhada).
+// O localStorage é só o espelho síncrono do que está no servidor para o usuário
+// logado no cliente ativo.
+
+/** Lê a identidade visual própria do usuário naquele cliente (ou null). */
+export async function loadUserBranding(
+  userKey: string,
+  profile: string,
+): Promise<BrandingConfig | null> {
+  const { data, error } = await supabase
+    .from("user_branding")
+    .select("client_name, client_logo, primary_color, accent_color")
+    .eq("user_key", userKey)
+    .eq("profile", profile)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    clientName: data.client_name ?? "",
+    clientLogo: data.client_logo ?? "",
+    primaryColor: data.primary_color || DEFAULT_BRANDING.primaryColor,
+    accentColor: data.accent_color || DEFAULT_BRANDING.accentColor,
+  };
+}
+
+/** Grava (upsert) a identidade visual própria do usuário naquele cliente. */
+export async function saveUserBranding(
+  userKey: string,
+  profile: string,
+  cfg: BrandingConfig,
+): Promise<void> {
+  const { error } = await supabase.from("user_branding").upsert(
+    {
+      user_key: userKey,
+      profile,
+      client_name: cfg.clientName,
+      client_logo: cfg.clientLogo,
+      primary_color: cfg.primaryColor,
+      accent_color: cfg.accentColor,
+    },
+    { onConflict: "user_key,profile" },
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Remove a identidade visual própria do usuário naquele cliente. */
+export async function deleteUserBranding(userKey: string, profile: string): Promise<void> {
+  const { error } = await supabase
+    .from("user_branding")
+    .delete()
+    .eq("user_key", userKey)
+    .eq("profile", profile);
+  if (error) throw new Error(error.message);
+}
+
+export const userBrandingKey = (userKey: string | undefined, profile: string) =>
+  ["user-branding", userKey ?? "", profile] as const;
+
+/** Query da identidade visual própria do usuário logado no cliente ativo. */
+export function useUserBranding(userKey: string | undefined, profile: string) {
+  return useQuery({
+    queryKey: userBrandingKey(userKey, profile),
+    queryFn: () => loadUserBranding(userKey!, profile),
+    enabled: !!userKey && !!profile,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Espelha no navegador a identidade visual própria do usuário logado: se ele
+ * tem uma naquele cliente, vale ela; se não tem, o espelho local é descartado
+ * (pode ser de outro usuário) e passa a valer a básica do cliente.
+ */
+export function useSyncUserBranding(userKey: string | undefined, profile: string) {
+  const query = useUserBranding(userKey, profile);
+  useEffect(() => {
+    if (!query.isSuccess) return;
+    if (query.data) saveBranding(query.data);
+    else resetBranding();
+  }, [query.isSuccess, query.data]);
 }
 
 // ---------- Configuração BÁSICA por cliente (tabela client_branding) ----------

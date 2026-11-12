@@ -4,6 +4,8 @@
 // filtra pelo usuário logado); RLS fica aberto (padrão do projeto).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getConfig, saveConfig } from "./argus-env";
+import { clearConfiguredSiteId, setConfiguredSiteId, setSystemObjectId } from "./argus-client";
 
 export interface UserClientDefaults {
   defaultSiteId: string | null;
@@ -11,6 +13,7 @@ export interface UserClientDefaults {
   defaultRuleId: string | null;
   defaultRuleName: string | null;
   systemObjectId: string | null;
+  linkVisitorToIdentity: boolean;
 }
 
 const EMPTY: UserClientDefaults = {
@@ -19,9 +22,29 @@ const EMPTY: UserClientDefaults = {
   defaultRuleId: null,
   defaultRuleName: null,
   systemObjectId: null,
+  linkVisitorToIdentity: false,
 };
 
-/** Defaults do usuário logado NAQUELE cliente (site/regra/system). */
+/**
+ * Aplica no navegador os defaults do usuário naquele cliente. O que ele não
+ * tem salvo é LIMPO — o navegador pode guardar valores de outro usuário ou de
+ * outro cliente. Sem site padrão, a seleção da sessão (topbar) é preservada.
+ */
+export function applyUserClientDefaults(d: UserClientDefaults) {
+  if (d.defaultSiteId) setConfiguredSiteId(d.defaultSiteId);
+  else clearConfiguredSiteId();
+  setSystemObjectId(d.systemObjectId);
+  saveConfig({
+    ...getConfig(),
+    defaultSiteId: d.defaultSiteId ?? undefined,
+    defaultSiteName: d.defaultSiteName ?? undefined,
+    defaultRuleId: d.defaultRuleId ?? undefined,
+    defaultRuleName: d.defaultRuleName ?? undefined,
+    linkVisitorToIdentity: d.linkVisitorToIdentity,
+  });
+}
+
+/** Defaults do usuário logado NAQUELE cliente (site/regra/system/visitas). */
 export function useUserClientDefaults(userKey: string | undefined, profile: string) {
   return useQuery({
     queryKey: ["user-client-defaults", userKey ?? "", profile],
@@ -30,7 +53,7 @@ export function useUserClientDefaults(userKey: string | undefined, profile: stri
       const { data, error } = await supabase
         .from("user_client_defaults")
         .select(
-          "default_site_id,default_site_name,default_rule_id,default_rule_name,system_object_id",
+          "default_site_id,default_site_name,default_rule_id,default_rule_name,system_object_id,link_visitor_to_identity",
         )
         .eq("user_key", userKey!)
         .eq("profile", profile)
@@ -43,6 +66,7 @@ export function useUserClientDefaults(userKey: string | undefined, profile: stri
         defaultRuleId: data.default_rule_id ?? null,
         defaultRuleName: data.default_rule_name ?? null,
         systemObjectId: data.system_object_id ?? null,
+        linkVisitorToIdentity: data.link_visitor_to_identity ?? false,
       };
     },
   });
@@ -66,6 +90,7 @@ export function useUpdateUserClientDefaults() {
           default_rule_id: input.defaults.defaultRuleId,
           default_rule_name: input.defaults.defaultRuleName,
           system_object_id: input.defaults.systemObjectId,
+          link_visitor_to_identity: input.defaults.linkVisitorToIdentity,
         },
         { onConflict: "user_key,profile" },
       );

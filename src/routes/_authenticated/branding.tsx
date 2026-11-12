@@ -1,6 +1,7 @@
 import { audit } from "@/lib/audit";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Upload, Trash2, RotateCcw, Sun, Moon, ShieldCheck } from "lucide-react";
 import { useActiveProfile } from "@/lib/argus-client";
@@ -22,14 +23,16 @@ import {
   saveBranding,
   resetBranding,
   applyBranding,
-  hasOwnBranding,
   saveClientBranding,
   useClientBranding,
+  saveUserBranding,
+  deleteUserBranding,
+  useUserBranding,
+  userBrandingKey,
   DEFAULT_BRANDING,
   type BrandingConfig,
 } from "@/lib/branding";
 import { PoweredBy } from "@/components/PoweredBy";
-import { pushSettings } from "@/lib/supabase-settings";
 import { useT } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/branding")({
@@ -42,18 +45,24 @@ function BrandingPage() {
   const activeProfile = useActiveProfile();
   const { data: currentUser } = useCurrentUser();
   const admin = isAdmin(currentUser);
+  const userKey = currentUser?.username || undefined;
+  const qc = useQueryClient();
   // Configuração BÁSICA do cliente (definida pelo administrador).
   const clientBranding = useClientBranding(activeProfile);
+  // Configuração PRÓPRIA do usuário logado neste cliente.
+  const userBranding = useUserBranding(userKey, activeProfile);
   const [cfg, setCfg] = useState<BrandingConfig>(() => getBranding());
   const [theme, setThemeState] = useState<Theme>(() => getTheme());
   const fileRef = useRef<HTMLInputElement>(null);
   const [savingClient, setSavingClient] = useState(false);
 
-  // Sem configuração própria, o formulário parte da básica do cliente quando
-  // ela carrega (é o que o usuário vê ao logar).
+  // O formulário parte da configuração própria do usuário neste cliente; sem
+  // ela, da básica do cliente (é o que o usuário vê ao logar).
   useEffect(() => {
-    if (clientBranding.data && !hasOwnBranding()) setCfg(clientBranding.data);
-  }, [clientBranding.data]);
+    if (!userBranding.isSuccess) return;
+    if (userBranding.data) setCfg(userBranding.data);
+    else if (clientBranding.isSuccess) setCfg(clientBranding.data ?? DEFAULT_BRANDING);
+  }, [userBranding.isSuccess, userBranding.data, clientBranding.isSuccess, clientBranding.data]);
 
   // Administrador: grava a configuração atual como BÁSICA do cliente.
   const handleSaveAsClientDefault = async () => {
@@ -89,11 +98,19 @@ function BrandingPage() {
     reader.readAsDataURL(file);
   };
 
+  // Grava a configuração PRÓPRIA do usuário logado neste cliente.
   const handleSave = () => {
     saveBranding(cfg);
     applyBranding(cfg);
-    pushSettings()
-      .then(() => toast.success(t("branding.toast.applied")))
+    if (!userKey) {
+      toast.warning(t("branding.toast.syncFail"));
+      return;
+    }
+    saveUserBranding(userKey, activeProfile, cfg)
+      .then(() => {
+        qc.setQueryData(userBrandingKey(userKey, activeProfile), cfg);
+        toast.success(t("branding.toast.applied"));
+      })
       .catch(() => toast.warning(t("branding.toast.syncFail")));
   };
 
@@ -104,7 +121,11 @@ function BrandingPage() {
     const fallback = clientBranding.data ?? DEFAULT_BRANDING;
     setCfg(fallback);
     applyBranding(fallback);
-    void pushSettings();
+    if (userKey) {
+      deleteUserBranding(userKey, activeProfile)
+        .then(() => qc.setQueryData(userBrandingKey(userKey, activeProfile), null))
+        .catch(() => toast.warning(t("branding.toast.syncFail")));
+    }
     toast.success(t("branding.toast.restored"));
   };
 

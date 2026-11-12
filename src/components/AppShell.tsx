@@ -43,8 +43,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   argusApi,
   setSessionSiteId,
-  setConfiguredSiteId,
-  setSystemObjectId,
   useDefaultSiteId,
   useSystemObjectId,
   useActiveProfile,
@@ -53,11 +51,20 @@ import {
   type ClearIdSite,
 } from "@/lib/argus-client";
 import { corporateData } from "@/lib/corporatedata-client";
+import { RequiredDefaultsDialog } from "@/components/RequiredDefaultsDialog";
 import { useUserScope } from "@/lib/user-scope";
-import { useUserClientDefaults, useUserDefaultProfile } from "@/lib/user-defaults";
+import {
+  applyUserClientDefaults,
+  useUserClientDefaults,
+  useUserDefaultProfile,
+} from "@/lib/user-defaults";
 import { mirrorCustomFieldDefs } from "@/lib/supabase-mirror";
-import { useArgusConfig, saveConfig, getConfig } from "@/lib/argus-env";
-import { useEffectiveBranding, useApplyEffectiveBranding } from "@/lib/branding";
+import { useArgusConfig } from "@/lib/argus-env";
+import {
+  useEffectiveBranding,
+  useApplyEffectiveBranding,
+  useSyncUserBranding,
+} from "@/lib/branding";
 import { useT, LANGS } from "@/lib/i18n";
 import { FlagIcon } from "@/components/FlagIcon";
 import { Button } from "@/components/ui/button";
@@ -405,32 +412,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [userDefaultProfile.data]);
 
   // Ao ENTRAR num cliente, aplica os defaults DESTE usuário NAQUELE cliente
-  // (site/system/regra) na topbar. Uma vez por cliente — depois pode trocar.
+  // (site/system/regra/visitas). Uma vez por (usuário, cliente) — depois pode
+  // trocar pela topbar. O que o usuário não tem salvo é limpo: o navegador pode
+  // guardar valores de outro usuário ou de outro cliente.
   const clientDefaults = useUserClientDefaults(userKey, activeProfile);
   const appliedDefaultsRef = useRef<string | null>(null);
   useEffect(() => {
     const d = clientDefaults.data;
-    if (!d) return;
-    if (appliedDefaultsRef.current === activeProfile) return;
-    // Nada a aplicar (linha vazia / ainda sem defaults) → NÃO marca como aplicado,
-    // para que um resultado com dados (ex.: após refetch) ainda aplique.
-    if (!d.defaultSiteId && !d.systemObjectId && !d.defaultRuleId) return;
-    appliedDefaultsRef.current = activeProfile;
-    if (d.defaultSiteId) {
-      // setConfiguredSiteId já remove o override de sessão, então o default
-      // aparece na topbar na hora. (NÃO chamar setSessionSiteId(null): ele grava
-      // override vazio "" que faz getDefaultSiteId retornar null e esconde o site.)
-      setConfiguredSiteId(d.defaultSiteId);
-    }
-    if (d.systemObjectId) setSystemObjectId(d.systemObjectId);
-    if (d.defaultRuleId) {
-      saveConfig({
-        ...getConfig(),
-        defaultRuleId: d.defaultRuleId,
-        defaultRuleName: d.defaultRuleName ?? undefined,
-      });
-    }
-  }, [clientDefaults.data, activeProfile]);
+    if (!d || !userKey) return;
+    const key = `${userKey}|${activeProfile}`;
+    if (appliedDefaultsRef.current === key) return;
+    appliedDefaultsRef.current = key;
+    applyUserClientDefaults(d);
+  }, [clientDefaults.data, activeProfile, userKey]);
+
+  // Identidade visual própria do usuário naquele cliente (ou a básica do cliente).
+  useSyncUserBranding(userKey, activeProfile);
 
   // Menus exibidos: filtrados pelas keys permitidas ao usuário (do backend).
   // FAIL-CLOSED: bypass só no dev/sem-auth (accessProfileId === "0"). Usuário real
@@ -447,6 +444,21 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Aviso quando o usuário está logado mas não tem menus liberados: sem
   // AccessProfile no Portal, ou falha ao consultar as permissões do perfil.
   const showMenuWarning = !devBypass && (noProfile || menuError);
+
+  // Sem site, regra e sistema padrão no cliente ativo o usuário não segue:
+  // abre a configuração obrigatória. Só depois de saber o cliente padrão dele
+  // (para não pedir a configuração do cliente errado durante o login).
+  const setupKey = `${userKey ?? ""}|${activeProfile}`;
+  const [setupDoneFor, setSetupDoneFor] = useState<string | null>(null);
+  const userDefaults = clientDefaults.data;
+  const needsSetup =
+    !devBypass &&
+    !!userKey &&
+    userDefaultProfile.isFetched &&
+    clientDefaults.isSuccess &&
+    !!userDefaults &&
+    (!userDefaults.defaultSiteId || !userDefaults.defaultRuleId || !userDefaults.systemObjectId) &&
+    setupDoneFor !== setupKey;
 
   // Se o cliente ATIVO não faz parte do grant do usuário, troca para o primeiro
   // permitido (evita operar num cliente sem acesso).
@@ -469,6 +481,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useT();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+
+  const logout = () => {
+    audit({ action: "logout", entityType: "session", summary: "Saiu do sistema" });
+    // dá um instante para o registro sair antes de derrubar a sessão
+    setTimeout(() => redirectToLogout(), 250);
+  };
 
   // Troca o perfil (conta ClearID) SÓ na sessão — não altera o padrão de
   // Configurações. Como os dados (sites, campos, pessoas…) são por conta, reseta
@@ -530,6 +548,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider>
+      {needsSetup && userKey && userDefaults && (
+        <RequiredDefaultsDialog
+          key={setupKey}
+          userKey={userKey}
+          profile={activeProfile}
+          current={userDefaults}
+          sites={visibleSites}
+          sitesLoading={clientesQuery.isLoading || sitesQuery.isLoading}
+          profiles={visibleProfiles}
+          onChangeProfile={changeProfile}
+          setAsDefaultProfile={!userDefaultProfile.data}
+          onSaved={() => setSetupDoneFor(setupKey)}
+          onLogout={logout}
+        />
+      )}
       <div className="flex min-h-screen w-full bg-background">
         <Sidebar collapsible="icon">
           <SidebarHeader>
@@ -625,15 +658,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => {
-                        audit({
-                          action: "logout",
-                          entityType: "session",
-                          summary: "Saiu do sistema",
-                        });
-                        // dá um instante para o registro sair antes de derrubar a sessão
-                        setTimeout(() => redirectToLogout(), 250);
-                      }}
+                      onClick={logout}
                       className="flex items-center gap-2 text-destructive focus:text-destructive"
                     >
                       <LogOut className="h-4 w-4" />
