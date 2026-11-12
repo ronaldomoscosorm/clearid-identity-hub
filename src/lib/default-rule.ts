@@ -106,3 +106,24 @@ export async function fetchDefaultRuleForSite(
   const teams = await qc.fetchQuery(siteTeamsQuery(profile, siteId));
   return resolveDefaultRule(siteId, siteName, teams, cfg);
 }
+
+/**
+ * Ao SALVAR a ficha de uma pessoa: garante que ela tenha a regra padrão.
+ * Pessoa do site padrão do operador recebe a regra padrão dele; de outro site,
+ * a General Access do site dela. Sem candidata única para o site, nada é
+ * atribuído e `missing` avisa que ela ficou sem regra.
+ */
+export async function ensureRuleOnSave(
+  qc: QueryClient,
+  profile: string,
+  identityId: string,
+  siteId: string | null | undefined,
+  siteName: string | null | undefined,
+): Promise<{ assigned: boolean; ruleName?: string; missing?: boolean }> {
+  let rule: DefaultRule | null | undefined;
+  if (differsFromOwnSite(siteId)) {
+    const r = await fetchDefaultRuleForSite(qc, profile, siteId, siteName);
+    rule = r.kind === "site" || r.kind === "own" ? r.rule : null;
+  }
+  return argusApi.ensureDefaultRule(identityId, rule);
+}

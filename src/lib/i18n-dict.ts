@@ -512,6 +512,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
       "Antes de iniciar o trabalho no cliente {client}, defina o seu site, a sua regra e o seu sistema padrão. Eles valem só para o seu usuário e podem ser alterados depois em Configurações.",
     "requiredDefaults.ruleHint":
       "Regra atribuída automaticamente às pessoas que você cadastrar sem nenhuma regra.",
+    "requiredDefaults.systemAuto": "Definido automaticamente: o mesmo sistema já usado neste cliente.",
+    "requiredDefaults.systemAdmin": "Será definido pelo administrador.",
     "requiredDefaults.save": "Salvar e continuar",
     "requiredDefaults.logout": "Sair",
     "requiredDefaults.retry": "Tentar novamente",
@@ -522,6 +524,10 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "defaultRule.hint.choose": "A regra será escolhida ao salvar.",
     "defaultRule.missing":
       "regra (a pessoa ficou sem regra: o site dela é diferente do seu site padrão — atribua em Regras)",
+    "defaultRule.toast.assigned": "Regra padrão atribuída: {rule}",
+    "defaultRule.toast.missing":
+      "A pessoa está sem regra: o site dela é diferente do seu site padrão. Atribua a regra em Regras.",
+    "defaultRule.toast.fail": "Falha ao atribuir a regra padrão: {error}",
     "siteMismatch.title": "Site diferente do seu padrão",
     "siteMismatch.description":
       "Você está cadastrando {name} no site {site}, diferente do seu site padrão ({ownSite}). Confira se o site está correto antes de continuar.",
@@ -531,6 +537,10 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
       "Nenhuma regra será atribuída automaticamente. Atribua a regra da pessoa em Regras depois de salvar.",
     "siteMismatch.cancel": "Voltar e corrigir",
     "siteMismatch.confirm": "Confirmar cadastro",
+    "updateRequired.title": "Nova versão do ClearID disponível",
+    "updateRequired.description":
+      "O sistema foi atualizado enquanto esta página estava aberta. Para continuar, atualize a página. Dados digitados e ainda não salvos nesta tela serão perdidos.",
+    "updateRequired.reload": "Atualizar agora",
     "settings.client.label": "Cliente",
     "settings.client.hint":
       "Ao trocar o cliente, os sites e demais seleções são recarregados no contexto dele.",
@@ -1130,6 +1140,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
       "Before you start working on client {client}, choose your default site, rule and system. They apply only to your user and can be changed later in Settings.",
     "requiredDefaults.ruleHint":
       "Rule automatically assigned to people you register without any rule.",
+    "requiredDefaults.systemAuto": "Set automatically: the same system already used for this client.",
+    "requiredDefaults.systemAdmin": "It will be set by the administrator.",
     "requiredDefaults.save": "Save and continue",
     "requiredDefaults.logout": "Sign out",
     "requiredDefaults.retry": "Try again",
@@ -1140,6 +1152,10 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "defaultRule.hint.choose": "The rule will be chosen on save.",
     "defaultRule.missing":
       "rule (the person has no rule: their site differs from your default site — assign one in Rules)",
+    "defaultRule.toast.assigned": "Default rule assigned: {rule}",
+    "defaultRule.toast.missing":
+      "The person has no rule: their site differs from your default site. Assign the rule in Rules.",
+    "defaultRule.toast.fail": "Failed to assign the default rule: {error}",
     "siteMismatch.title": "Site different from your default",
     "siteMismatch.description":
       "You are registering {name} at site {site}, which differs from your default site ({ownSite}). Check that the site is correct before continuing.",
@@ -1149,6 +1165,10 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
       "No rule will be assigned automatically. Assign the person's rule in Rules after saving.",
     "siteMismatch.cancel": "Go back and fix",
     "siteMismatch.confirm": "Confirm registration",
+    "updateRequired.title": "A new version of ClearID is available",
+    "updateRequired.description":
+      "The system was updated while this page was open. To continue, reload the page. Data typed on this screen and not yet saved will be lost.",
+    "updateRequired.reload": "Reload now",
     "settings.client.label": "Client",
     "settings.client.hint":
       "Switching the client reloads sites and other selections in its context.",
@@ -1752,6 +1772,8 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
       "Antes de empezar a trabajar en el cliente {client}, defina su sitio, su regla y su sistema predeterminados. Valen solo para su usuario y se pueden cambiar después en Configuración.",
     "requiredDefaults.ruleHint":
       "Regla asignada automáticamente a las personas que registre sin ninguna regla.",
+    "requiredDefaults.systemAuto": "Definido automáticamente: el mismo sistema ya usado en este cliente.",
+    "requiredDefaults.systemAdmin": "Lo definirá el administrador.",
     "requiredDefaults.save": "Guardar y continuar",
     "requiredDefaults.logout": "Salir",
     "requiredDefaults.retry": "Intentar de nuevo",
@@ -1762,6 +1784,10 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
     "defaultRule.hint.choose": "La regla se elegirá al guardar.",
     "defaultRule.missing":
       "regla (la persona quedó sin regla: su sitio es diferente de su sitio predeterminado — asígnela en Reglas)",
+    "defaultRule.toast.assigned": "Regla predeterminada asignada: {rule}",
+    "defaultRule.toast.missing":
+      "La persona está sin regla: su sitio es diferente de su sitio predeterminado. Asigne la regla en Reglas.",
+    "defaultRule.toast.fail": "Error al asignar la regla predeterminada: {error}",
     "siteMismatch.title": "Sitio diferente de su predeterminado",
     "siteMismatch.description":
       "Está registrando a {name} en el sitio {site}, diferente de su sitio predeterminado ({ownSite}). Verifique que el sitio sea correcto antes de continuar.",
@@ -1771,6 +1797,10 @@ export const dictionaries: Record<Lang, Record<string, string>> = {
       "No se asignará ninguna regla automáticamente. Asigne la regla de la persona en Reglas después de guardar.",
     "siteMismatch.cancel": "Volver y corregir",
     "siteMismatch.confirm": "Confirmar registro",
+    "updateRequired.title": "Nueva versión de ClearID disponible",
+    "updateRequired.description":
+      "El sistema se actualizó mientras esta página estaba abierta. Para continuar, actualice la página. Los datos escritos y aún no guardados en esta pantalla se perderán.",
+    "updateRequired.reload": "Actualizar ahora",
     "settings.client.label": "Cliente",
     "settings.client.hint":
       "Al cambiar el cliente, los sitios y demás selecciones se recargan en su contexto.",

@@ -2,7 +2,11 @@
 // sistema padrão. Sem ela o trabalho não começa — a regra padrão é o que dá
 // acesso às pessoas cadastradas e o sistema é exigido nas credenciais.
 // Não pode ser fechada; as saídas são salvar, trocar de cliente ou sair.
-import { useEffect, useState } from "react";
+//
+// O SISTEMA só pode ser listado por administrador (a API exige esse perfil).
+// Para os demais, o sistema é o já adotado pelos outros usuários do cliente —
+// do mesmo site, se houver — e a falta dele nunca impede de salvar.
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { LogOut } from "lucide-react";
@@ -32,6 +36,14 @@ import {
   type UserClientDefaults,
 } from "@/lib/user-defaults";
 import { useT } from "@/lib/i18n";
+import { supabase } from "@/integrations/supabase/client";
+
+/** Valor mais frequente de uma lista (null se vazia). */
+function mostCommon(values: string[]): string | null {
+  const count = new Map<string, number>();
+  for (const v of values) count.set(v, (count.get(v) ?? 0) + 1);
+  return [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
 
 const byName = (a: { name?: string | null }, b: { name?: string | null }) =>
   (a.name ?? "").localeCompare(b.name ?? "", "pt-BR", { sensitivity: "base" });
@@ -79,10 +91,37 @@ export function RequiredDefaultsDialog({
     queryKey: ["argus", "systems", profile],
     queryFn: () => argusApi.listSystems(profile),
     staleTime: 60_000,
+    retry: false, // sem perfil de administrador a API recusa (403); não adianta insistir
+  });
+  // Sistema já adotado pelos usuários deste cliente (por site).
+  const peerSystemsQuery = useQuery({
+    queryKey: ["peer-systems", profile],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_client_defaults")
+        .select("default_site_id, system_object_id")
+        .eq("profile", profile)
+        .not("system_object_id", "is", null);
+      if (error) throw new Error(error.message);
+      return data ?? [];
+    },
+    staleTime: 5 * 60_000,
   });
   const teams = (teamsQuery.data ?? []).filter((x) => !x.isDeleted);
   const systems = systemsQuery.data ?? [];
   const site = sites.find((s) => s.siteId === siteId);
+  const peerSystem = useMemo(() => {
+    const rows = peerSystemsQuery.data ?? [];
+    const ids = (list: typeof rows) =>
+      list.map((r) => r.system_object_id).filter((v): v is string => !!v);
+    return (
+      mostCommon(ids(rows.filter((r) => r.default_site_id === siteId))) ?? mostCommon(ids(rows))
+    );
+  }, [peerSystemsQuery.data, siteId]);
+  // Sem lista (não é administrador, falha ou cliente sem sistemas): vale o do cliente.
+  const systemsUnavailable =
+    systemsQuery.isError || (systemsQuery.isSuccess && systems.length === 0);
+  const effectiveSystemId = systemsUnavailable ? (peerSystem ?? "") : systemId;
 
   // Sugere a regra General Access do site escolhido e o sistema, quando único.
   useEffect(() => {
@@ -92,9 +131,12 @@ export function RequiredDefaultsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamsQuery.data, siteId]);
   useEffect(() => {
-    if (!systemId && systems.length === 1) setSystemId(systems[0].systemObjectId);
+    if (systemId || !systems.length) return;
+    if (systems.length === 1) setSystemId(systems[0].systemObjectId);
+    else if (peerSystem && systems.some((x) => x.systemObjectId === peerSystem))
+      setSystemId(peerSystem);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [systemsQuery.data]);
+  }, [systemsQuery.data, peerSystem]);
 
   const changeSite = (id: string) => {
     setSiteId(id);
@@ -104,7 +146,7 @@ export function RequiredDefaultsDialog({
   // Lista carregada e vazia = não há o que escolher; não trava o usuário.
   const siteRequired = sitesLoading || sites.length > 0;
   const ruleRequired = siteRequired && !(teamsQuery.isSuccess && teams.length === 0);
-  const systemRequired = !(systemsQuery.isSuccess && systems.length === 0);
+  const systemRequired = !systemsUnavailable;
   const ready =
     (!siteRequired || !!site) &&
     (!ruleRequired || teams.some((x) => x.teamId === ruleId)) &&
@@ -117,11 +159,14 @@ export function RequiredDefaultsDialog({
       defaultSiteName: site?.name ?? null,
       defaultRuleId: ruleId || null,
       defaultRuleName: teams.find((x) => x.teamId === ruleId)?.name ?? null,
-      systemObjectId: systemId || null,
+      systemObjectId: effectiveSystemId || null,
     };
     try {
       await updateDefaults.mutateAsync({ userKey, profile, defaults });
-      if (setAsDefaultProfile) updateDefaultProfile.mutate({ userKey, defaultProfile: profile });
+      // Só vira o cliente padrão dele se houver site: sem site o usuário não trabalha ali.
+      if (setAsDefaultProfile && site) {
+        updateDefaultProfile.mutate({ userKey, defaultProfile: profile });
+      }
       applyUserClientDefaults(defaults);
       toast.success(t("requiredDefaults.saved"));
       onSaved();
@@ -130,7 +175,7 @@ export function RequiredDefaultsDialog({
     }
   };
 
-  const loadError = (teamsQuery.error ?? systemsQuery.error) as Error | null;
+  const loadError = teamsQuery.error as Error | null;
 
   return (
     <AlertDialog open>
@@ -216,27 +261,37 @@ export function RequiredDefaultsDialog({
 
           <div className="space-y-2">
             <Label htmlFor="rd-system">{t("settings.system.label")}</Label>
-            <Select value={systemId} onValueChange={setSystemId} disabled={systemsQuery.isLoading}>
-              <SelectTrigger id="rd-system">
-                <SelectValue
-                  placeholder={
-                    systemsQuery.isLoading
-                      ? t("settings.system.loading")
-                      : t("settings.system.placeholder")
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {systems
-                  .slice()
-                  .sort(byName)
-                  .map((x) => (
-                    <SelectItem key={x.systemObjectId} value={x.systemObjectId}>
-                      {x.name || x.systemObjectId}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            {systemsUnavailable ? (
+              <p id="rd-system" className="text-sm text-muted-foreground">
+                {peerSystem ? t("requiredDefaults.systemAuto") : t("requiredDefaults.systemAdmin")}
+              </p>
+            ) : (
+              <Select
+                value={systemId}
+                onValueChange={setSystemId}
+                disabled={systemsQuery.isLoading}
+              >
+                <SelectTrigger id="rd-system">
+                  <SelectValue
+                    placeholder={
+                      systemsQuery.isLoading
+                        ? t("settings.system.loading")
+                        : t("settings.system.placeholder")
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {systems
+                    .slice()
+                    .sort(byName)
+                    .map((x) => (
+                      <SelectItem key={x.systemObjectId} value={x.systemObjectId}>
+                        {x.name || x.systemObjectId}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {loadError && (
@@ -246,10 +301,7 @@ export function RequiredDefaultsDialog({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  if (teamsQuery.error) void teamsQuery.refetch();
-                  if (systemsQuery.error) void systemsQuery.refetch();
-                }}
+                onClick={() => void teamsQuery.refetch()}
               >
                 {t("requiredDefaults.retry")}
               </Button>

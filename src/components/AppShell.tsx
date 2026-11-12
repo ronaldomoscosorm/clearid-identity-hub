@@ -52,6 +52,7 @@ import {
 } from "@/lib/argus-client";
 import { corporateData } from "@/lib/corporatedata-client";
 import { RequiredDefaultsDialog } from "@/components/RequiredDefaultsDialog";
+import { UpdateRequiredDialog } from "@/components/UpdateRequiredDialog";
 import { useUserScope } from "@/lib/user-scope";
 import {
   applyUserClientDefaults,
@@ -445,19 +446,23 @@ export function AppShell({ children }: { children: ReactNode }) {
   // AccessProfile no Portal, ou falha ao consultar as permissões do perfil.
   const showMenuWarning = !devBypass && (noProfile || menuError);
 
-  // Sem site, regra e sistema padrão no cliente ativo o usuário não segue:
-  // abre a configuração obrigatória. Só depois de saber o cliente padrão dele
-  // (para não pedir a configuração do cliente errado durante o login).
+  // Sem site e regra padrão no cliente ativo o usuário não segue: abre a
+  // configuração obrigatória (que também define o sistema). Só depois de saber
+  // o cliente padrão dele, para não pedir a configuração do cliente errado
+  // durante o login. A falta só do sistema não abre a janela: quem não é
+  // administrador não consegue escolhê-lo.
   const setupKey = `${userKey ?? ""}|${activeProfile}`;
   const [setupDoneFor, setSetupDoneFor] = useState<string | null>(null);
   const userDefaults = clientDefaults.data;
   const needsSetup =
     !devBypass &&
     !!userKey &&
+    // cliente ativo ainda não é um dos permitidos (será trocado logo abaixo)
+    (!restrictByUser || allowedClientCodes.has(activeProfile.toLowerCase())) &&
     userDefaultProfile.isFetched &&
     clientDefaults.isSuccess &&
     !!userDefaults &&
-    (!userDefaults.defaultSiteId || !userDefaults.defaultRuleId || !userDefaults.systemObjectId) &&
+    (!userDefaults.defaultSiteId || !userDefaults.defaultRuleId) &&
     setupDoneFor !== setupKey;
 
   // Se o cliente ATIVO não faz parte do grant do usuário, troca para o primeiro
@@ -548,6 +553,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider>
+      <UpdateRequiredDialog />
       {needsSetup && userKey && userDefaults && (
         <RequiredDefaultsDialog
           key={setupKey}

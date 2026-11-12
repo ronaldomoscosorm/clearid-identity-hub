@@ -2,7 +2,8 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Power, PowerOff } from "lucide-react";
 import { toast } from "sonner";
-import { argusApi, ArgusApiError, useDefaultSiteId } from "@/lib/argus-client";
+import { argusApi, ArgusApiError, useActiveProfile, useDefaultSiteId } from "@/lib/argus-client";
+import { ensureRuleOnSave } from "@/lib/default-rule";
 import { clearIdToFormValues, serializeCustomFieldsForPatch } from "@/lib/argus-client";
 import {
   saveIdentityCustomFields,
@@ -39,6 +40,7 @@ function IdentityDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const activeProfile = useActiveProfile();
   const siteId = useDefaultSiteId();
 
   const query = useQuery({
@@ -105,7 +107,25 @@ function IdentityDetail() {
       // 3) Espelha os valores no Supabase (inclui campos storage='supabase').
       await saveIdentityCustomFields(id, siteFieldValues);
     },
-    onSuccess: async () => {
+    onSuccess: async (_r, vars) => {
+      // Regra padrão: pessoa sem regra recebe a do site dela ao salvar a ficha.
+      try {
+        const personSiteId = vars.data.siteId ?? identitySiteId;
+        const rule = await ensureRuleOnSave(
+          qc,
+          activeProfile,
+          id,
+          personSiteId,
+          sitesQuery.data?.find((s) => s.siteId === personSiteId)?.name,
+        );
+        if (rule.assigned) {
+          toast.success(t("defaultRule.toast.assigned", { rule: rule.ruleName ?? "" }));
+        } else if (rule.missing) {
+          toast.warning(t("defaultRule.toast.missing"));
+        }
+      } catch (e) {
+        toast.warning(t("defaultRule.toast.fail", { error: (e as Error).message }));
+      }
       // Sincroniza a identidade com os sistemas integrados (best-effort).
       try {
         await argusApi.synchronizeIdentities([id], scopeSiteId);

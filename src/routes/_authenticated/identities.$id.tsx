@@ -5,11 +5,7 @@ import { ArrowLeft, Power, PowerOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { argusApi, ArgusApiError, useActiveProfile, useDefaultSiteId } from "@/lib/argus-client";
 import { useUserScope } from "@/lib/user-scope";
-import {
-  differsFromOwnSite,
-  fetchDefaultRuleForSite,
-  type DefaultRule,
-} from "@/lib/default-rule";
+import { ensureRuleOnSave } from "@/lib/default-rule";
 import {
   mirrorIdentities,
   saveIdentityCustomFields,
@@ -184,13 +180,13 @@ function IdentityDetail() {
       // sem candidata única, nada é atribuído (o operador escolhe em Regras).
       try {
         const personSiteId = vars.data.siteId ?? identitySiteId;
-        let siteRule: DefaultRule | null | undefined;
-        if (differsFromOwnSite(personSiteId)) {
-          const personSiteName = sitesQuery.data?.find((s) => s.siteId === personSiteId)?.name;
-          const r = await fetchDefaultRuleForSite(qc, activeProfile, personSiteId, personSiteName);
-          siteRule = r.kind === "site" || r.kind === "own" ? r.rule : null;
-        }
-        const rule = await argusApi.ensureDefaultRule(id, siteRule);
+        const rule = await ensureRuleOnSave(
+          qc,
+          activeProfile,
+          id,
+          personSiteId,
+          sitesQuery.data?.find((s) => s.siteId === personSiteId)?.name,
+        );
         if (rule.assigned)
           ok.push(
             t("identityDetail.defaultRuleAssigned", {

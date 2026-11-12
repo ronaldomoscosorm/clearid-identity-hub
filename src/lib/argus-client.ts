@@ -929,6 +929,8 @@ export interface ClearIdTeam {
 export interface ClearIdTeamMember {
   teamId: string;
   teamName?: string;
+  /** Origem do vínculo: "TeamService" (portal/manual), "TPS" (provisionamento automático), "EntraId"… */
+  sourceId?: string | null;
   identityId: string;
   identityName?: string | null;
   identityEmail?: string | null;
@@ -1908,6 +1910,10 @@ export const argusApi = {
    * atribui `rule`. Sem `rule` (undefined), usa a regra padrão do operador;
    * `null` = não há regra a atribuir para o site da pessoa — nesse caso
    * `missing` indica que ela ficou sem nenhuma.
+   *
+   * Vínculos automáticos do ClearID (TPS/EntraId, ex.: "Brazil Identities")
+   * entram sozinhos segundos após a criação e NÃO contam como "já ter regra":
+   * só deixam de receber a regra quem já a tem ou tem alguma regra manual.
    */
   ensureDefaultRule: async (
     id: string,
@@ -1922,7 +1928,14 @@ export const argusApi = {
         : rule;
     if (!target && rule === undefined) return { assigned: false };
     const teams = await argusApi.getIdentityTeams(id);
-    if (teams.length > 0) return { assigned: false };
+    const targetId = target?.ruleId.toLowerCase();
+    if (targetId && teams.some((t) => (t.teamId ?? "").toLowerCase() === targetId)) {
+      return { assigned: false };
+    }
+    const manual = teams.filter(
+      (t) => !["tps", "entraid"].includes((t.sourceId ?? "").toLowerCase()),
+    );
+    if (manual.length > 0) return { assigned: false };
     if (!target) return { assigned: false, missing: true };
     await argusApi.addTeamMembers(target.ruleId, { identityIds: [id] });
     return { assigned: true, ruleName: target.ruleName };
